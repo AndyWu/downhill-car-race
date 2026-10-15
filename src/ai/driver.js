@@ -15,10 +15,11 @@ export function forwardXZ(q) {
 /**
  * createAIDriver(profile, { world, rng, spec?, rubberBand?, headlight? })
  *  spec        optional truck spec ({wheelBase, steerLock}) for pure-pursuit -> steer conversion
- *  rubberBand  0..1 strength (default 0 = OFF)
+ *  rubberBand  0..1 strength (default 1 = gentle +-5% paddle cadence; 0 = OFF)
+ *  human       optional () => state of the human player to chase/ease off from
  *  headlight   boolean | () => boolean ; default reads world.timeOfDay / world.isDark
  */
-export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, headlight } = {}) {
+export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, human, headlight } = {}) {
   const P = profile;
   rng = rng || createRng(1);
   const plan = buildPlan(world, P, rng);
@@ -31,7 +32,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
   let side = rng() < 0.5, nextStroke = 0.2, stamina = 1;
   let attentive = false, nextToggle = 0;
   // stuck recovery
-  let stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0, consec = 0;
+  let stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0, consec = 0, stuckTotal = 0;
 
   function think(dt, self, others = []) {
     t += dt;
@@ -89,14 +90,17 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
     const rawSteer = clamp((P.steerGain * (1 + 0.5 * Math.min(1, outBy)) * delta) / (LOCK * lockScale) + noise, -1, 1);
 
     // ---- speed target / handbrake ----
+    // soft rubber band (default ON, gentle): +-5% paddle cadence by gap to the human (opts.human() -> state) or, if
+    // unknown, to the average of the other cars. Does not touch lines, braking or grip.
     let rb = 1;
     if (rubberBand > 0 && others.length) {
-      let mx = -Infinity;
-      for (const o of others) if (o && o.s > mx) mx = o.s;
-      const gap = mx - s; // >0: behind the leader, <0: we lead
-      rb = gap > 0 ? 1 + 0.12 * rubberBand * Math.min(1, gap / 80) : 1 - 0.1 * rubberBand * Math.min(1, -gap / 80);
+      let ref;
+      const hs = typeof human === 'function' ? human() : null;
+      if (hs && hs !== self) ref = hs.s;
+      else { ref = 0; for (const o of others) ref += o.s; ref /= others.length; }
+      rb = 1 + 0.05 * rubberBand * clamp((ref - s) / 60, -1, 1);
     }
-    const vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * rb * (outBy > 0 ? 0.65 : 1);
+    const vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (outBy > 0 ? 0.65 : 1);
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
     if (P.brake.tap && hbRaw > 0 && over < 1.2) hbRaw = ((t * 6) % 1) < 0.5 ? Math.min(0.4, hbRaw * 2) : 0; // light taps
@@ -134,7 +138,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
     const fat = PD.stamina.minFactor + (1 - PD.stamina.minFactor) * stamina;
     // physics gives dv ~ 1/(1+(v/5.5)^2) per stroke, so the pro bursts hardest when slowest
     const burst = PD.mode === 'optimal' ? Math.min(4.2 / PD.cadence, 1 + 0.4 * (1 - clamp(speed / 8, 0, 1))) : 1;
-    const cadence = PD.cadence * fat * burst * (rb > 1 ? 1 + (rb - 1) : 1) * (PD.mode === 'optimal' ? want : 1);
+    const cadence = PD.cadence * fat * burst * rb * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;
@@ -149,6 +153,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
 
     // ---- stuck recovery: speed < 1.5 for 2 s beyond s>20 -> reverse 0.8 s with opposite steer, then kick forward ----
     let reverse = false;
+    if (s > 20 && t > 3 && speed < 1.5) stuckTotal += dt; else if (speed > 3) stuckTotal = 0;
     const slowNow = speed < 1.5 || (speed < 2 && outBy > 0);
     if (s > 20 && t > 3 && slowNow && t > kickUntil) stuckT += dt; else if (!slowNow || t <= kickUntil) stuckT = 0;
     if (speed > 4) consec = 0;
@@ -179,5 +184,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
       reverse,
     };
   }
-  return { think, profile: P, plan, get recoveries() { return recoveries; } };
+  return { think, profile: P, plan, get recoveries() { return recoveries; },
+    /** seconds continuously below 1.5 m/s (recovery manoeuvres didn't free the car). Host should call body.recover(~8) when needsRescue. */
+    get stuckFor() { return stuckTotal; }, get needsRescue() { return stuckTotal > 6; },
+    clearStuck() { stuckTotal = 0; stuckT = 0; consec = 0; } };
 }

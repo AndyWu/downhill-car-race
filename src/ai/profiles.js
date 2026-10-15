@@ -39,14 +39,14 @@ const make = (o) => Object.freeze(merge(BASE, o));
 export const Barnaby = make({
   id: 'barnaby', name: 'Barnaby', tier: 1, title: 'Rookie',
   description: 'Oversteers, weaves, misses rocks, forgets to paddle, brakes late.',
-  reactionTime: 0.2, steerGain: 1.05, yawDamp: 0.1, steerNoise: 0.045, steerNoiseTau: 0.5, steerTau: 0.1,
+  reactionTime: 0.2, steerGain: 1.05, yawDamp: 0.12, steerNoise: 0.035, steerNoiseTau: 0.5, steerTau: 0.1,
   look: { min: 7, time: 0.5 },
   perception: { detect: { rock: 0.5, mud: 1, water: 1, default: 0.5 } },
   hazardWeight: { rock: 20, mud: 10, water: 8, default: 5 }, hazardMargin: 0.8, hazardStretch: 0.9,
   line: { mode: 'center', edge: 0.1, pull: 0.3, maxStep: 3, smooth: 1 },
-  speed: { mu: 0.8, cornerFactor: 1.3, brakeDecel: 10, cap: 15 },
-  paddle: { mode: 'forgetful', cadence: 2.2, strength: 0.9, jitter: 0.3,
-    attentive: 0.7, startDist: 120 },
+  speed: { mu: 0.8, cornerFactor: 1.2, brakeDecel: 9, cap: 15 },
+  paddle: { mode: 'forgetful', cadence: 2.7, strength: 0.9, jitter: 0.3,
+    attentive: 0.85, startDist: 120 },
   brake: { gain: 0.2, dead: 1.0, max: 0.9 },
 });
 
@@ -58,8 +58,8 @@ export const Clementine = make({
   hazardWeight: { rock: 60, mud: 30, water: 25, default: 25 }, hazardMargin: 3.0, hazardStretch: 2.5,
   surfaceWeight: { sand: 4, gravel: 2, grass: 8, mud: 6, water: 5 },
   line: { mode: 'avoid', edge: 0.5, pull: 0.1, maxStep: 1 },
-  speed: { mu: 0.8, cornerFactor: 0.55, brakeDecel: 2.6, cap: 15, useSurface: true },
-  paddle: { mode: 'slow', cadence: 2.5, strength: 0.85, jitter: 0.1 },
+  speed: { mu: 0.8, cornerFactor: 0.52, brakeDecel: 2.6, cap: 15, useSurface: true },
+  paddle: { mode: 'slow', cadence: 2.3, strength: 0.85, jitter: 0.1 },
   brake: { gain: 0.5, dead: 0.2 },
   carAvoid: 1,
 });
@@ -73,8 +73,8 @@ export const Buster = make({
   hazardWeight: { rock: 15, mud: 0, water: 0, default: 0 }, hazardMargin: 0.3, hazardStretch: 0.8,
   line: { mode: 'racing', edge: 0.3, pull: 0.02, maxStep: 3, relaxIters: 70 },
   speed: { mu: 0.85, cornerFactor: 1.05, brakeDecel: 6.5, cap: 24, scale: 1.0 },
-  paddle: { mode: 'furious', cadence: 3.4, strength: 1.0, jitter: 0.04,
-    stamina: { drain: 0.02, regen: 0.1, minFactor: 0.75 } },
+  paddle: { mode: 'furious', cadence: 3.7, strength: 1.0, jitter: 0.04,
+    stamina: { drain: 0.02, regen: 0.1, minFactor: 0.85 } },
   brake: { gain: 0.5, dead: 1.5 },
   aggression: 0.8,
 });

@@ -188,7 +188,7 @@ async function getRealPhysicsWorld(seed) {
   }
   return worldCache.get(seed);
 }
-async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = 0, trucks = null, rubberBand = 0, trace = false } = {}) {
+async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = 0, trucks = null, rubberBand = 1, trace = false } = {}) {
   const { createVehicleBody, collideBodies, draftFactor } = await import('../src/core/physics.js');
   const { TRUCKS } = await import('../src/vehicles/index.js');
   const world = await getRealPhysicsWorld(seed);
@@ -215,6 +215,7 @@ async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = 0
       else inp = c.driver.think(dt, c.body.state, states.filter((o) => o !== c.body.state));
       inp.draft = draftFactor(c.body, bodies);
       c.body.step(dt, inp);
+      if (racing && c.finished == null && c.driver.needsRescue) { c.body.recover(8); c.driver.clearStuck(); c.resets++; }
       if (racing && c.finished == null) {
         const st = c.body.state, w = world.track.sampleAt(Math.max(0, st.s)).width;
         if (Math.abs(st.lateral) > w / 2) { c.offroad += dt; if (process.env.OFF && c.name === process.env.OFF && !c.wasOff) console.log('OFFROAD', c.name, 's', st.s.toFixed(0), 'lat', st.lateral.toFixed(2), 'hw', (w / 2).toFixed(2), 'v', st.speed.toFixed(1), 'plan e', c.driver.plan.offsetAt(st.s).toFixed(2), 'yaw', st.angularVelocity.y.toFixed(2), 'surf', st.surface); c.wasOff = true; if (process.env.OFF && c.name === process.env.OFF && c.offroad < 0.02) console.log('  near hazards', world.hazards.filter((h) => Math.abs(h.s - st.s) < 25).map((h) => `${h.kind}@${h.s.toFixed(0)}/${h.lateral.toFixed(1)}`).join(' '), '| cars', cars.map((o) => o.name[0] + o.body.state.s.toFixed(0)).join(' ')); } else c.wasOff = false;
@@ -232,7 +233,7 @@ async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = 0
     if (trace && Math.abs((t % 10) - 0) < dt / 2) console.log(t.toFixed(0), cars.map((c) => `${c.name[0]}:${c.body.state.s.toFixed(0)}@${c.body.state.speed.toFixed(1)}`).join(' '));
     t += dt;
   }
-  return cars.map((c) => ({ name: c.name, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, maxStall: c.maxStall, stallS: c.stallS }));
+  return cars.map((c) => ({ name: c.name, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets }));
 }
 
 // ---------------- run ----------------
@@ -252,7 +253,7 @@ const agg = AI_PROFILES.map((p) => ({ name: p.name, time: 0, mud: 0, water: 0, r
 const t0 = Date.now();
 for (const sd of seeds) {
   const res = await runRace(sd);
-  console.log(`seed ${sd}: ` + res.map((r) => `${r.name} ${r.time === Infinity ? 'DNF@' + r.s.toFixed(0) : r.time.toFixed(1) + 's'} (m${r.hits.mud} w${r.hits.water} r${r.hits.rock} off${r.offroad.toFixed(1)}s${r.maxStall > 2 ? ' STALL' + r.maxStall.toFixed(0) + 's@' + r.stallS.toFixed(0) : ''})`).join(' | '));
+  console.log(`seed ${sd}: ` + res.map((r) => `${r.name} ${r.time === Infinity ? 'DNF@' + r.s.toFixed(0) : r.time.toFixed(1) + 's'} (m${r.hits.mud} w${r.hits.water} r${r.hits.rock} off${r.offroad.toFixed(1)}s${r.resets ? ' RESCUE' + r.resets : ''}${r.maxStall > 2.5 ? ' STALL' + r.maxStall.toFixed(0) + 's@' + r.stallS.toFixed(0) : ''})`).join(' | '));
   res.forEach((r, i) => { const a = agg[i]; if (r.time === Infinity) a.dnf++; a.time += Math.min(r.time, 900); a.mud += r.hits.mud; a.water += r.hits.water; a.rock += r.hits.rock; a.off += r.offroad; });
 }
 const n = seeds.length;
