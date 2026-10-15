@@ -5,7 +5,7 @@ const DS = 2;          // sample spacing along s (m)
 const CAR_HALF = 0.5;  // clearance assumed for car half-width
 const BIG = 1e4;
 
-export function buildPlan(world, P, rng) {
+export function buildPlan(world, P, rng, spec = null) {
   const track = world.track;
   const L = track.length || 3218;
   const n = Math.floor(L / DS) + 1;
@@ -137,10 +137,18 @@ export function buildPlan(world, P, rng) {
     kS[i] = mx;
   }
   const S = P.speed;
+  const gripK = Math.min(1.3, Math.max(0.6, spec?.gripMul ?? 1)); // truck tyre grip scales the cornering limit
   const v = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const fr = S.useSurface ? surfFric[i * K + slot[i]] : 1;
-    v[i] = Math.min(S.cap, Math.sqrt((S.mu * Math.min(1, fr) * G) / Math.max(1e-5, kS[i])) * S.cornerFactor);
+    v[i] = Math.min(S.cap, Math.sqrt((S.mu * gripK * Math.min(1, fr) * G) / Math.max(1e-5, kS[i])) * S.cornerFactor);
+  }
+  if (S.streamV) { // road-wide water crossings: slow down and cross squarely
+    for (const h of world.hazards || []) {
+      if (h.kind !== 'stream') continue;
+      const a = (h.halfLength ?? h.radius) + 2;
+      for (let i = Math.max(0, Math.floor((h.s - a) / DS)); i <= Math.min(n - 1, Math.ceil((h.s + a) / DS)); i++) v[i] = Math.min(v[i], S.streamV);
+    }
   }
   for (let i = n - 2; i >= 0; i--) { // backward: be able to brake in time
     const d = Math.hypot(px[i + 1] - px[i], pz[i + 1] - pz[i]);

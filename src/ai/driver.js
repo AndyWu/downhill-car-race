@@ -22,7 +22,7 @@ export function forwardXZ(q) {
 export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, human, headlight } = {}) {
   const P = profile;
   rng = rng || createRng(1);
-  const plan = buildPlan(world, P, rng);
+  const plan = buildPlan(world, P, rng, spec);
   const WB = spec?.wheelBase ?? 1.7, LOCK = spec?.steerLock ?? 0.5;
   const L = plan.length;
 
@@ -32,6 +32,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   let side = rng() < 0.5, nextStroke = 0.2, stamina = 1;
   let attentive = false, nextToggle = 0;
   // stuck recovery
+  let launch = null;
   let passSide = 0, passUntil = 0, passStart = 0, passCool = 0;
   let stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0, consec = 0, stuckTotal = 0;
 
@@ -86,8 +87,10 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     extra += (goal - extra) * (1 - Math.exp(-dt / 0.4));
 
     // ---- steering: pure pursuit toward planned point ----
+    if (launch === null) { launch = { s0: s, off: clamp(self.lateral - plan.offsetAt(s), -3, 3) }; } // grid slot is rarely on the planned line
+    const launchOff = launch.off * Math.max(0, 1 - (sT - launch.s0) / 90); // fade the grid offset into the plan over 90 m
     const [rxT, rzT] = plan.rightAt(sT);
-    const tx = plan.xAt(sT) + extra * rxT, tz = plan.zAt(sT) + extra * rzT;
+    const tx = plan.xAt(sT) + (extra + launchOff) * rxT, tz = plan.zAt(sT) + (extra + launchOff) * rzT;
     const dx = tx - px, dz = tz - pz;
     const xl = dx * fx + dz * fz, yl = -dx * fz + dz * fx;
     const dist = Math.max(1, Math.hypot(dx, dz));

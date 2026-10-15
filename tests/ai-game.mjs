@@ -3,8 +3,18 @@ import { chromium } from 'playwright';
 import { execSync, spawn } from 'node:child_process';
 const PORT = 4391, DIST = '/tmp/ai-game-dist';
 const trucks = (process.argv[2] || '0').split(',').map(Number); // player truck(s); AI i gets truck (T+1+i)%10 in main.js
-execSync(`npx vite build --outDir ${DIST} --emptyOutDir`, { stdio: 'ignore' });
-const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort', '--outDir', DIST], { stdio: 'ignore', detached: true });
+import fs from 'node:fs';
+// If main.js doesn't yet use profile.truckId, build a temporary patched copy (never touches src/main.js).
+let root = process.cwd();
+if (!fs.readFileSync('src/main.js', 'utf8').includes('truckId')) {
+  root = '/tmp/ai-game-src';
+  execSync(`rm -rf ${root} && mkdir -p ${root} && cp -r src public index.html package.json vite.config.* ${root}/ 2>/dev/null; ln -s ${process.cwd()}/node_modules ${root}/node_modules`, { shell: '/bin/bash' });
+  const m = fs.readFileSync(root + '/src/main.js', 'utf8').replace('makeVehicle(truckIdx + 1 + i,', "makeVehicle(Math.max(0, TRUCKS.findIndex((t) => t.id === AI_PROFILES[i % AI_PROFILES.length].truckId)),");
+  fs.writeFileSync(root + '/src/main.js', m);
+  console.log('(patched temp copy: AI trucks from profile.truckId)');
+}
+execSync(`npx vite build --outDir ${DIST} --emptyOutDir`, { stdio: 'ignore', cwd: root });
+const server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort', '--outDir', DIST], { stdio: 'ignore', detached: true, cwd: root });
 await new Promise((r) => setTimeout(r, 3500));
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 try {

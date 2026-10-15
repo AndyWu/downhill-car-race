@@ -199,9 +199,10 @@ async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = n
   const mk = (spec, slot) => { const body = createVehicleBody(spec, world); const st = world.startTransform(slot); body.reset(st.position, st.quaternion); return body; };
   const pBody = player ? mk(TRUCKS[T % TRUCKS.length], 0) : null;
   const cars = profiles.map((p, i) => {
-    const spec = TRUCKS[(AITRUCK ?? (T + 1 + i)) % TRUCKS.length];
+    const byId = AITRUCK == null && !NOSIG ? TRUCKS.findIndex((x) => x.id === p.truckId) : -1; // signature truck per profile
+    const spec = TRUCKS[byId >= 0 ? byId : (AITRUCK ?? (T + 1 + i)) % TRUCKS.length];
     const body = mk(spec, i + 1);
-    const driver = createAIDriver(p, { world, rng: createRng(1000 + i + (AITRUCK != null ? 97 * seed : 0)), spec, rubberBand, human: pBody ? () => pBody.state : undefined });
+    const driver = createAIDriver(p, { world, rng: createRng(1000 + i + (AITRUCK != null || !NOSIG ? 97 * seed : 0)), spec, rubberBand, human: pBody ? () => pBody.state : undefined });
     return { body, driver, finished: null, offroad: 0, hits: { mud: 0, water: 0, rock: 0 }, inHaz: new Set(), stall: 0, maxStall: 0, stallS: 0, resets: 0, name: p.name, truck: spec.id, snap: null };
   });
   const bodies = (pBody ? [pBody] : []).concat(cars.map((c) => c.body));
@@ -254,6 +255,7 @@ const MOCK = process.argv.includes('--mock') || REAL;
 const PHYS = !MOCK; // default: real physics + real world
 const TRACE = process.argv.includes('--trace');
 const TRUCKARG = process.argv.find((a) => a.startsWith('--truck='));
+const NOSIG = process.argv.includes('--nosig'); // ignore profile.truckId (main.js's old T+1+i pairing)
 const AIT = process.argv.find((a) => a.startsWith('--aitruck='));
 const AITRUCK = AIT ? Number(AIT.split('=')[1]) : null; // all AIs on one truck (balanced) instead of main.js's T+1+i pairing
 const TRUCK = TRUCKARG ? Number(TRUCKARG.split('=')[1]) : null;
