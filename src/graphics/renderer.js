@@ -22,7 +22,7 @@ export function createRenderer(canvas, opts = {}) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = tier.shadowType === 'basic' ? THREE.BasicShadowMap : THREE.PCFShadowMap;
   renderer.setClearColor(0x0b0f14, 1);
 
   const gfx = {

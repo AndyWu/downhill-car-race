@@ -50,7 +50,7 @@ float gHt( vec2 uv ) { return textureGrad( roughnessMap, uv, gDx, gDy ).a; }
 	vec4 sampledDiffuseColor = textureGrad( map, gUv, gDx, gDy );
 	float gMac = texture2D( gMacroM, vMapUv * 0.09 ).r;
 	sampledDiffuseColor.rgb *= 0.7 + 0.6 * gMac;
-	sampledDiffuseColor.rgb *= mix( 1.0, 0.55, gWet * gWetM );
+	sampledDiffuseColor.rgb *= mix( 1.0, 0.55, gWet * gWetM ) * mix( 1.0, 0.8, gWet );
 	sampledDiffuseColor.rgb = mix( sampledDiffuseColor.rgb, vec3( 0.05, 0.045, 0.03 ), gPool * gWet * 0.85 );
 	diffuseColor *= sampledDiffuseColor;`)
       .replace('#include <roughnessmap_fragment>', /* glsl */`

@@ -13,7 +13,7 @@ export function createMaterials(renderer, opts = {}) {
   if (opts.quality) setTier(opts.quality);
   const tier = getTier();
   const maxA = renderer?.capabilities?.getMaxAnisotropy?.() ?? 4;
-  const aniso = Math.min(opts.anisotropy ?? 8, maxA);
+  const aniso = Math.min(opts.anisotropy ?? tier.aniso, maxA);
   const big = opts.bigTextureSize ?? tier.tex;
   const small = opts.textureSize ?? Math.min(256, tier.tex);
   const T = {};
