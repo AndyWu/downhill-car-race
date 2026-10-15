@@ -7,8 +7,30 @@ const FARM_OFFSET = 68;
 export function planFarms(track, seed) {
   const rng = mulberry32(seed * 6131 + 7);
   const farms = [], q = {}, pp = {};
-  const bases = [330, 800, 1290, 1760, 2230, 2700];
-  bases.forEach((base, i) => {
+  // --- barns on the OUTSIDE of tight bends, 32 m off the road, facing it ---
+  const tight = track.bends.filter((b) => Math.abs(b.k) >= 1 / 60).sort((a, b) => a.s - b.s);
+  const BARN_LOCAL = [-24, -6];
+  [0, 2, 4].forEach((bi) => {
+    const bd = tight[bi]; if (!bd) return;
+    for (const off of [32, 28, 36, 30]) {
+      const side = bd.k > 0 ? -1 : 1;
+      track.atS(bd.s, pp);
+      const bx = pp.px + pp.rhx * side * (pp.hw + off), bz = pp.pz + pp.rhz * side * (pp.hw + off);
+      const dx = -side * pp.rhx, dz = -side * pp.rhz, yaw = Math.atan2(dx, dz), c = Math.cos(yaw), sn = Math.sin(yaw);
+      const x = bx - (BARN_LOCAL[0] * c + BARN_LOCAL[1] * sn), z = bz - (-BARN_LOCAL[0] * sn + BARN_LOCAL[1] * c);
+      track.project2(x, z, q);
+      if (q.dist < 17) continue;
+      const rx = pp.px + pp.rhx * side * (pp.hw + 1.4), rz = pp.pz + pp.rhz * side * (pp.hw + 1.4);
+      farms.push({
+        i: farms.length, s: bd.s, side, x, z, yaw, r: 30, y: 0, roadX: rx, roadZ: rz, hw: pp.hw, bend: true, barnLateral: side * (pp.hw + off),
+        silo: true, windmill: false, tractor: farms.length % 2 === 0, seed: Math.floor(rng() * 1e6), tint: Math.floor(rng() * 3),
+      });
+      break;
+    }
+  });
+  const bases = [800, 1760, 2700];
+  bases.forEach((base) => {
+    const i = farms.length;
     for (let att = 0; att < 14; att++) {
       const s = base + rng() * 90 + (att > 1 ? ((att % 2) ? 1 : -1) * (att >> 1) * 40 : 0);
       const side = (att % 2 === 0) === (i % 2 === 0) ? 1 : -1;
@@ -25,7 +47,7 @@ export function planFarms(track, seed) {
       const yaw = Math.atan2(rx - x, rz - z);
       farms.push({
         i, s: fs, side: sgn, x, z, yaw, r: 30, y: 0, roadX: rx, roadZ: rz, hw: pp.hw,
-        silo: rng() < 0.7, windmill: i === 1 || i === 4, tractor: i % 2 === 0, seed: Math.floor(rng() * 1e6),
+        silo: rng() < 0.7, windmill: i === 4 || i === 3, tractor: i % 2 === 0, seed: Math.floor(rng() * 1e6),
         tint: Math.floor(rng() * 3),
       });
       break;

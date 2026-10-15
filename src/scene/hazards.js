@@ -120,7 +120,7 @@ export function createHazardField(track, seed = 1) {
     let m = 0;
     for (let i = 0; i < b.length; i++) {
       const z = b[i]; if (!WETKIND[z.kind]) continue;
-      const w = weight(z, s, d, z.kind === 'stream' ? 1.9 : 2.1);
+      const w = weight(z, s, d, z.kind === 'stream' ? 2.2 : 2.7);
       if (w > m) m = w;
     }
     return m;

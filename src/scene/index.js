@@ -20,7 +20,10 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
   const farms = planFarms(track, seed);
   await tick();
   progress(0.15, 'shaping the hills');
-  const terrain = buildTerrain(track, field, farms, seed);
+  const gaps = [];
+  for (const f of farms) gaps.push({ s: f.s, side: f.side });
+  for (const sg of [-1, 1]) { gaps.push({ s: TRACK_LENGTH, side: sg, r: 40 }); gaps.push({ s: 30, side: sg, r: 30 }); }
+  const terrain = buildTerrain(track, field, farms, seed, gaps);
   for (const f of farms) f.y = f.y; // pad heights were written by buildTerrain
   const lib = createMaterialLibrary(materials);
   const root = new THREE.Group(); root.name = 'world';
@@ -88,11 +91,12 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
       if (o.visible !== v) o.visible = v;
     }
   };
-  const groundItems = [...ground.chunks, ...ground.decals];
+  const groundItems = [...ground.chunks, ...ground.decals, ...ground.items];
   function update(dt, camera) {
     time += dt;
     lib.wind.uTime.value = time;
     for (const t of waterMats) t.offset.y = (time * 0.02) % 1;
+    ground.update(time);
     if (camera) {
       camera.getWorldPosition(camPos);
       vis(groundItems, RANGE_GROUND);
@@ -105,7 +109,14 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
     }
   }
 
+  const landmarks = [];
+  for (const f of farms) landmarks.push(f.bend ? { type: 'barn', s: f.s, lateral: f.barnLateral } : { type: 'farm', s: f.s, lateral: f.side * (f.hw + 68) });
+  for (const z of field.zones) if (z.kind === 'stream' && z.bridge) landmarks.push({ type: 'bridge', s: z.s, lateral: 0 });
+  landmarks.push({ type: 'finish', s: TRACK_LENGTH, lateral: 0 });
+  landmarks.sort((a, b) => a.s - b.s);
+
   return {
+    landmarks,
     track: { length: TRACK_LENGTH, sampleAt: track.sampleAt, project: track.project },
     heightAt: terrain.heightAt,
     normalAt: (x, z) => terrain.normalAt(x, z),
@@ -115,7 +126,7 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
     update,
     // extras (not part of the contract)
     group: root, seed,
-    info: { drop: track.drop, farms: farms.map((f) => ({ s: f.s, x: f.x, z: f.z })) },
+    info: { drop: track.drop, farms: farms.map((f) => ({ s: f.s, x: f.x, z: f.z, bend: !!f.bend })) },
     dispose() { scene.remove(root); root.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); },
   };
 }

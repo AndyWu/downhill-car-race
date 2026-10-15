@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32, Noise, clamp, smoothstep, lerp, ihash } from './util.js';
 import { Batch, boxG, cylG, prep, xf } from './batch.js';
+import { bannerTexture } from './materials.js';
 
 export const SCENERY_CHUNK = 250;
 
@@ -33,32 +34,47 @@ function blob(r, detail, seed, squash = 0.8) {
 }
 const lerp3 = (a, b, t, o) => { o[0] = lerp(a[0], b[0], t); o[1] = lerp(a[1], b[1], t); o[2] = lerp(a[2], b[2], t); };
 
-function makePine(seed) {
+function makePine(seed, narrow = 1) {
+  const r = mulberry32(seed * 91 + 3);
   const bark = (x, y, z, o) => { o[0] = 0.55; o[1] = 0.45; o[2] = 0.38; };
   const trunk = mergeParts([{ g: cylG(0.12, 0.28, 9, 6, 2), m: xf(0, 4.5, 0), shade: bark }]);
-  const cones = [];
-  for (let i = 0; i < 5; i++) {
-    const r = 2.5 - i * 0.42, h = 3.0 - i * 0.2, y = 2.3 + i * 1.55;
+  const cones = [], tiers = 4 + Math.floor(r() * 3);
+  for (let i = 0; i < tiers; i++) {
+    const k = i / (tiers - 1), rad = (2.6 - k * 2.0) * narrow * (0.9 + r() * 0.25), h = 2.6 + r() * 0.8 - k * 0.5, y = 2.0 + k * 7 * (0.9 + r() * 0.1) - 0.7;
     cones.push({
-      g: new THREE.ConeGeometry(r, h, 8, 1), m: xf(0, y + h / 2, 0, 0, i * 0.7, 0),
-      shade: (x, yy, z, o) => { const t = clamp((yy - y) / h, 0, 1); lerp3([0.14, 0.27, 0.15], [0.24, 0.4, 0.2], t, o); },
+      g: new THREE.ConeGeometry(rad, h, 7 + Math.floor(r() * 3), 1), m: xf((r() - 0.5) * 0.25, y + h / 2, (r() - 0.5) * 0.25, 0, r() * 6, 0),
+      shade: (x, yy, z, o) => { const t = clamp((yy - y) / h, 0, 1); lerp3([0.12, 0.25, 0.14], [0.24, 0.4, 0.2], t, o); },
     });
   }
   return { trunk, canopy: mergeParts(cones), h: 10 };
 }
-function makeOak(seed) {
+function makeOak(seed, maple = false) {
+  const r = mulberry32(seed * 57 + 11);
+  const barkc = (x, y, z, o) => { o[0] = 0.5; o[1] = 0.42; o[2] = 0.36; };
+  const lean = (r() - 0.5) * 0.3;
   const trunk = mergeParts([
-    { g: cylG(0.32, 0.55, 3.4, 7, 2), m: xf(0, 1.7, 0), shade: (x, y, z, o) => { o[0] = 0.5; o[1] = 0.42; o[2] = 0.36; } },
-    { g: cylG(0.14, 0.24, 2.4, 5, 2), m: xf(0.9, 3.6, 0, 0, 0, -0.7), shade: (x, y, z, o) => { o[0] = 0.5; o[1] = 0.42; o[2] = 0.36; } },
-    { g: cylG(0.12, 0.2, 2.2, 5, 2), m: xf(-0.8, 3.7, 0.3, 0.2, 0, 0.65), shade: (x, y, z, o) => { o[0] = 0.5; o[1] = 0.42; o[2] = 0.36; } },
+    { g: cylG(0.32, 0.55, 3.4, 7, 2), m: xf(0, 1.7, 0, lean, 0, lean), shade: barkc },
+    { g: cylG(0.14, 0.24, 2.4, 5, 2), m: xf(0.9, 3.6, 0, 0, 0, -0.7 - r() * 0.3), shade: barkc },
+    { g: cylG(0.12, 0.2, 2.2, 5, 2), m: xf(-0.8, 3.7, 0.3, 0.2, 0, 0.5 + r() * 0.3), shade: barkc },
   ]);
-  const blobs = [];
-  const pos = [[0, 6.8, 0, 2.7], [2.0, 5.6, 0.4, 2.2], [-2.0, 5.4, -0.4, 2.3], [0.3, 5.2, 2.2, 2.1], [-0.5, 5.4, -2.2, 2.1]];
-  pos.forEach((q, i) => blobs.push({
-    g: blob(q[3], 1, seed + i, 0.8), m: xf(q[0], q[1], q[2], 0, i, 0),
-    shade: (x, y, z, o) => { const t = clamp((y - (q[1] - q[3])) / (q[3] * 1.6), 0, 1); lerp3([0.2, 0.34, 0.14], [0.42, 0.58, 0.22], t, o); },
-  }));
+  const blobs = [], nb = 4 + Math.floor(r() * 3);
+  for (let i = 0; i < nb; i++) {
+    const a = (i / nb) * 6.28 + r(), rr = i === 0 ? 0 : 1.8 + r() * 0.9, y = (i === 0 ? 6.9 : 5.3 + r() * 1.6), rad = (i === 0 ? 2.7 : 1.9 + r() * 0.6) * (maple ? 0.85 : 1);
+    const cx = Math.cos(a) * rr, cz = Math.sin(a) * rr;
+    blobs.push({
+      g: blob(rad, 1, seed * 7 + i, 0.7 + r() * 0.25), m: xf(cx, y, cz, 0, i, 0),
+      shade: (x, yy, z, o) => { const t = clamp((yy - (y - rad)) / (rad * 1.6), 0, 1); lerp3([0.2, 0.34, 0.14], [0.42, 0.58, 0.22], t, o); },
+    });
+  }
   return { trunk, canopy: mergeParts(blobs), h: 9.2 };
+}
+function makePoplar(seed) {
+  const trunk = mergeParts([{ g: cylG(0.1, 0.22, 5, 6, 2), m: xf(0, 2.5, 0), shade: (x, y, z, o) => { o[0] = 0.58; o[1] = 0.52; o[2] = 0.45; } }]);
+  const blobs = [[0, 4.2, 1.1, 1.7], [0.1, 6.2, 0.95, 1.9], [-0.1, 8.2, 0.75, 1.9], [0, 10, 0.5, 1.6]].map((q, i) => ({
+    g: blob(q[2], 1, seed + i, q[3]), m: xf(q[0], q[1], 0, 0, i, 0),
+    shade: (x, y, z, o) => { const t = clamp((y - (q[1] - 2)) / 4, 0, 1); lerp3([0.2, 0.36, 0.14], [0.4, 0.56, 0.2], t, o); },
+  }));
+  return { trunk, canopy: mergeParts(blobs), h: 11.5 };
 }
 function makeBirch(seed) {
   const trunk = mergeParts([{ g: cylG(0.1, 0.17, 8, 6, 2), m: xf(0, 4, 0), shade: (x, y, z, o) => { const m = ihash(Math.round(y * 3), 0, seed) > 0.7 ? 0.3 : 1.35; o[0] = m; o[1] = m; o[2] = m * 0.95; } }]);
@@ -126,13 +142,28 @@ function makePole() {
 export function buildScenery({ track, terrain, field, lib, parent, L, seed, farms }) {
   const nz = new Noise(seed * 211 + 9);
   const pp = {};
+  // palettes: instance tints multiply the canopy vertex colours (lo/hi per channel)
+  const GREEN = [[0.7, 1.15], [0.8, 1.15], [0.6, 1.1]], YEL = [[0.95, 1.35], [0.9, 1.15], [0.5, 0.8]], AUTUMN = [[1.5, 2.2], [0.55, 1.1], [0.25, 0.5]], BLUEG = [[0.65, 0.95], [0.8, 1.1], [0.75, 1.1]];
   const species = [
-    { name: 'pine', ...makePine(1), sc: [0.8, 1.5], amp: 0.14 },
-    { name: 'oak', ...makeOak(2), sc: [0.8, 1.35], amp: 0.1 },
-    { name: 'birch', ...makeBirch(3), sc: [0.8, 1.2], amp: 0.14 },
-    { name: 'dead', ...makeDead(4), sc: [0.7, 1.2], amp: 0.0 },
-    { name: 'bush', ...makeBush(5), sc: [0.7, 1.7], amp: 0.06 },
+    { name: 'pineA', ...makePine(1, 1.0), sc: [0.8, 1.5], amp: 0.14, pal: BLUEG },
+    { name: 'pineB', ...makePine(2, 0.7), sc: [1.0, 1.7], amp: 0.14, pal: GREEN },
+    { name: 'oakA', ...makeOak(2), sc: [0.8, 1.35], amp: 0.1, pal: GREEN },
+    { name: 'oakB', ...makeOak(6), sc: [0.7, 1.5], amp: 0.1, pal: YEL },
+    { name: 'maple', ...makeOak(9, true), sc: [0.7, 1.2], amp: 0.1, pal: AUTUMN },
+    { name: 'birch', ...makeBirch(3), sc: [0.8, 1.2], amp: 0.14, pal: YEL },
+    { name: 'poplar', ...makePoplar(8), sc: [0.8, 1.4], amp: 0.1, pal: GREEN },
+    { name: 'dead', ...makeDead(4), sc: [0.7, 1.2], amp: 0.0, pal: GREEN },
+    { name: 'bush', ...makeBush(5), sc: [0.7, 1.7], amp: 0.06, pal: YEL },
   ];
+  const SP = Object.fromEntries(species.map((sp, i) => [sp.name, i]));
+  const pickSpecies = (v, r) => {
+    if (r < 0.05) return SP.dead;
+    if (r < 0.26) return SP.bush;
+    const q = (r - 0.26) / 0.74;
+    if (v < -0.25) return q < 0.38 ? SP.pineA : q < 0.72 ? SP.pineB : q < 0.88 ? SP.oakA : q < 0.95 ? SP.birch : SP.maple;
+    if (v < 0.25) return q < 0.28 ? SP.oakA : q < 0.5 ? SP.oakB : q < 0.62 ? SP.maple : q < 0.78 ? SP.birch : q < 0.88 ? SP.poplar : SP.pineA;
+    return q < 0.3 ? SP.birch : q < 0.55 ? SP.poplar : q < 0.75 ? SP.oakB : q < 0.88 ? SP.maple : SP.oakA;
+  };
   const grassGeo = makeGrass(), rockGeo = makeRock(7), poleGeo = makePole();
   const grassMat = lib.get('blade', { vertexColors: true, side: THREE.DoubleSide, sway: { amp: 0.16, freq: 1.7, hpow: 1.6, hscale: 1.1 } });
   const rockMat = lib.get('rock');
@@ -145,6 +176,8 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
   }
   const railGeo = boxG(1, 0.08, 0.11, 2), postGeo = boxG(0.14, 1.3, 0.14, 2);
   const wireMat = new THREE.LineBasicMaterial({ color: 0x15181a });
+  const signMat = new THREE.MeshStandardMaterial({ map: bannerTexture('SLOW - KIDS RACING', '#e8dcb8', '#9c1d14'), roughness: 0.9, side: THREE.DoubleSide });
+  const terrainY = (x, z) => terrain.heightAt(x, z);
 
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler(), _c = new THREE.Color();
   const mats = (arr) => arr;
@@ -186,23 +219,20 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
     // ---- trees, bushes ----
     {
       const buckets = species.map(() => ({ ms: [], cols: [] }));
-      for (let i = 0; i < 230; i++) {
+      for (let i = 0; i < 250; i++) {
         const s = s0 + rng() * (s1 - s0), side = rng() < 0.5 ? -1 : 1;
         track.atS(s, pp);
-        const off = pp.hw + 4.2 + Math.pow(rng(), 1.8) * 85;
+        const off = pp.hw + 6.5 + Math.pow(rng(), 1.8) * 85;
         const dens = 0.18 + 0.82 * smoothstep(-0.25, 0.45, nz.n1(s / 120 + side * 5.3 + off / 60));
         if (rng() > dens) continue;
         place(s, side * off, o);
         if (farmBlocked(o.x, o.z, 52)) continue;
-        const v = nz.n1(s / 170 + side * 17 + 3);
-        let si;
-        const r = rng();
-        if (r < 0.05) si = 3; else if (r < 0.3) si = 4;
-        else if (v < -0.25) si = r < 0.8 ? 0 : 1; else if (v < 0.25) si = r < 0.6 ? 1 : r < 0.8 ? 2 : 0; else si = r < 0.55 ? 2 : 1;
+        const si = pickSpecies(nz.n1(s / 170 + side * 17 + 3 + off / 150), rng());
         const sp = species[si], sc = lerp(sp.sc[0], sp.sc[1], rng());
-        buckets[si].ms.push(compose(o.x, o.y - 0.15, o.z, rng() * 6.28, sc * (0.9 + rng() * 0.2), sc, sc * (0.9 + rng() * 0.2), (rng() - 0.5) * 0.06, (rng() - 0.5) * 0.06));
-        const t = rng();
-        buckets[si].cols.push(new THREE.Color(0.8 + t * 0.3, 0.85 + t * 0.2, 0.7 + rng() * 0.3));
+        const wv = lerp(0.8, 1.28, rng()), hv = lerp(0.78, 1.35, rng());
+        buckets[si].ms.push(compose(o.x, o.y - 0.15, o.z, rng() * 6.28, sc * wv, sc * hv, sc * lerp(0.8, 1.28, rng()), (rng() - 0.5) * 0.09, (rng() - 0.5) * 0.09));
+        const br = 0.82 + rng() * 0.3, t = rng();
+        buckets[si].cols.push(new THREE.Color(br * lerp(sp.pal[0][0], sp.pal[0][1], t), br * lerp(sp.pal[1][0], sp.pal[1][1], rng() * 0.6 + t * 0.4), br * lerp(sp.pal[2][0], sp.pal[2][1], rng())));
       }
       species.forEach((sp, i) => {
         const bk = buckets[i]; if (!bk.ms.length) return;
@@ -243,29 +273,30 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
       const posts = [], rails = [], pcols = [], rcols = [];
       const fencePt = (side, s) => {
         if (s < 30) return null;
-        if (nz.n1(s / 230 + side * 13 + 2) <= 0.05) return null;
-        for (const f of farms) if (f.side === side && Math.abs(s - f.s) < 6) return null;
+        if (nz.n1(s / 230 + side * 13 + 2) <= -0.38) return null;
+        for (const f of farms) if (f.side === side && Math.abs(s - f.s) < 7) return null;
         const hw = track.atS(s, pp).hw;
-        return place(s, side * (hw + 2.5 + 0.3 * nz.n1(s / 17 + side * 3)), {});
+        return place(s, side * (hw + 4.7 + 0.3 * nz.n1(s / 17 + side * 3)), {});
       };
       for (const side of [-1, 1]) {
         for (let k = Math.ceil(s0 / 3); k * 3 < s1; k++) {
           const s = k * 3, cur = fencePt(side, s);
           if (!cur) continue;
-          const lean = (rng() - 0.5) * 0.12;
-          posts.push(compose(cur.x, cur.y + 0.55, cur.z, rng() * 6.28, 1, 1, 1, lean, lean * 0.7));
-          const t = 0.65 + rng() * 0.35; pcols.push(new THREE.Color(t, t * 0.96, t * 0.92));
+          const hsh = ihash(k, side * 7 + 3, seed), broken = hsh < 0.1, missing = hsh > 0.965;
+          const lean = broken ? (hsh < 0.05 ? 0.6 : -0.55) : (rng() - 0.5) * 0.12;
+          if (!missing) { posts.push(compose(cur.x, cur.y + 0.55, cur.z, rng() * 6.28, 1, 1, 1, lean, lean * 0.7)); const t = 0.65 + rng() * 0.35; pcols.push(new THREE.Color(t, t * 0.96, t * 0.92)); }
           const prev = fencePt(side, s - 3);
           if (prev) {
             for (const hh of [0.42, 0.92]) {
-              if (rng() < 0.05) continue;
-              const a = new THREE.Vector3(prev.x, prev.y + hh + 0.05, prev.z), b = new THREE.Vector3(cur.x, cur.y + hh + (rng() - 0.5) * 0.06, cur.z);
+              if (rng() < (broken ? 0.45 : 0.05)) continue;
+              const a = new THREE.Vector3(prev.x, prev.y + hh + 0.05, prev.z), b = new THREE.Vector3(cur.x, broken ? cur.y + 0.1 + hh * 0.15 : cur.y + hh + (rng() - 0.5) * 0.06, cur.z);
               const dir = new THREE.Vector3().subVectors(b, a), len = dir.length();
               _q.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.normalize());
               rails.push(new THREE.Matrix4().compose(a.add(b).multiplyScalar(0.5), _q.clone(), new THREE.Vector3(len, 1, 1)));
               const tt = 0.7 + rng() * 0.3; rcols.push(new THREE.Color(tt, tt * 0.96, tt * 0.9));
             }
           }
+          if (broken) { rails.push(compose(cur.x + (rng() - 0.5) * 1.5, cur.y + 0.08, cur.z + (rng() - 0.5) * 1.5, rng() * 6.28, 2.8, 1, 1, 0, (rng() - 0.5) * 0.2)); rcols.push(new THREE.Color(0.6, 0.55, 0.5)); }
         }
       }
       if (posts.length) { const m = mkInst(postGeo, postMat, posts, pcols, true, false); m.name = 'fence_posts'; group.add(m); }
@@ -300,20 +331,60 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
       }
     }
 
-    // ---- warning signs before mud / streams ----
+    // ---- roadside story props + signs ----
     {
       const b = new Batch();
+      const at = (s, side, off) => { const hw = track.atS(s, pp).hw; const q = place(s, side * (hw + off), {}); q.T = track.sampleAt(s).tangent; q.side = side; q.ry = Math.atan2(-pp.rhz, pp.rhx); return q; };
       for (const z of field.zones) {
         if ((z.kind !== 'mud' && z.kind !== 'stream') || z.s - 32 < s0 || z.s - 32 >= s1) continue;
-        const side = rng() < 0.5 ? -1 : 1;
-        const s = z.s - 32;
-        track.atS(s, pp);
-        place(s, side * (pp.hw + 1.9), o);
-        const yaw = Math.atan2(-pp.rhz, pp.rhx) + Math.PI / 2 + side * 0.15;
-        b.add('woodWeathered', boxG(0.1, 1.9, 0.1, 1), xf(o.x, o.y + 0.9, o.z, 0, yaw, (rng() - 0.5) * 0.1), [0.7, 0.62, 0.55]);
-        b.add('metalRusted', boxG(0.75, 0.75, 0.03, 1), xf(o.x, o.y + 1.9, o.z, 0, yaw, Math.PI / 4), [1.4, 1.1, 0.5]);
-        b.add('dark', boxG(0.07, 0.38, 0.04, 1), xf(o.x, o.y + 1.95, o.z, 0, yaw, 0), [0.05, 0.05, 0.05]);
+        const side = rng() < 0.5 ? -1 : 1, q = at(z.s - 32, side, 5.4);
+        const yaw = q.ry + Math.PI / 2 + side * 0.15;
+        b.add('woodWeathered', boxG(0.1, 1.9, 0.1, 1), xf(q.x, q.y + 0.9, q.z, 0, yaw, (rng() - 0.5) * 0.1), [0.7, 0.62, 0.55]);
+        b.add('metalRusted', boxG(0.75, 0.75, 0.03, 1), xf(q.x, q.y + 1.9, q.z, 0, yaw, Math.PI / 4), [1.4, 1.1, 0.5]);
+        b.add('dark', boxG(0.07, 0.38, 0.04, 1), xf(q.x, q.y + 1.95, q.z, 0, yaw, 0), [0.05, 0.05, 0.05]);
       }
+      const inR = (v) => v >= s0 && v < s1;
+      // hand-painted "SLOW - KIDS RACING" signs
+      [60, 800, 1700, 2600, 3100].forEach((ss, i) => {
+        if (!inR(ss)) return;
+        const side = i % 2 ? 1 : -1, q = at(ss, side, 5.6), T = q.T;
+        const yaw = Math.atan2(-T.x, -T.z) + side * 0.12;
+        b.add('woodWeathered', boxG(0.12, 2.3, 0.12, 1), xf(q.x - Math.cos(yaw) * 0.9, q.y + 1.0, q.z + Math.sin(yaw) * 0.9, 0, yaw, 0.03), [0.6, 0.52, 0.45]);
+        b.add('woodWeathered', boxG(0.12, 2.3, 0.12, 1), xf(q.x + Math.cos(yaw) * 0.9, q.y + 1.0, q.z - Math.sin(yaw) * 0.9, 0, yaw, -0.02), [0.6, 0.52, 0.45]);
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.6), signMat);
+        m.position.set(q.x, q.y + 1.9, q.z); m.rotation.set(0.05, yaw, (rng() - 0.5) * 0.06); m.castShadow = true; m.name = 'kids_sign'; group.add(m);
+      });
+      // broken cart wheels leaning on the fence line
+      [350, 1520, 2400, 2990].forEach((ss, i) => {
+        if (!inR(ss)) return;
+        const q = at(ss, i % 2 ? 1 : -1, 5.0), base = xf(q.x, q.y + 0.48, q.z, -0.28, q.ry + 0.5, 0.0);
+        b.add('woodWeathered', new THREE.TorusGeometry(0.5, 0.05, 5, 14), base, [0.55, 0.48, 0.4]);
+        for (let k = 0; k < 6; k++) if (k !== 2) b.add('woodWeathered', boxG(1.0, 0.045, 0.045, 1), base.clone().multiply(xf(0, 0, 0, 0, 0, k * Math.PI / 6)), [0.6, 0.52, 0.44]);
+        b.add('metalRusted', cylG(0.08, 0.08, 0.12, 6, 1), base.clone().multiply(xf(0, 0, 0, Math.PI / 2, 0, 0)), [1.0, 0.55, 0.4]);
+      });
+      // hay wagons parked in the field
+      [{ s: 1010, side: -1 }, { s: 2030, side: 1 }].forEach((w) => {
+        if (!inR(w.s)) return;
+        const q = at(w.s, w.side, 12.5), base = xf(q.x, q.y, q.z, 0, q.ry + 0.6, 0.04);
+        const L = (m) => base.clone().multiply(m);
+        b.add('woodWeathered', boxG(3.4, 0.14, 1.7, 2), L(xf(0, 0.8, 0)), [0.7, 0.62, 0.55]);
+        for (const sx of [-1, 1]) { b.add('woodWeathered', boxG(3.4, 0.5, 0.06, 2), L(xf(0, 1.15, sx * 0.84)), [0.65, 0.58, 0.5]); b.add('dark', cylG(0.5, 0.5, 0.1, 10, 1), L(xf(sx * 0.0 - 0.9, 0.5, sx * 0.95, Math.PI / 2, 0, 0)), [0.25, 0.2, 0.15]); b.add('dark', cylG(0.5, 0.5, 0.1, 10, 1), L(xf(0.9, 0.5, sx * 0.95, Math.PI / 2, 0, 0)), [0.25, 0.2, 0.15]); }
+        b.add('woodWeathered', boxG(0.1, 0.1, 2.6, 2), L(xf(2.5, 0.45, 0, 0, Math.PI / 2, 0.28)), [0.55, 0.5, 0.45]);
+        b.add('straw', boxG(3.0, 0.8, 1.55, 2), L(xf(-0.1, 1.3, 0)), [0.95, 0.9, 0.7]);
+        b.add('straw', boxG(2.0, 0.5, 1.3, 2), L(xf(-0.4, 1.9, 0)), [1, 0.95, 0.75]);
+      });
+      // rusted oil drums
+      [610, 1250, 1900, 2850].forEach((ss, i) => {
+        if (!inR(ss)) return;
+        const side = i % 2 ? -1 : 1, q = at(ss, side, 7.2);
+        for (let k = 0; k < 3; k++) {
+          const x = q.x + (rng() - 0.5) * 1.8, z = q.z + (rng() - 0.5) * 1.8, y = terrainY(x, z), tipped = k === 2;
+          const base = tipped ? xf(x, y + 0.3, z, 0, rng() * 6, Math.PI / 2) : xf(x, y + 0.45, z, 0, rng() * 6, 0);
+          b.add('metalRusted', cylG(0.3, 0.3, 0.9, 10, 1), base, [1.0, 0.5 + rng() * 0.2, 0.35]);
+          for (const hh of [-0.28, 0, 0.28]) b.add('metalRusted', cylG(0.315, 0.315, 0.05, 10, 1), base.clone().multiply(xf(0, hh, 0)), [0.7, 0.4, 0.3]);
+          b.add('dark', cylG(0.28, 0.28, 0.03, 10, 1), base.clone().multiply(xf(0, 0.46, 0)), [0.15, 0.1, 0.08]);
+        }
+      });
       if (b.parts.size) group.add(b.build(lib, { shadow: false }));
     }
 

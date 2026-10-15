@@ -66,7 +66,7 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
           const grassy = 0.5 * (rnz.n2(s * 0.3 + 5, d * 0.5) * 0.5 + 0.5);
           const centerWear = 1.0 + 0.06 * (1 - smoothstep(0, 1.2, ad));
           const wetv = field.wet(s, d);
-          const base = nzv * (1 - rut) * centerWear * (1 - 0.45 * wetv);
+          const base = nzv * (1 - rut) * centerWear * (1 - 0.62 * wetv);
           C[i * 3] = lerp(base, 0.70 * base, edge * (0.6 + grassy)); C[i * 3 + 1] = lerp(base, 0.86 * base, edge * (0.6 + grassy)); C[i * 3 + 2] = lerp(base, 0.52 * base, edge * (0.6 + grassy));
         }
       }
