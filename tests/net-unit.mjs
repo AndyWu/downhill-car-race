@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { packSdp, unpackSdp, parseSdp } from '../src/net/sdpPack.js';
 import { encodeInputFrame, decodeInputFrame, packInputPacket, unpackInputPacket, packSnapshot, unpackSnapshot, createSnapshotEncoder, createSnapshotDecoder, packQuat, unpackQuat, SNAP_HEADER, SNAP_STRIDE } from '../src/net/protocol.js';
 import { createPredictor } from '../src/net/predictor.js';
+import { createFakeWorld, carAt } from './net-fake-world.js';
 import { createInterpolator } from '../src/net/interpolator.js';
 import { createLicensing, MAX_SEATS } from '../src/net/licensing.js';
 
@@ -76,7 +77,7 @@ await t('smallest-three 10-bit quaternion (worst-case angle error)', () => {
   assert.ok(worst < 0.25, 'worst ' + worst);
   console.log(`        worst rotation error over 20k random quats: ${worst.toFixed(3)}°`);
 });
-await t('snapshot v2: ≤64 B/car, keyframe+delta, acks, 30 Hz bandwidth', () => {
+await t('snapshot FULL records (no world available): ≤64 B/car, keyframe+unchanged deltas, acks', () => {
   // 6 cars spread over 3 km of track, 2 parked at the start line (unchanged → 1 B in deltas)
   const car = (id, z, moving, ev = 0) => { const q = randQuat(); return [id, 12.3 + id, 410 - z * 0.12, -z, ...q, moving ? 3.2 : 0, moving ? -1.1 : 0, moving ? -24.5 : 0, z * 1.01 - 5, ev, -1]; };
   const parked = [car(4, 0, false), car(5, 2, false)];
@@ -109,15 +110,49 @@ await t('snapshot v2: ≤64 B/car, keyframe+delta, acks, 30 Hz bandwidth', () =>
   const total = avg * 30 * 5; // host upstream to 5 clients at 30 Hz
   assert.ok(total < 25 * 1024, 'total ' + total);
   console.log(`        keyframe ${(key / nk).toFixed(0)} B, delta ${(delta / nd).toFixed(0)} B (6 cars, 2 parked, 5 acks) → ~${perCar.toFixed(1)} B/car incl. ack`);
-  console.log(`        30 Hz: ${(avg * 30 / 1024).toFixed(2)} KiB/s per client, ${(total / 1024).toFixed(1)} KiB/s host total for 5 clients (v1 was 12.1 KiB/s per client)`);
+  console.log(`        30 Hz: ${(avg * 30 / 1024).toFixed(2)} KiB/s per client, ${(total / 1024).toFixed(1)} KiB/s host total for 5 clients (full-record fallback)`);
   console.log(`        max error: pos ${(maxErr.p * 1000).toFixed(2)} mm, vel ${maxErr.v.toFixed(3)} m/s, s ${maxErr.s.toFixed(3)} m`);
   // all 6 moving, no acks: worst case
   const worst = enc.encode(mkSnap(1000, [0, 1, 2, 3, 4, 5].map((id) => car(id, id * 600, true))));
   console.log(`        worst case 6 moving cars: ${worst.byteLength} B → ${(worst.byteLength * 30 * 5 / 1024).toFixed(1)} KiB/s for 5 clients`);
 });
+await t('snapshot v3: track-relative compact deltas ≤ 12 B/car, exact keyframes every 10', () => {
+  const world = createFakeWorld();
+  const enc = createSnapshotEncoder({ keyframeEvery: 10, world }), dec = createSnapshotDecoder({ world });
+  const acks = new Map([[1, 300], [2, 77], [3, 1023], [4, 5], [5, 6]]);
+  let key = 0, delta = 0, nk = 0, nd = 0, deltaCarBytes = 0, deltaCars = 0, worst = { p: 0, a: 0, v: 0 };
+  for (let tick = 0; tick < 600; tick += 2) {
+    const src = mkSnap(tick, [0, 1, 2, 3, 4, 5].map((id) => [...carAt(world, id, tick / 60), -1, 1]));
+    const buf = enc.encode(src, acks);
+    const u8 = new Uint8Array(buf);
+    const isKey = u8[2] & 1;
+    if (isKey) { key += buf.byteLength; nk++; } else { delta += buf.byteLength; nd++; deltaCarBytes += buf.byteLength - (u8[2] & 2 ? 25 : 9); deltaCars += 6; }
+    const out = dec.decode(buf).data;
+    assert.equal(out[1], 6);
+    for (let i = 0; i < 6; i++) {
+      const b = SNAP_HEADER + i * SNAP_STRIDE;
+      worst.p = Math.max(worst.p, Math.hypot(out[b + 1] - src[b + 1], out[b + 2] - src[b + 2], out[b + 3] - src[b + 3]));
+      let dot = 0; for (let k = 4; k < 8; k++) dot += out[b + k] * src[b + k];
+      worst.a = Math.max(worst.a, 2 * Math.acos(Math.min(1, Math.abs(dot))) * 180 / Math.PI);
+      worst.v = Math.max(worst.v, Math.hypot(out[b + 8] - src[b + 8], out[b + 9] - src[b + 9], out[b + 10] - src[b + 10]));
+      assert.equal(out[b + 13], acks.has(out[b]) ? acks.get(out[b]) & 255 : -1);
+      assert.equal(out[b + 14], isKey ? 1 : 0, 'exact flag');
+    }
+  }
+  const perCarDelta = deltaCarBytes / deltaCars;
+  assert.ok(perCarDelta <= 12, 'delta bytes per car ' + perCarDelta);
+  assert.ok(enc.stats.compact > 0 && worst.p < 0.15 && worst.a < 1.5 && worst.v < 0.8, JSON.stringify(worst));
+  const avg = (key + delta) / (nk + nd);
+  console.log(`        compact delta: ${perCarDelta.toFixed(2)} B/car (incl. 5 ack bytes spread over 6 cars); keyframe ${(key / nk).toFixed(0)} B, delta ${(delta / nd).toFixed(0)} B per 6-car snapshot`);
+  console.log(`        30 Hz avg ${avg.toFixed(1)} B → ${(avg * 30 / 1024).toFixed(2)} KiB/s per client, ${(avg * 30 * 5 / 1024).toFixed(2)} KiB/s for 5 clients`);
+  console.log(`        compact reconstruction worst: pos ${(worst.p * 100).toFixed(1)} cm, rot ${worst.a.toFixed(2)}°, vel ${worst.v.toFixed(2)} m/s; records full/compact: ${enc.stats.full}/${enc.stats.compact}`);
+  // off-road / airborne cars fall back to FULL records automatically
+  const off = enc.encode(mkSnap(9999, [[...carAt(world, 0, 3, { lateral: 30 }), -1, 1]]));
+  assert.ok(new Uint8Array(off)[2] & 2, 'off-road car → full record with origin');
+});
 await t('decoder skips unchanged cars when it missed the keyframe', () => {
   const enc = createSnapshotEncoder({ keyframeEvery: 10 });
-  const still = [3, 1, 2, 3, 0, 0, 0, 1, 0, 0, 0, 10, 0, -1], mov = (z) => [1, 0, 0, z, 0, 0, 0, 1, 0, 0, -5, 20, 0, -1];
+  const still = [3, 1, 2, 3, 0, 0, 0, 1, 0, 0, 0, 10, 0, -1, 1], mov = (z) => [1, 0, 0, z, 0, 0, 0, 1, 0, 0, -5, 20, 0, -1, 1];
   enc.encode(mkSnap(0, [mov(0), still])); // keyframe lost
   const d = createSnapshotDecoder().decode(enc.encode(mkSnap(2, [mov(-1), still])));
   assert.equal(d.data[1], 1); assert.equal(d.data[SNAP_HEADER], 1);

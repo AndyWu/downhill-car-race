@@ -114,10 +114,18 @@ function decodeCompact(world, dv, o, out, b) {
 /** Try to write a compact record for car at snap[b..]; returns bytes written or 0 if it must be FULL. */
 function encodeCompact(world, snap, b, dv, o, check) {
   const step = sStep(world);
-  const sq = Math.round((snap[b + 11] + S_OFF) / step);
-  if (!(sq >= 0 && sq <= 65535)) return 0;
-  const f = frame(world, sq * step - S_OFF);
   const px = snap[b + 1], py = snap[b + 2], pz = snap[b + 3];
+  let sq = Math.round((snap[b + 11] + S_OFF) / step);
+  if (!(sq >= 0 && sq <= 65535)) return 0;
+  let f = frame(world, sq * step - S_OFF);
+  // refine s so the car sits on the normal of the centreline (s from physics may be approximate)
+  for (let it = 0; it < 2; it++) {
+    const along = (px - f.cx) * f.rz - (pz - f.cz) * f.rx; // horizontal tangent = (rz, -rx)
+    if (Math.abs(along) < step * 0.5) break;
+    sq = Math.round((sq * step - S_OFF + along + S_OFF) / step);
+    if (!(sq >= 0 && sq <= 65535)) return 0;
+    f = frame(world, sq * step - S_OFF);
+  }
   const lq = Math.round(((px - f.cx) * f.rx + (pz - f.cz) * f.rz) / LAT);
   if (lq < -127 || lq > 127) return 0;
   const gx = f.cx + f.rx * lq * LAT, gz = f.cz + f.rz * lq * LAT;
@@ -176,7 +184,7 @@ export function createSnapshotEncoder({ keyframeEvery = 10, world, compact = tru
     encode(snap, acks) {
       const tick = snap[0] >>> 0;
       const count = Math.min(snap[1] | 0, 8);
-      const key = sinceKey >= keyframeEvery || tick - keyTick > 255;
+      const key = sinceKey >= keyframeEvery - 1 || tick - keyTick > 255;
       if (key) { sinceKey = 0; keyTick = tick; base.clear(); } else sinceKey++;
       const w = compact && !key ? resolveWorld(world) : null;
       // pass 1: classify + write car bodies into carBuf (full records need origin/scale → pass 2)

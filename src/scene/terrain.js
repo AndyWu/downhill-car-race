@@ -54,9 +54,11 @@ export function buildTerrain(track, field, pads, seed = 1, gaps = []) {
   function verge(s, d, hw) {
     const ad = Math.abs(d), a = bermAmp(s, d);
     const t1 = (ad - (hw + 1.9)) / 0.45;
-    const wall = clamp((ad - (hw + 2.1)) / 1.0, 0, 1);          // ~43 deg inner face
+    const wall = clamp((ad - (hw + 2.1)) / 1.15, 0, 1);          // ~43 deg inner face
     const back = 1 - smoothstep(hw + 4.0, hw + 6.4, ad);       // gentle outer fall-off
-    return a * (-0.22 * Math.exp(-t1 * t1) + BERM_H * wall * back);
+    const ki = clamp(Math.round(s + 40), 0, track.tables.TN - 1);
+    const H = BERM_H + 0.8 * Math.min(1, Math.abs(track.tables.kap[ki]) / 0.014); // taller on tight bends
+    return a * (-0.22 * Math.exp(-t1 * t1) + H * wall * back);
   }
 
   // ---- terrain grid ----

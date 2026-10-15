@@ -134,12 +134,13 @@ export const RECIPES = {
     return bake('gravel', size, (u, v, c) => {
       const soil = fbm(u, v, 6, 6, 3, 161);
       worley(u, v, 30, 162, W);
-      const id = W.id, rad = 0.3 + 0.28 * hash2(Math.floor(id * 1e4), 5, 6);
+      const id = W.id, rad = 0.22 + 0.4 * hash2(Math.floor(id * 1e4), 5, 6);
       const q = W.f1 / rad;
       let h = 0.15 + soil * 0.1, ao = 0.5 + 0.2 * soil;
-      lerp3(c, 0.2, 0.165, 0.125, 0.27, 0.22, 0.16, soil);
+      lerp3(c, 0.27, 0.215, 0.16, 0.36, 0.29, 0.21, soil);
       let rough = 0.95;
-      if (q < 1) {
+      const present = hash2(Math.floor(id * 1e4), 21, 22) < 0.5; // half the cells are bare soil
+      if (q < 1 && present) {
         const dome = Math.sqrt(1 - q * q), pick = hash2(Math.floor(id * 1e4), 9, 10);
         let r, g, b;
         if (pick < 0.4) { r = 0.4; g = 0.385; b = 0.36; }       // grey
@@ -151,6 +152,8 @@ export const RECIPES = {
         c.r = mix(c.r, r * t, edge); c.g = mix(c.g, g * t, edge); c.b = mix(c.b, b * t, edge);
         h += dome * 0.45 * (0.5 + 0.5 * pick); ao = mix(ao, 0.72 + 0.28 * dome, edge); rough = mix(0.95, 0.72 + 0.2 * pick, edge);
       }
+      worley(u, v, 9, 166, W);
+      if (W.id < 0.22) { const bq = W.f1 / 0.34; if (bq < 1) { const dome = Math.sqrt(1 - bq * bq), t = 0.8 + 0.4 * W.id * 4; const e = smoothstep(0, 0.2, dome); c.r = mix(c.r, 0.38 * t, e); c.g = mix(c.g, 0.36 * t, e); c.b = mix(c.b, 0.33 * t, e); h += dome * 0.6; ao = mix(ao, 0.8, e); rough = 0.8; } }
       worley(u, v, 62, 164, W);
       if (W.f1 < 0.3 && W.id < 0.6) { const d = 1 - W.f1 / 0.28; c.r = mix(c.r, 0.36, d * 0.5); c.g = mix(c.g, 0.34, d * 0.5); c.b = mix(c.b, 0.31, d * 0.5); h += d * 0.12; }
       mul(c, 0.9 + 0.2 * vnoise(u * 128, v * 128, 128, 128, 165));

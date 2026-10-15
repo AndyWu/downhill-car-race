@@ -31,7 +31,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
   let side = rng() < 0.5, nextStroke = 0.2, stamina = 1;
   let attentive = false, nextToggle = 0;
   // stuck recovery
-  let stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0;
+  let stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0, consec = 0;
 
   function think(dt, self, others = []) {
     t += dt;
@@ -151,7 +151,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
     let reverse = false;
     const slowNow = speed < 1.5 || (speed < 2 && outBy > 0);
     if (s > 20 && t > 3 && slowNow && t > kickUntil) stuckT += dt; else if (!slowNow || t <= kickUntil) stuckT = 0;
-    if (stuckT > 1) { reverseUntil = t + 0.8; kickUntil = t + 0.8 + 2.0; stuckT = 0; recoveries++; revSteer = err >= 0 ? -1 : 1; }
+    if (speed > 4) consec = 0;
+    if (stuckT > 1) { const rd = 0.8 + 0.7 * Math.min(consec, 3); consec++; reverseUntil = t + rd; kickUntil = t + rd + 2.0; stuckT = 0; recoveries++; revSteer = err >= 0 ? -1 : 1; }
     let steer = steerOut;
     let rpv = pv, rhb = hbOut;
     if (t < reverseUntil) { // reversing is done with paddle strokes in the physics

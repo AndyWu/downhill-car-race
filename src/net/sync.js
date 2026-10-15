@@ -20,7 +20,7 @@ function listPeers(peers) {
 /**
  * @param {{role:'host'|'client', peers: Peer[]|Map|()=>Peer[], worldSnapshotSize?: number}} o
  */
-export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30, tickRate = 60, keyframeEvery = 10, world, inputBacklog = 4 } = {}) {
+export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30, tickRate = 60, keyframeEvery = 10, world, inputBacklog = 8 } = {}) {
   const isHost = role === 'host';
   const inputCbs = new Set(), snapCbs = new Set(), ctrlCbs = new Set();
   const lastSeq = new Map();      // host: peerId → last delivered input seq
@@ -162,7 +162,7 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
       const last = lastTaken.get(id);
       if (!last) { consumed.set(id, consumed.get(id) ?? -1); return null; }
       const rep = last.slice(); rep[2] = 0; rep[3] = 0;
-      stats.inputsRepeated = (stats.inputsRepeated || 0) + 1;
+      stats.inputsRepeated = (stats.inputsRepeated || 0) + 1; (stats.repeatLog ??= []).push(performance.now() | 0);
       return { frame: rep, seq: last[0], repeated: true };
     },
     /**

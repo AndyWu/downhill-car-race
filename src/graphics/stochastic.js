@@ -18,7 +18,7 @@ vec4 gxTex( sampler2D t ) {
 }
 `;
 
-export function applyStochastic(material, { mode = 'full', scale = 3.0, detailScale = 2.3, detailStrength = 0.55 } = {}) {
+export function applyStochastic(material, { mode = 'full', scale = 3.0, detailScale = 2.3, detailStrength = 0.55, detailMean = 0.12 } = {}) {
   const prev = material.onBeforeCompile;
   const U = { gxScale: { value: scale } };
   material.onBeforeCompile = (shader, renderer) => {
@@ -60,7 +60,7 @@ export function applyStochastic(material, { mode = 'full', scale = 3.0, detailSc
 		gxHex( gxUv, gxO1, gxO2, gxO3, gxW );
 		vec3 dd = gxTex( map ).rgb;
 		float dl = dot( dd, vec3( 0.3, 0.59, 0.11 ) );
-		diffuseColor.rgb *= mix( 1.0, clamp( dl / 0.3, 0.45, 1.6 ), ${detailStrength.toFixed(2)} );
+		diffuseColor.rgb *= mix( 1.0, clamp( dl / ${detailMean.toFixed(3)}, 0.45, 1.6 ), ${detailStrength.toFixed(2)} );
 	}
 	#endif
 	// GFX_MAP_END`);

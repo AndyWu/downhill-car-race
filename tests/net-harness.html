@@ -11,6 +11,8 @@
 <script type="module">
   import * as net from '/src/net/index.js';
   import jsQR from 'jsqr';
+  import * as fw from '/tests/net-fake-world.js';
+  window.fw = fw;
   window.jsQR = jsQR;
   window.net = net;
   window.netReady = true;

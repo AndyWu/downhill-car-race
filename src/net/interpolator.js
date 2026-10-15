@@ -4,7 +4,11 @@
 
 import { SNAP_HEADER, SNAP_STRIDE } from './protocol.js';
 
-export function createInterpolator({ delayMs = 100, tickRate = 60, maxBuffer = 48, maxExtrapolateMs = 120 } = {}) {
+export function createInterpolator({ delayMs = 100, tickRate = 60, maxBuffer = 48, maxExtrapolateMs = 120, adaptive = true, maxDelayMs = 220 } = {}) {
+  // adaptive: render delay = max(delayMs, 1.5 snapshot intervals + observed arrival jitter), so
+  // jittery hotspot links interpolate instead of extrapolating; capped at maxDelayMs.
+  let jitter = 0, interval = 1 / 30, lastT = null, effDelay = delayMs / 1000;
+  const istats = { extrapolated: 0, samples: 0 };
   const buf = []; // { t (host seconds), data }
   let offset = null; // local seconds - host seconds (min-filtered)
   let lastSampleT = -Infinity;
@@ -18,6 +22,11 @@ export function createInterpolator({ delayMs = 100, tickRate = 60, maxBuffer = 4
     const o = local - t;
     // Min filter with slow upward drift (0.5 ms per snapshot) to track clock skew / route changes.
     offset = offset === null ? o : Math.min(o, offset + 0.0005);
+    jitter = Math.max(o - offset, jitter * 0.995);
+    if (lastT !== null && t > lastT) interval += (Math.min(0.2, t - lastT) - interval) * 0.05;
+    if (lastT === null || t > lastT) lastT = t;
+    const want = adaptive ? Math.min(maxDelayMs / 1000, Math.max(delayMs / 1000, interval * 1.5 + jitter)) : delayMs / 1000;
+    effDelay += (want - effDelay) * (want > effDelay ? 0.2 : 0.01); // grow fast, shrink slowly (no visible time warps)
     if (buf.length && t <= buf[buf.length - 1].t) {
       if (buf.some((b) => b.t === t)) return; // duplicate
       buf.push({ t, data }); buf.sort((a, b) => a.t - b.t);
@@ -46,7 +55,8 @@ export function createInterpolator({ delayMs = 100, tickRate = 60, maxBuffer = 4
   /** @returns Map<id, {position, quaternion, velocity, s, events}> at render time now - delay */
   function sample(nowMs = performance.now()) {
     if (!buf.length || offset === null) return out;
-    const rt = nowMs / 1000 - offset - delayMs / 1000;
+    const rt = nowMs / 1000 - offset - effDelay;
+    istats.samples++;
     lastSampleT = rt;
     // locate bracketing snapshots
     let i1 = buf.findIndex((b) => b.t >= rt);
@@ -62,6 +72,7 @@ export function createInterpolator({ delayMs = 100, tickRate = 60, maxBuffer = 4
       const c = carState(id);
       const pb = b ? findCar(b.data, id) : -1;
       if (pb < 0) {
+        if (rt > a.t) istats.extrapolated++;
         // extrapolate (or hold) from a
         const dt = Math.max(0, Math.min(rt - a.t, maxExtrapolateMs / 1000));
         for (let j = 0; j < 3; j++) { c.position[j] = da[pa + 1 + j] + da[pa + 8 + j] * dt; c.velocity[j] = da[pa + 8 + j]; }
@@ -100,6 +111,9 @@ export function createInterpolator({ delayMs = 100, tickRate = 60, maxBuffer = 4
     get renderTick() { return lastSampleT * tickRate; },
     get bufferedMs() { return buf.length ? (buf[buf.length - 1].t - lastSampleT) * 1000 : 0; },
     setDelay(ms) { delayMs = ms; },
-    clear() { buf.length = 0; offset = null; out.clear(); pending.clear(); },
+    get delayMs() { return effDelay * 1000; },
+    get jitterMs() { return jitter * 1000; },
+    stats: istats,
+    clear() { buf.length = 0; offset = null; out.clear(); pending.clear(); jitter = 0; lastT = null; effDelay = delayMs / 1000; },
   };
 }

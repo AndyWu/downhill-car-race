@@ -65,7 +65,7 @@ async function main() {
   if (opened.some((s) => s !== 'open')) throw new Error('no connection');
 
   // ---------------- 2. 60 Hz sync ----------------
-  console.log('2) 60 Hz inputs + 30 Hz v2 snapshots (host steps at 60 Hz for 3 s)');
+  console.log('2) 60 Hz inputs + 30 Hz snapshots, no world → FULL records (host steps at 60 Hz for 3 s)');
   await host.evaluate(() => {
     window.hs = net.createSync({ role: 'host', peers: [hp] });
     window.rx = { inputs: 0, lastSeq: -1, gaps: 0, ctrl: [] };
@@ -118,6 +118,105 @@ async function main() {
   check(cRx.sampled > 100, 'interpolator produced samples');
   check(cRx.synced && cRx.rtt < 50, 'clock ping/pong synced');
   check(cRx.ctrl.some((m) => m.t === 'seed' && m.seed === 99) && hRx.ctrl.some((m) => m.t === 'truck'), 'reliable control channel both ways');
+
+  // ---------------- 2b. Lossy, jittery link: interpolation + prediction smoothness ----------------
+  for (const [loss, jMin, jMax] of [[0.05, 20, 80], [0.15, 20, 80]]) {
+    console.log(`2b) ${Math.round(loss * 100)}% loss, ${jMin}-${jMax} ms jitter on the fast channel (8 s, v3 track-relative snapshots, prediction on)`);
+    const shim = (page) => page.evaluate(([loss, jMin, jMax]) => {
+      const peer = window.hp || window.cp;
+      const ch = peer.fast;
+      ch.__send ??= ch.send.bind(ch);
+      ch.send = (d) => { if (Math.random() < loss) return; const copy = d.slice ? d.slice(0) : d; setTimeout(() => { if (ch.readyState === 'open') ch.__send(copy); }, jMin + Math.random() * (jMax - jMin)); };
+      window.world = fw.createFakeWorld();
+    }, [loss, jMin, jMax]);
+    await shim(host); await shim(client);
+    await host.evaluate(() => {
+      window.hs?.close();
+      window.hs = net.createSync({ role: 'host', peers: [hp], world });
+      window.hbody = fw.createToyBody(world, 60);
+    });
+    await client.evaluate(() => {
+      window.cs?.close();
+      window.cs = net.createSync({ role: 'client', peers: [cp], world });
+      window.ip = net.createInterpolator({ delayMs: 100 });
+      window.cbody = fw.createToyBody(world, 60);
+      window.pred = net.createPredictor({ body: cbody, slot: 1 });
+      window.m2 = { interpMax: 0, interpSum: 0, interpN: 0, pop: 0, ackLat: [], sentAt: new Map(), lastSeq: -1, snaps: 0 };
+      cs.onSnapshot((data) => {
+        m2.snaps++; ip.push(data); pred.onSnapshot(data);
+        for (let i = 0; i < data[1]; i++) {
+          const b = net.SNAP_HEADER + i * net.SNAP_STRIDE;
+          if (data[b] !== 1 || data[b + 13] < 0) continue;
+          let seq = m2.lastSeq; while (seq >= 0 && (seq & 255) !== data[b + 13]) seq--;
+          if (seq >= 0 && m2.sentAt.has(seq)) { m2.ackLat.push(performance.now() - m2.sentAt.get(seq)); m2.sentAt.delete(seq); }
+        }
+      });
+    });
+    const run2 = (page, role) => page.evaluate((role) => new Promise((done) => {
+      const N = 480, dt = 1 / 60, start = performance.now();
+      let k = 0, prev = null;
+      const snap = new Float32Array(net.SNAP_HEADER + 6 * net.SNAP_STRIDE);
+      const fr = new Float32Array(20);
+      const iv = setInterval(() => {
+        const due = Math.min(N, Math.floor((performance.now() - start) / (dt * 1000)) + 1);
+        while (k < due) {
+          if (role === 'host') {
+            const r = hs.takeInput(1);
+            if (r) hbody.step(dt, net.decodeInputFrame(r.frame));
+            snap[0] = k; snap[1] = 6;
+            for (let id = 0; id < 6; id++) {
+              const b = net.SNAP_HEADER + id * net.SNAP_STRIDE;
+              if (id === 1) { hbody.serialize(fr); snap.set([1, fr[0], fr[1], fr[2], fr[3], fr[4], fr[5], fr[6], fr[7], fr[8], fr[9], fr[13], 0, -1, 1], b); }
+              else snap.set([...fw.carAt(world, id, k * dt), -1, 1], b);
+            }
+            hs.broadcastSnapshot(snap);
+          } else {
+            const inp = { steer: fw.followTrack(world, cbody, 0.35 * Math.sin(k / 37)), paddleL: k % 30 === 0 ? 1 : 0 };
+            m2.sentAt.set(k, performance.now()); m2.lastSeq = k;
+            cs.sendInput(net.encodeInputFrame(inp, k));
+            pred.step(dt, inp, k);
+            const rp = pred.renderPose();
+            if (prev && k > 90) {
+              const v = cbody.state.velocity;
+              const jump = Math.hypot(rp.position[0] - prev[0], rp.position[1] - prev[1], rp.position[2] - prev[2]);
+              m2.pop = Math.max(m2.pop, Math.abs(jump - Math.hypot(v.x, v.y, v.z) * dt));
+            }
+            prev = rp.position.slice();
+            if (k === 90) { pred.stats.maxError = 0; pred.stats.corrections = 0; pred.stats.skipped = 0; pred.stats.reconciles = 0; } // ignore the join warm-up
+            const m = ip.sample(performance.now());
+            if (k > 90 && m.size) {
+              const rt = ip.renderTick * dt;
+              for (const [id, c] of m) {
+                if (id === 1) continue;
+                const truth = fw.carAt(world, id, rt);
+                const e = Math.hypot(c.position[0] - truth[1], c.position[1] - truth[2], c.position[2] - truth[3]);
+                m2.interpMax = Math.max(m2.interpMax, e); m2.interpSum += e; m2.interpN++;
+              }
+            }
+          }
+          k++;
+        }
+        if (k >= N) { clearInterval(iv); done(k); }
+      }, 4);
+    }), role);
+    await Promise.all([run2(host, 'host'), run2(client, 'client')]);
+    await host.waitForTimeout(200);
+    const H2 = await host.evaluate(() => ({ st: hs.stats, enc: hs.encoderStats }));
+    if (process.env.NET_DEBUG) console.log('repeat times', JSON.stringify(H2.st.repeatLog?.map((t) => t - H2.st.repeatLog[0])));
+    const C2 = await client.evaluate(() => ({ ...m2, sentAt: 0, ack: m2.ackLat.slice().sort((a, b) => a - b), pred: pred.stats, delay: ip.delayMs, jit: ip.jitterMs, ext: ip.stats.extrapolated, samples: ip.stats.samples }));
+    const p95 = C2.ack[Math.floor(C2.ack.length * 0.95)] ?? Infinity;
+    const avgSnap = H2.st.snapshotBytesTotal / H2.st.snapshotsTx;
+    console.log(`     host: ${H2.st.snapshotsTx} snapshots avg ${avgSnap.toFixed(1)} B (${(avgSnap * 30 / 1024).toFixed(2)} KiB/s per client, ${(avgSnap * 30 * 5 / 1024).toFixed(2)} KiB/s ×5); records full/compact ${H2.enc.full}/${H2.enc.compact}; inputs repeated ${H2.st.inputsRepeated || 0}, merged ${H2.st.inputsMerged || 0}`);
+    console.log(`     client: ${C2.snaps} snapshots received; interp delay adapted to ${C2.delay.toFixed(0)} ms (jitter ${C2.jit.toFixed(0)} ms), extrapolated ${C2.ext}/${C2.samples * 5} samples`);
+    console.log(`     interpolation error vs ground truth: max ${(C2.interpMax * 100).toFixed(1)} cm, mean ${(C2.interpSum / C2.interpN * 100).toFixed(1)} cm`);
+    console.log(`     prediction: ${C2.pred.reconciles} reconciles, ${C2.pred.corrections} corrections >1 cm, ${C2.pred.skipped} inside deadband, max correction ${(C2.pred.maxError * 100).toFixed(1)} cm, max visual pop ${(C2.pop * 100).toFixed(2)} cm/frame; ack latency p50 ${C2.ack[C2.ack.length >> 1]?.toFixed(0)} ms, p95 ${p95.toFixed(0)} ms`);
+    check(C2.interpMax < 0.5, `interpolated remote cars stay within 0.5 m of truth (max ${(C2.interpMax * 100).toFixed(1)} cm)`);
+    check(p95 < 200, `own inputs acknowledged/reconciled within 200 ms (p95 ${p95.toFixed(0)} ms)`);
+    check(C2.pred.maxError < 0.5 && C2.pop < 0.1, `prediction smooth: max correction ${(C2.pred.maxError * 100).toFixed(1)} cm, max visual pop ${(C2.pop * 100).toFixed(2)} cm`);
+    check(avgSnap * 30 * 5 < 25 * 1024, `bandwidth ${(avgSnap * 30 * 5 / 1024).toFixed(2)} KiB/s for 5 clients`);
+    await host.evaluate(() => { hp.fast.send = hp.fast.__send; });
+    await client.evaluate(() => { cp.fast.send = cp.fast.__send; });
+  }
 
   // ---------------- 3. Lobby state machine + QR render/decode ----------------
   console.log('3) Lobby state machine (host + 2 clients, fallback modal, manual codes, QR decode)');

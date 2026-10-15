@@ -243,8 +243,9 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     rc.updateMatrixWorld();
     G.gfxReflVP.value.multiplyMatrices(rc.projectionMatrix, rc.matrixWorldInverse);
     refl.plane.constant = -refl.y + 0.02;
-    const prevShadow = renderer.shadowMap.autoUpdate, prevClip = renderer.clippingPlanes;
+    const prevShadow = renderer.shadowMap.autoUpdate, prevNeed = renderer.shadowMap.needsUpdate, prevClip = renderer.clippingPlanes;
     renderer.shadowMap.autoUpdate = !refl.warm; // reuse last frame's shadow maps (allocate on the very first pass)
+    if (refl.warm) renderer.shadowMap.needsUpdate = false;
     refl.warm = true;
     renderer.clippingPlanes = [refl.plane];
     for (const m of refl.hide) m.visible = false;
@@ -255,7 +256,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     G.gfxReflTex.value = refl.rt.texture; G.gfxReflOn.value = 1;
     for (const m of refl.hide) m.visible = true;
     renderer.clippingPlanes = prevClip;
-    renderer.shadowMap.autoUpdate = prevShadow;
+    renderer.shadowMap.autoUpdate = prevShadow; renderer.shadowMap.needsUpdate = prevNeed;
   }
   /** Mirror the scene about the horizontal plane y at ~0.4x res and feed it to the water materials.
    *  Costs one extra scene render: enable only while a puddle is on screen; call again each frame to track y. */

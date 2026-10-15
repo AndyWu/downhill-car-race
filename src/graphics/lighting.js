@@ -148,8 +148,10 @@ export function setupLighting(scene, renderer, opts = {}) {
     sun.target.updateMatrixWorld(); sun.updateMatrixWorld();
   }
 
+  let frameN = 0;
   function update(dt, camera) {
     tickTime();
+    frameN++;
     sky.uniforms.uTime.value = G.gfxTime.value;
     if (!settled) {
       const d = lerpTo(1 - Math.exp(-Math.min(dt, 0.1) * 1.6));
@@ -159,7 +161,11 @@ export function setupLighting(scene, renderer, opts = {}) {
     if (camera) {
       camera.updateMatrixWorld();
       G.gfxFogH.value.x = camera.position.y - 2.5;
-      fitShadow(camera);
+      // shadow cadence: re-fit + re-render the sun shadow map every N frames (texel-snapped, so a stale map never shimmers)
+      const every = tier.shadowEvery || 1;
+      const doShadow = every === 1 || !settled || frameN <= 2 || frameN % every === 0;
+      if (doShadow) fitShadow(camera);
+      if (every > 1) { renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = doShadow; }
     }
   }
 

@@ -7,3 +7,4 @@ export { attachHeadlight } from './headlight.js';
 export { createPostFX } from './postfx.js';
 export { applyMudCoat } from './mudcoat.js';
 export { getTier, setTier } from './quality.js';
+export { freezeStatic } from './static.js';

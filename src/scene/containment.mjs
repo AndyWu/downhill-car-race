@@ -17,11 +17,14 @@ for (const s0 of [120, 260, 700, 1000, 1350, 1700, 2050, 2500, 2900]) for (const
   const dir = T.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -a); // toward +side
   const v = dir.clone().multiplyScalar(12);
   placeOnGround(body, world, x, z, dir, v);
-  let maxBeyond = 0, tEnd = 0;
+  let maxBeyond = 0, tEnd = 0, left = false;
   for (let t = 0; t < 25; t += 1 / 60) {
     body.step(1 / 60, { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false });
     const st = body.state, hw = world.track.sampleAt(Math.max(0, st.s)).width / 2;
-    maxBeyond = Math.max(maxBeyond, Math.abs(st.lateral) - hw);
+    const bey = Math.abs(st.lateral) - hw;
+    if (bey > 0.3) left = true;
+    if (left && bey < -0.3) break; // back on the road: first excursion is over
+    maxBeyond = Math.max(maxBeyond, bey);
     if (st.s > 3200) break;
     tEnd = t;
   }

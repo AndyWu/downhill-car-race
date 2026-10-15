@@ -21,7 +21,6 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
   await tick();
   progress(0.15, 'shaping the hills');
   const gaps = [];
-  for (const f of farms) gaps.push({ s: f.s, side: f.side, r: 0.8 });
   for (const sg of [-1, 1]) { gaps.push({ s: TRACK_LENGTH + 15, side: sg, r: 30 }); }
   const terrain = buildTerrain(track, field, farms, seed, gaps);
   for (const f of farms) f.y = f.y; // pad heights were written by buildTerrain
