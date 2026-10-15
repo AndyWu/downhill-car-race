@@ -11,6 +11,8 @@
 //
 // Host flow:   radio (confirm hotspot) → offering [show offer QR ⇄ scanning reply] → ready
 // Client flow: radio (confirm Wi-Fi) → scanOffer → answering → showAnswer (slow → retry) → connected
+// Each offer is single-use (ICE latches onto the first iPad that tries it), so offers carry
+// their own 16-bit tag; the host can mint a fresh one with refreshOffer() ("New code").
 // The host pre-builds its first offer in the background, and submitCode() is accepted in any
 // phase (a pasted code proves the radio step), so scripted tests need no extra taps.
 
@@ -34,6 +36,7 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
   const slots = new Map();          // host: slot → Peer (any state)
   const peerCbs = new Set(), readyCbs = new Set(), stateCbs = new Set();
   let current = null;               // host: peer whose offer is on screen
+  const offerTags = new Map();      // host: per-offer 16-bit tag → peer (each offer is single-use)
   let offering = null;              // host: in-flight offer promise
   let scanner = null;
   let view = null;
@@ -49,7 +52,7 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
   };
 
   const actions = {
-    begin: confirmRadio, confirmRadio, scanAnswer, scanOffer, stopScan, submitCode, startRace, retry,
+    begin: confirmRadio, confirmRadio, scanAnswer, scanOffer, stopScan, submitCode, startRace, retry, refreshOffer,
     flipCamera, cancel: () => close({ keepPeers: false }),
     get video() { return scanner?.video ?? null; },
   };
@@ -107,7 +110,10 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
       for (let s = 1; s <= maxPeers; s++) if (!slots.has(s)) { slot = s; break; }
       if (!slot) { state.offerCode = null; state.slot = null; render(); return; }
       state.busy = true; render();
-      const { peer, code } = await hostCreateOffer(slot, tag);
+      let otag;
+      do { otag = crypto.getRandomValues(new Uint16Array(1))[0]; } while (offerTags.has(otag));
+      const { peer, code } = await hostCreateOffer(slot, otag);
+      offerTags.set(otag, peer); peer.offerTag = otag;
       if (closed) { peer.close(); return; }
       slots.set(slot, peer);
       current = peer;
@@ -123,11 +129,12 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
     let a;
     try { a = unpackSdp(code); } catch { return notify(LOBBY_COPY.notices.badCode); }
     if (a.kind !== 'answer') return notify(LOBBY_COPY.notices.wrongKind);
-    if (a.tag !== tag) return notify(LOBBY_COPY.notices.oldSession);
     if (offering) await offering;
-    const peer = slots.get(a.slot);
-    if (!peer || peer.pc.signalingState !== 'have-local-offer') return; // duplicate scan
-    try { await hostAcceptAnswer(peer, a, tag); } catch (e) { return notify(LOBBY_COPY.notices.connectFailed); }
+    const peer = offerTags.get(a.tag);
+    if (!peer) return notify(LOBBY_COPY.notices.oldSession);
+    if (slots.get(peer.id) !== peer) return notify(LOBBY_COPY.notices.staleReply);
+    if (peer.pc.signalingState !== 'have-local-offer') return; // duplicate scan
+    try { await hostAcceptAnswer(peer, a, peer.offerTag); } catch (e) { return notify(LOBBY_COPY.notices.connectFailed); }
     if (!state.radioConfirmed) { state.radioConfirmed = true; state.phase = 'offering'; }
     state.notice = null;
     const to = setTimeout(() => { if (peer.state !== 'open') peer.close(); }, CONNECT_TIMEOUT_MS);
@@ -148,6 +155,17 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
     stopCamera(); state.scanning = false;
     if (current === peer) { current = null; await offerNext(); }
     render();
+  }
+
+  /** Host: replace the code on screen with a fresh one (an offer only works with the first iPad that tries it). */
+  async function refreshOffer() {
+    if (!isHost) return;
+    if (offering) await offering;
+    if (current && current.pc.signalingState === 'have-local-offer') {
+      current.close(); slots.delete(current.id); current = null;
+      state.offerCode = null; stopCamera(); state.scanning = false; state.notice = null;
+      await offerNext();
+    }
   }
 
   function startRace() {
@@ -231,7 +249,7 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
 
   return {
     role, tag, peers, state, actions,
-    start, begin: confirmRadio, confirmRadio, submitCode, startRace, retry, scanAnswer, scanOffer, stopScan,
+    start, begin: confirmRadio, confirmRadio, submitCode, startRace, retry, refreshOffer, scanAnswer, scanOffer, stopScan,
     onPeer(cb) { peerCbs.add(cb); return () => peerCbs.delete(cb); },
     onReady(cb) { readyCbs.add(cb); return () => readyCbs.delete(cb); },
     onState(cb) { stateCbs.add(cb); return () => stateCbs.delete(cb); },

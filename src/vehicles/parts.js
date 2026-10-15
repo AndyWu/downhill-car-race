@@ -200,9 +200,9 @@ export function buildPaddle(kit, col, L = 0.46, lean = 0.22) {
   const at = (d) => [0, Math.cos(lean) * d, Math.sin(lean) * d];
   c.cyl(0.014, 0.1, [0, 0, 0], { axis: 'x', seg: 8, c: 0x8a8a82, v: 0.1 }); // hinge pin
   // shaft: bevelled weathered board, mostly bare
-  c.add(board(0.034, L, 0.02, 0.006), { q, p: at(L / 2), tess: 0.035, wear: { paint: col, bare: WOOD_BARE, amt: 0.95 } });
+  c.add(board(0.034, L, 0.02, 0.006), { q, p: at(L / 2), tess: 0.035, wear: { paint: col, bare: WOOD_BARE, amt: 0.8 } });
   // painted blade with a contrasting stripe, wear mask on edges + chips
-  c.add(board(0.115, 0.165, 0.016, 0.012), { q, p: at(L - 0.06), tess: 0.022, wear: { paint: col, bare: WOOD_BARE, amt: 0.6 } });
+  c.add(board(0.115, 0.165, 0.016, 0.012), { q, p: at(L - 0.06), tess: 0.022, wear: { paint: col, bare: WOOD_BARE, amt: 0.3 } });
   const stripe = new THREE.Color(col).offsetHSL(0.5, 0, -0.05);
   c.add(board(0.11, 0.018, 0.019, 0.003), { q, p: at(L - 0.085), tess: 0.03, wear: { paint: stripe, bare: WOOD_BARE, amt: 0.5 } });
   c.add(board(0.1, 0.02, 0.022, 0.004), { q, p: at(L - 0.135), c: 0x1c1c1a, v: 0.1 }); // rubber tread strip
@@ -228,7 +228,7 @@ export function buildLever(kit, kind, col) {
   c.rod([0, 0, 0], at(L), kind === 'hand' ? 0.011 : 0.008, { seg: 6, c: 0x9a988e, v: 0.1 });
   if (kind === 'hand') {
     // long worn grip: turned wooden handle with a spiral of black tape and bare patches
-    const prof = [[0.001, -0.07], [0.016, -0.07], [0.019, -0.055], [0.017, -0.03], [0.02, 0.0], [0.017, 0.03], [0.019, 0.055], [0.016, 0.068], [0.001, 0.07]];
+    const prof = [[0.001, -0.06], [0.013, -0.06], [0.015, -0.045], [0.013, -0.025], [0.016, 0.0], [0.013, 0.025], [0.015, 0.045], [0.013, 0.058], [0.001, 0.06]];
     c.lathe(prof, at(L - 0.02), { q, seg: 10, colorFn: tapeFn(0x181816, 0x2c2c2a, 0x7a5a38, 6, 7, 0.2) });
     c.add(new THREE.BoxGeometry(0.034, 0.012, 0.034), { q, p: at(L - 0.095), c: 0xa4a39e, v: 0.15 }); // tape ring
     c.lathe([[0.001, 0], [0.012, 0.0], [0.014, 0.012], [0.01, 0.022], [0.001, 0.026]], at(L + 0.05), { q, seg: 8, wear: { paint: 0xc8352a, bare: WOOD_BARE, amt: 0.7 } }); // release button cap

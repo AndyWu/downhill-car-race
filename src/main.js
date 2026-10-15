@@ -56,6 +56,8 @@ async function boot() {
   const [gfx, sceneMod, vehMod, audioMod, uiMod, netMod, aiMod] = await Promise.all(['graphics', 'scene', 'vehicles', 'audio', 'ui', 'net', 'ai'].map(tryImport));
   if (netMod) { safe(() => netMod.injectPWAHead(), 'injectPWAHead'); safe(() => netMod.registerServiceWorker(), 'registerServiceWorker'); }
 
+  if (netMod && netMod.onOfflineReady) safe(() => netMod.onOfflineReady((st) => { game.state.offlineReady = true; if (game.ui && game.ui.toast && game.state.mode === 'title') game.ui.toast('Ready to play offline', 2600); }), 'onOfflineReady');
+
   // ---- renderer / scene ----
   let renderer = gfx && safe(() => gfx.createRenderer(canvas), 'createRenderer');
   if (!renderer) {
@@ -137,7 +139,7 @@ async function boot() {
 
   let cockpit = null, playerV = null, ui = null;
   let cfg = { role: 'solo', truck: 0, ai: 5 };   // last race config (for rematch)
-  const mp = { sync: null, interp: null, localSlot: 0, players: [], trucks: [], inputs: new Map(), tick: 0, goAtLocal: 0, picks: new Map(), info: null, results: [] };
+  const mp = { predictor: null, sync: null, interp: null, localSlot: 0, players: [], trucks: [], inputs: new Map(), tick: 0, goAtLocal: 0, picks: new Map(), info: null, results: [] };
   let aiNames = ['Barnaby', 'Clementine', 'Buster', 'Maeve', 'Ace'];
 
   // ---- vehicles ----
@@ -164,7 +166,7 @@ async function boot() {
       headlight = safe(() => gfx.attachHeadlight(built.parts.headlight, local ? {} : { castShadow: false, intensity: 1500 }), 'attachHeadlight');
     }
     return { spec, body, group: built.group, parts: built.parts, flag, ai, kind, slot, name, headlight, lightOn: false,
-      isPlayer: local, prevPos: body.state.position.clone(), prevQuat: body.state.quaternion.clone(), spin: 0,
+      setMudCoat: built.setMudCoat || (built.group.userData && built.group.userData.setMudCoat) || null, isPlayer: local, prevPos: body.state.position.clone(), prevQuat: body.state.quaternion.clone(), spin: 0,
       finished: false, finishTime: 0, lastInp: null, wheelLoad: 0 };
   }
 
@@ -242,6 +244,7 @@ async function boot() {
     const cd = o.countdown ?? 3;
     Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });
     mp.goAtLocal = o.goAtLocal || 0; mp.results = [];
+    mp.predictor = role === 'client' && netMod && netMod.createPredictor ? safe(() => netMod.createPredictor({ body: playerV.body, slot: o.localSlot }), 'createPredictor') : null;
     input.setEnabled(true); input.calibrate();
     if (o.headlight ?? P.headlight) input.setHeadlight(true);
     const sOverride = o.s ?? null;
@@ -366,7 +369,7 @@ async function boot() {
     const sync = netMod.createSync({ role: 'client', peers: info.peers });
     mp.sync = sync; game.sync = sync; mp.localSlot = info.localSlot;
     mp.interp = netMod.createInterpolator();
-    sync.onSnapshot((data) => mp.interp.push(data));
+    sync.onSnapshot((data) => { mp.interp.push(data); if (mp.predictor) mp.predictor.onSnapshot(data); });
     sync.sendControl({ t: 'pick', truck: game.state.truck });
     sync.onControl((id, m) => {
       if (!m) return;
@@ -374,6 +377,7 @@ async function boot() {
         const goAt = sync.clock.synced ? sync.clock.toLocal(m.goAtHostMs) : performance.now() + m.seconds * 1000;
         mp.players = m.players || [];
         mp.interp.clear();
+        mp.predictor = null;
         startRace({ role: 'client', players: mp.players, trucks: m.trucks, localSlot: mp.localSlot, countdown: 0, goAtLocal: goAt });
         game.state.countdown = Math.max(0, (goAt - performance.now()) / 1000);
       } else if (m.t === 'result') {
@@ -467,7 +471,7 @@ async function boot() {
     const cd = game.state.countdown;
     const ct = Math.ceil(cd);
     if (cd > 0 && ct < lastCountdownTick) { lastCountdownTick = ct; audioOnce('countdown'); }
-    else if (cd === 0 && lastCountdownTick > 0) { lastCountdownTick = 0; audioOnce('go'); input.calibrate(); }
+    else if (cd === 0 && lastCountdownTick > 0) { lastCountdownTick = 0; audioOnce('go'); input.calibrate(); if (ui && ui.raceStarted) safe(() => ui.raceStarted(), 'ui.raceStarted'); }
     if (cd === 0 && mode === 'race') game.state.raceTime += STEP;
     else if (cd === 0 && mode === 'finish') game.state.raceTime += STEP;
 
@@ -476,10 +480,11 @@ async function boot() {
       if (cd > 0) { inp.paddleL = inp.paddleR = 0; }
       frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
       playerV.lastInp = inp;
-      if (mp.sync) {
-        const f = netMod.encodeInputFrame(inp, netSeq++);
-        mp.sync.sendInput(f);
-      }
+      inp.draft = 0;
+      const seq = netSeq++;
+      if (mp.sync) mp.sync.sendInput(netMod.encodeInputFrame(inp, seq));
+      if (mp.predictor) mp.predictor.step(STEP, inp, seq);
+      else if (playerV) { playerV.prevPos.copy(playerV.body.state.position); playerV.prevQuat.copy(playerV.body.state.quaternion); playerV.body.step(STEP, inp); }
       return;
     }
 
@@ -539,7 +544,7 @@ async function boot() {
     const m = mp.interp.sample(performance.now());
     for (const v of game.vehicles) {
       const st = v.body.state;
-      const c = m.get(v.slot);
+      const c = v.isPlayer && mp.predictor ? null : m.get(v.slot);
       if (c) {
         st.position.set(c.position[0], c.position[1], c.position[2]);
         st.quaternion.set(c.quaternion[0], c.quaternion[1], c.quaternion[2], c.quaternion[3]);
@@ -550,13 +555,10 @@ async function boot() {
         for (const wc of st.wheelContacts) { wc.contact = true; wc.compression = 0.5; }
       }
       if (v.isPlayer) {
-        const inp = v.lastInp || idle;
-        st.steerNorm += ((inp.steer || 0) - st.steerNorm) * Math.min(1, dt * 12);
-        st.steerAngle = st.steerNorm * (v.spec.steerLock || 0.5);
-        st.handbrake = inp.handbrake || 0; st.reverse = !!inp.reverse;
-        st.paddleL = Math.max(inp.paddleL || 0, st.paddleL - dt * 4.5); st.paddleR = Math.max(inp.paddleR || 0, st.paddleR - dt * 4.5);
+        if (!mp.predictor) { const inp = v.lastInp || idle; st.steerNorm += ((inp.steer || 0) - st.steerNorm) * Math.min(1, dt * 12); st.steerAngle = st.steerNorm * (v.spec.steerLock || 0.5); st.handbrake = inp.handbrake || 0; st.reverse = !!inp.reverse; }
         game.state.s = st.s; game.state.speed = st.speed;
         if (!game.state.finished && st.s >= TRACK_LENGTH - 3 && game.state.countdown === 0) finishPlayer(game.state.raceTime, game.vehicles.filter((o) => o.body.state.s > st.s).length + 1);
+        if (mp.predictor) continue;
       }
       v.prevPos.copy(st.position); v.prevQuat.copy(st.quaternion);
     }
@@ -580,8 +582,11 @@ async function boot() {
     const ap = game.state.paused ? 1 : alpha;
     for (const v of game.vehicles) {
       const s = v.body.state;
-      v.group.position.lerpVectors(v.prevPos, s.position, ap);
-      v.group.quaternion.slerpQuaternions(v.prevQuat, s.quaternion, ap);
+      if (v.isPlayer && game.state.role === 'client' && mp.predictor) mp.predictor.applyTo(v.group);
+      else {
+        v.group.position.lerpVectors(v.prevPos, s.position, ap);
+        v.group.quaternion.slerpQuaternions(v.prevQuat, s.quaternion, ap);
+      }
       v.group.updateMatrixWorld(true);
       const ws = v.parts.wheels;
       if (ws && ws.length === 4) {

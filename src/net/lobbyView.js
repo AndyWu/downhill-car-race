@@ -1,8 +1,7 @@
 // Minimal fallback lobby modal so the network flow is testable without the real UI.
 // Agent 4's UI can replace it by providing ui.renderLobby(state, actions).
 
-import { renderQR } from './qr.js';
-import { fmt } from './lobbyCopy.js';
+import { createLobbyPanel } from './lobbyPanel.js';
 
 const CSS = `
 .sbd-lobby{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(10,12,8,.82);font:16px/1.35 system-ui,-apple-system,sans-serif;color:#1d1a14;padding:16px;box-sizing:border-box}
@@ -20,7 +19,17 @@ const CSS = `
 .sbd-lobby .err{background:#ffd9cf;color:#7a1a00;border-radius:8px;padding:8px 12px;margin:0 0 12px}
 .sbd-lobby textarea{width:100%;font:12px ui-monospace,monospace;min-height:56px;border-radius:8px;border:1px solid #bba;padding:6px}
 .sbd-lobby .peers{list-style:none;margin:8px 0;padding:0}.sbd-lobby .peers li{padding:2px 0}
-.sbd-lobby details{margin-top:10px}
+.sbd-lobby .cols{display:grid;grid-template-columns:1fr 1.3fr .7fr;gap:16px;align-items:start}
+@media (max-width:640px){.sbd-lobby .cols{grid-template-columns:1fr}}
+.sbd-lobby .steps{list-style:none;margin:0;padding:0}.sbd-lobby .steps li{margin:6px 0;display:flex;gap:8px;color:#6b604d}
+.sbd-lobby .steps li.active{color:#1d1a14;font-weight:600}.sbd-lobby .steps li.done{color:#3d6b2a}
+.sbd-lobby .steps .mk{width:1em;flex:none;text-align:center}
+.sbd-lobby .centre{display:flex;flex-direction:column;align-items:center;gap:6px}
+.sbd-lobby .box{background:#fff;border-radius:10px;padding:6px;width:min(320px,70vw)}
+.sbd-lobby .box canvas,.sbd-lobby .box video{width:100%;height:auto;display:block;image-rendering:pixelated}
+.sbd-lobby .box.vid{background:#111}.sbd-lobby .box video{image-rendering:auto}
+.sbd-lobby .cap{margin:0;text-align:center;color:#4a4235}
+.sbd-lobby .foot{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
 `;
 
 export function createLobbyView(root = document.body) {
@@ -32,7 +41,7 @@ export function createLobbyView(root = document.body) {
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-modal', 'true');
   root.appendChild(el);
-  let lastQR = null, qrCanvas = null, manualOpen = false;
+  const panel = createLobbyPanel();
 
   function h(tag, props = {}, ...kids) {
     const n = document.createElement(tag);
@@ -41,68 +50,28 @@ export function createLobbyView(root = document.body) {
       else if (k === 'class') n.className = v;
       else n.setAttribute(k, v);
     }
-    for (const c of kids.flat()) if (c != null && c !== false) n.append(c instanceof Node ? c : String(c));
+    for (const c of kids.flat()) if (c != null && c !== false && c !== '') n.append(c instanceof Node ? c : String(c));
     return n;
   }
 
-  function qr(code) {
-    if (code !== lastQR) { qrCanvas = renderQR(code, { size: 480 }); qrCanvas.className = 'qr'; lastQR = code; }
-    return qrCanvas;
-  }
-
-  function manual(state, actions, myCode) {
-    const C = state.copy.manual;
-    const d = h('details', {});
-    if (manualOpen) d.open = true;
-    d.addEventListener('toggle', () => { manualOpen = d.open; });
-    const paste = h('textarea', { placeholder: C.pasteLabel, 'aria-label': C.pasteLabel });
-    d.append(h('summary', {}, C.toggle));
-    if (myCode) {
-      const mine = h('textarea', { readonly: '', 'aria-label': 'My code', 'data-testid': 'my-code' });
-      mine.value = myCode;
-      d.append(mine, h('button', { class: 'sec', onclick: () => { mine.select(); navigator.clipboard?.writeText(myCode).catch(() => document.execCommand('copy')); } }, C.copy));
-    }
-    d.append(paste, h('button', { onclick: () => actions.submitCode(paste.value) }, C.submit));
-    return d;
-  }
-
+  const MARK = { done: '✓', active: '›', todo: '·' };
   function render(state, actions) {
     const C = state.copy;
-    const card = h('div', { class: 'card' });
-    const err = state.error ? h('p', { class: 'err', role: 'alert' }, state.error) : '';
-    const vid = () => {
-      const v = actions.video;
-      if (!v || !state.cameraOn) return '';
-      queueMicrotask(() => v.play?.().catch(() => {})); // re-attaching can pause on iOS
-      return h('div', {}, v, h('br'), h('button', { class: 'sec', onclick: () => actions.flipCamera() }, 'Flip camera'));
-    };
-    const peerList = () => h('ul', { class: 'peers' }, state.peers.map((p) => h('li', {}, `${p.state === 'open' ? '✓' : '…'} ${p.name} (${p.state})`)));
-
-    if (state.phase === 'radio') {
-      const R = C.radio[state.role];
-      card.append(h('h2', {}, R.title), h('p', { class: 'lead' }, R.lead), h('ol', {}, R.steps.map((s) => h('li', {}, s))), h('p', { class: 'note' }, R.note),
-        h('button', { onclick: () => actions.begin() }, R.action), h('button', { class: 'sec', onclick: () => actions.cancel() }, 'Back'));
-    } else if (state.phase === 'offering') {
-      const O = C.offering;
-      card.append(h('h2', {}, state.slot ? fmt(O.title, { slot: state.slot + 1 }) : 'All seats filled'), err, h('p', { class: 'lead' }, O.lead));
-      card.append(h('div', { class: 'row' },
-        state.offerCode ? qr(state.offerCode) : h('p', {}, state.busy ? 'Preparing code…' : ''),
-        h('div', {}, vid(), h('p', {}, state.slot ? fmt(O.waiting, { slot: state.slot + 1 }) : ''), peerList())));
-      card.append(h('button', { onclick: () => actions.startRace() }, O.start), h('span', { class: 'note' }, ' ' + O.startHint));
-      card.append(manual(state, actions, state.offerCode));
-    } else if (state.phase === 'scanOffer' || state.phase === 'answering') {
-      const S = C[state.phase];
-      card.append(h('h2', {}, S.title), err, h('p', { class: 'lead' }, S.lead), vid(), manual(state, actions, null));
-    } else if (state.phase === 'showAnswer') {
-      const S = C.showAnswer;
-      card.append(h('h2', {}, S.title), err, h('p', { class: 'lead' }, S.lead), qr(state.answerCode), manual(state, actions, state.answerCode));
-    } else if (state.phase === 'connected') {
-      card.append(h('h2', {}, C.connected.title), h('p', { class: 'lead' }, C.connected.lead));
-    } else if (state.phase === 'ready') {
-      card.append(h('h2', {}, 'Racing!'), peerList());
-    } else {
-      card.append(h('p', {}, '…'));
-    }
+    const title = state.phase === 'radio' || state.phase === 'idle' ? C.radio[state.role].title
+      : state.role === 'host' ? 'Host a Family Race' : state.phase === 'connected' ? C.connected.title : 'Join a Family Race';
+    const steps = h('ol', { class: 'steps' }, state.steps.map((s) => h('li', { class: s.state }, h('span', { class: 'mk' }, MARK[s.state] || ''), s.text)));
+    const c = panel.center(state, actions);
+    if (c.kind === 'video') queueMicrotask(() => c.el.play?.().catch(() => {})); // re-attaching can pause on iOS
+    const centre = h('div', { class: 'centre' },
+      c.el ? h('div', { class: 'box' + (c.kind === 'video' ? ' vid' : '') }, c.el) : '',
+      c.caption ? h('p', { class: 'cap' }, c.caption) : '');
+    panel.updateBar(state, actions);
+    const players = h('ul', { class: 'peers' }, state.peers.filter((p) => p.state !== 'new').map((p) => h('li', {}, `${p.state === 'open' ? '✓' : '…'} ${p.name}`)));
+    const foot = h('div', { class: 'foot' },
+      h('button', { class: 'sec', onclick: () => actions.cancel() }, 'Back'),
+      state.role === 'host' && state.phase === 'offering' ? h('button', { onclick: () => actions.startRace() }, C.offering.start) : '',
+      state.role === 'host' && state.phase === 'offering' ? h('span', { class: 'note' }, C.offering.startHint) : '');
+    const card = h('div', { class: 'card' }, h('h2', {}, title), h('div', { class: 'cols' }, steps, h('div', {}, centre, panel.bar), players), foot);
     el.replaceChildren(card);
     el.hidden = state.phase === 'ready' || state.phase === 'idle';
   }

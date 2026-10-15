@@ -126,7 +126,7 @@ const palletPounder = {
 // ============================================================ 3. RUST BUCKET
 const rustBucket = {
   id: 'rust-bucket', name: 'Rust Bucket', seed: 303,
-  description: 'Corrugated tin tub that rattles like a hailstorm: plenty of travel in the springs and good brakes, but she's a porky, wide-turning ol' bucket.',
+  description: 'Corrugated tin tub that rattles like a hailstorm: plenty of travel in the springs and good brakes, but she is a porky, wide-turning old bucket.',
   stats: { mass: 112, dragCoef: 0.82, frontalArea: 0.72, rollingResist: 0.02, gripMul: 1.0, steerLock: 0.42, steerRate: 2.4, paddleEfficiency: 0.9, brakeForce: 780, suspension: { stiffness: 11000, damping: 950, travel: 0.13 } },
   flagColor: 0xe8872a, number: 9,
   layout: {
@@ -187,7 +187,7 @@ const rustBucket = {
 // ============================================================ 4. WAGON WHEEL WILLY
 const wagonWheelWilly = {
   id: 'wagon-wheel-willy', name: 'Wagon Wheel Willy', seed: 404,
-  description: 'Big spoked wagon wheels roll forever and she's the easiest to paddle, but the iron tyres skate on loose ground and the brakes are mostly prayer.',
+  description: 'Big spoked wagon wheels roll forever and she is the easiest to paddle, but the iron tyres skate on loose ground and the brakes are mostly prayer.',
   stats: { mass: 96, dragCoef: 0.85, frontalArea: 0.8, rollingResist: 0.012, gripMul: 0.72, steerLock: 0.5, steerRate: 3.0, paddleEfficiency: 1.2, brakeForce: 300, suspension: { stiffness: 6200, damping: 520, travel: 0.09 } },
   flagColor: 0xf2c200, number: 5,
   layout: {

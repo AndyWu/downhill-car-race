@@ -42,6 +42,7 @@ export const LOBBY_COPY = {
     scanReply: 'Scan Player {slot}’s reply',
     scanCaption: 'Hold Player {slot}’s reply code up to this camera',
     showCode: 'Show my code again',
+    newCode: 'New code',
     full: 'All seats are filled. Tap Start Race!',
     preparing: 'Making a code…',
     start: 'Start Race',
@@ -57,7 +58,7 @@ export const LOBBY_COPY = {
   showAnswer: {
     step: 'Show your reply code to the Host',
     caption: 'Turn this iPad so the Host iPad’s camera can see this code',
-    slow: 'Taking a while? Make sure you’re on the Host’s Wi-Fi, then try again.',
+    slow: 'Taking a while? Tap Try again, ask the Host to tap “New code”, then scan the new code.',
     retry: 'Try again',
   },
   connected: { step: 'Wait for the Host to start', title: 'You’re in!', caption: 'Waiting for the Host to start the race.' },
@@ -76,6 +77,7 @@ export const LOBBY_COPY = {
     connectFailed: 'Couldn’t reach that iPad. Check you’re both on the same hotspot or Wi-Fi, then try again.',
     full: 'The race is full (6 players).',
     badCode: 'That code didn’t read properly. Try again.',
+    staleReply: 'That reply is for an older code. On that iPad tap “Try again” and scan the new code.',
   },
 };
 // Back-compat alias (round 1 name).

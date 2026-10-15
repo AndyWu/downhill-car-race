@@ -37,6 +37,39 @@ export const SNAP_HEADER = 2;
 export const SNAP_STRIDE = 14;
 export const SNAP_VERSION = 2;
 export const SNAP_FIELDS = { id: 0, px: 1, py: 2, pz: 3, qx: 4, qy: 5, qz: 6, qw: 7, vx: 8, vy: 9, vz: 10, s: 11, events: 12, ack: 13 };
+
+/** Input struct → Float32Array frame [seq, steer, paddleL, paddleR, handbrake, flags]. */
+export function encodeInputFrame(input, seq, out = new Float32Array(INPUT_STRIDE)) {
+  out[0] = seq;
+  out[1] = input.steer || 0;
+  out[2] = input.paddleL || 0;
+  out[3] = input.paddleR || 0;
+  out[4] = input.handbrake || 0;
+  out[5] = (input.headlight ? FLAG_HEADLIGHT : 0) | (input.reverse ? FLAG_REVERSE : 0);
+  return out;
+}
+export function decodeInputFrame(f) {
+  const flags = f[5] | 0;
+  return { seq: f[0], steer: f[1], paddleL: f[2], paddleR: f[3], handbrake: f[4], headlight: !!(flags & FLAG_HEADLIGHT), reverse: !!(flags & FLAG_REVERSE) };
+}
+
+export function packInputPacket(frames /* newest first, Float32Array[] */) {
+  const n = Math.min(frames.length, 255);
+  const buf = new ArrayBuffer(4 + n * INPUT_STRIDE * 4);
+  const u8 = new Uint8Array(buf);
+  u8[0] = MSG.INPUT; u8[1] = n;
+  const f = new Float32Array(buf, 4);
+  for (let i = 0; i < n; i++) f.set(frames[i].subarray(0, INPUT_STRIDE), i * INPUT_STRIDE);
+  return buf;
+}
+export function unpackInputPacket(buf) {
+  const n = new Uint8Array(buf, 0, 2)[1];
+  const f = new Float32Array(buf, 4, n * INPUT_STRIDE);
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(f.slice(i * INPUT_STRIDE, (i + 1) * INPUT_STRIDE));
+  return out;
+}
+
 const HDR = 25, CAR_FULL = 21;
 const F_KEY = 1, C_UNCHANGED = 8, C_EVENTS = 16, C_ACK = 32;
 const R = Math.SQRT1_2;

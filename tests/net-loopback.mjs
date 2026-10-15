@@ -65,7 +65,7 @@ async function main() {
   if (opened.some((s) => s !== 'open')) throw new Error('no connection');
 
   // ---------------- 2. 60 Hz sync ----------------
-  console.log('2) 60 Hz input + snapshot flow (3 s)');
+  console.log('2) 60 Hz inputs + 30 Hz v2 snapshots (host steps at 60 Hz for 3 s)');
   await host.evaluate(() => {
     window.hs = net.createSync({ role: 'host', peers: [hp] });
     window.rx = { inputs: 0, lastSeq: -1, gaps: 0, ctrl: [] };
@@ -89,8 +89,8 @@ async function main() {
       while (sent < due) {
         if (role === 'host') {
           snap[0] = sent; snap[1] = 6;
-          for (let i = 0; i < 6; i++) { const b = net.SNAP_HEADER + i * net.SNAP_STRIDE; snap.set([i, i * 3, 100 - sent * 0.2, -sent * 0.5, 0, 0, 0, 1, 0, -12, -30, sent * 0.5, 0], b); }
-          window.snapBytes = hs.broadcastSnapshot(snap);
+          for (let i = 0; i < 6; i++) { const b = net.SNAP_HEADER + i * net.SNAP_STRIDE; snap.set([i, i * 3, 100 - sent * 0.2 - i * 40, -sent * 0.5 - i * 300, 0, Math.sin(sent / 50), 0, Math.cos(sent / 50), 0, -12, -30, sent * 0.5 + i * 300, 0, 0], b); }
+          const by = hs.broadcastSnapshot(snap); if (by) { window.snapBytes = by; window.snapTotal = (window.snapTotal || 0) + by; }
         } else {
           net.encodeInputFrame({ steer: Math.sin(sent / 10), paddleL: sent % 20 === 0 ? 1 : 0, headlight: true }, sent, frame);
           cs.sendInput(frame);
@@ -108,11 +108,13 @@ async function main() {
   await host.waitForTimeout(300);
   const hRx = await host.evaluate(() => ({ ...rx, stats: hs.stats, snapBytes: window.snapBytes }));
   const cRx = await client.evaluate(() => ({ ...rx, stats: cs.stats, rtt: cs.clock.rtt, synced: cs.clock.synced, offset: cs.clock.offset }));
-  console.log(`     host sent ${hRes.sent} snapshots (${hRx.snapBytes} B each) in ${hRes.ms.toFixed(0)} ms; client sent ${cRes.sent} inputs in ${cRes.ms.toFixed(0)} ms`);
+  const snapTotal = await host.evaluate(() => window.snapTotal);
+  console.log(`     host stepped ${hRes.sent} ticks, sent ${hRx.stats.snapshotsTx} snapshots (last ${hRx.snapBytes} B, ${(snapTotal / (hRes.ms / 1000) / 1024).toFixed(2)} KiB/s per client) in ${hRes.ms.toFixed(0)} ms; client sent ${cRes.sent} inputs`);
   console.log(`     host received ${hRx.inputs} input frames (seq gaps ${hRx.gaps}); client received ${cRx.snaps} snapshots; interpolator samples ${cRx.sampled}, last pos ${JSON.stringify(cRx.lastPos?.map((v) => +v.toFixed(2)))}`);
   console.log(`     clock: synced=${cRx.synced} rtt=${cRx.rtt.toFixed(2)} ms; bytes host tx=${hRx.stats.sentBytes} client tx=${cRx.stats.sentBytes}`);
   check(hRx.inputs >= 175, `≥175/180 input frames delivered at 60 Hz (${hRx.inputs})`);
-  check(cRx.snaps >= 170, `≥170/180 snapshots delivered at 60 Hz (${cRx.snaps})`);
+  check(hRx.stats.snapshotsTx === 90 && cRx.snaps >= 85, `30 Hz snapshots: ${hRx.stats.snapshotsTx} sent, ${cRx.snaps} delivered`);
+  check(snapTotal / (hRes.ms / 1000) * 5 < 25 * 1024, `6-car snapshot stream × 5 clients < 25 KiB/s (${(snapTotal / (hRes.ms / 1000) * 5 / 1024).toFixed(1)} KiB/s)`);
   check(cRx.sampled > 100, 'interpolator produced samples');
   check(cRx.synced && cRx.rtt < 50, 'clock ping/pong synced');
   check(cRx.ctrl.some((m) => m.t === 'seed' && m.seed === 99) && hRx.ctrl.some((m) => m.t === 'truck'), 'reliable control channel both ways');
@@ -121,13 +123,27 @@ async function main() {
   console.log('3) Lobby state machine (host + 2 clients, fallback modal, manual codes, QR decode)');
   const client2 = await open('client2');
   await host.evaluate(() => {
-    window.lobby = net.createLobby({ role: 'host', camera: false, name: 'Dad' });
+    window.gumCalls = 0;
+    if (navigator.mediaDevices) { const orig = navigator.mediaDevices.getUserMedia?.bind(navigator.mediaDevices); navigator.mediaDevices.getUserMedia = (c) => { window.gumCalls++; return orig ? orig(c) : Promise.reject(new Error('none')); }; }
+    window.lobby = net.createLobby({ role: 'host', name: 'Dad' }); // camera enabled: must stay off until asked
     window.lobbyReady = null;
     lobby.onReady((info) => { window.lobbyReady = { n: info.peers.length, players: info.players }; });
-    lobby.start(); lobby.begin();
+    lobby.start();
   });
+  const pre = await host.waitForFunction(() => lobby.state.offerCode && lobby.state, null, { timeout: 15000 }).then((h) => h.jsonValue());
+  check(pre.phase === 'radio' && pre.steps.every((x) => x.state !== 'done'), `host starts on the hotspot step with nothing pre-ticked (${pre.steps.map((x) => x.state[0]).join('')})`);
+  await host.evaluate(() => lobby.confirmRadio());
+  const post = await host.evaluate(() => ({ steps: lobby.state.steps.map((x) => x.state), gum: window.gumCalls, notice: lobby.state.notice, scanning: lobby.state.scanning }));
+  check(post.steps[0] === 'done' && post.steps[1] === 'active' && post.gum === 0 && !post.notice, `after "My hotspot is on": step 1 ticked, offer step active, camera NOT opened (getUserMedia calls: ${post.gum})`);
+  const pasteLink = await host.evaluate(() => [...document.querySelectorAll('.sbd-net-actions button')].map((b) => b.textContent));
+  check(pasteLink.some((t) => /Can’t use the camera\? Tap to paste/.test(t)) && pasteLink.some((t) => /Scan Player 2’s reply/.test(t)), `host actions: ${pasteLink.join(' | ')}`);
+  await host.evaluate(() => lobby.scanAnswer());
+  const scan = await host.waitForFunction(() => window.gumCalls > 0 && (lobby.state.cameraOn || lobby.state.notice) && lobby.state, null, { timeout: 10000 }).then((h) => h.jsonValue());
+  console.log('     steps while scanning:', scan.steps.map((x) => x.state).join(','));
+  check(scan.scanning && scan.steps.some((x) => x.state === 'active' && /reply/.test(x.text)) && (scan.cameraOn || /isn’t available here, and that’s OK/.test(scan.notice)), `"Scan reply" opens the camera only now (cameraOn=${scan.cameraOn}, soft notice: "${scan.notice || ''}")`);
+  await host.evaluate(() => lobby.stopScan());
   for (const [i, cp2] of [[1, client], [2, client2]]) {
-    const offerCode = await host.waitForFunction((slot) => lobby.state.phase === 'offering' && lobby.state.slot === slot && lobby.state.offerCode, i, { timeout: 15000 }).then((h) => h.jsonValue());
+    let offerCode = await host.waitForFunction((slot) => lobby.state.phase === 'offering' && lobby.state.slot === slot && lobby.state.offerCode, i, { timeout: 15000 }).then((h) => h.jsonValue());
     // decode the on-screen QR canvas with jsQR to prove the rendered code round-trips
     const decoded = await host.evaluate(async () => {
       const c = document.querySelector('.sbd-lobby canvas.qr');
@@ -136,15 +152,35 @@ async function main() {
     });
     check(decoded.text === offerCode, `slot ${i}: offer QR (${decoded.modules}×${decoded.modules} modules, ${decoded.px}px) decodes back to the code`);
     await cp2.evaluate((name) => {
-      window.lobby = net.createLobby({ role: 'client', camera: false, name });
+      window.lobby = net.createLobby({ role: 'client', camera: false, name, slowMs: 1500 });
       window.lobbyReady = null;
       lobby.onReady((info) => { window.lobbyReady = { slot: info.localSlot }; });
-      lobby.start(); lobby.begin();
+      lobby.start(); lobby.confirmRadio();
     }, 'Kid' + i);
+    if (i === 1) {
+      // client whose reply is never scanned: becomes "slow", Try again regenerates a fresh reply
+      await cp2.evaluate((c) => { lobby.submitCode(c); }, offerCode);
+      const first = await cp2.waitForFunction(() => lobby.state.phase === 'showAnswer' && lobby.state.answerCode, null, { timeout: 15000 }).then((h) => h.jsonValue());
+      await cp2.waitForFunction(() => lobby.state.slow, null, { timeout: 5000 });
+      const btns = await cp2.evaluate(() => [...document.querySelectorAll('.sbd-net-actions button')].map((b) => b.textContent));
+      await cp2.evaluate(() => lobby.retry());
+      const ph = await cp2.evaluate(() => lobby.state.phase);
+      check(btns.includes('Try again') && ph === 'scanOffer', `unscanned client offers "Try again" after timeout → back to ${ph}`);
+      check(!!first, 'first reply code was generated');
+      // that reply is now useless; the host mints a fresh single-use code for the same seat
+      await host.evaluate(() => lobby.refreshOffer());
+      offerCode = await host.waitForFunction((old) => lobby.state.offerCode && lobby.state.offerCode !== old && lobby.state.offerCode, offerCode, { timeout: 15000 }).then((h) => h.jsonValue());
+      const stale = await host.evaluate(async (a) => { await lobby.submitCode(a); return lobby.state.notice; }, first);
+      check(/older code/.test(stale || ''), `host rejects the stale reply politely: "${stale}"`);
+    }
     await cp2.evaluate((c) => { lobby.submitCode(c); }, offerCode); // resolves only once connected
     const ans = await cp2.waitForFunction(() => lobby.state.phase === 'showAnswer' && lobby.state.answerCode, null, { timeout: 15000 }).then((h) => h.jsonValue());
     await host.evaluate((c) => lobby.submitCode(c), ans);
-    const r = await cp2.waitForFunction(() => window.lobbyReady, null, { timeout: 15000 }).then((h) => h.jsonValue());
+    const r = await cp2.waitForFunction(() => window.lobbyReady, null, { timeout: 15000 }).then((h) => h.jsonValue()).catch(async (e) => {
+      console.log('host', JSON.stringify(await host.evaluate(() => ({ ...lobby.state, copy: 0, steps: 0 }))));
+      console.log('client', JSON.stringify(await cp2.evaluate(() => ({ ...lobby.state, copy: 0, steps: 0 }))));
+      throw e;
+    });
     check(r.slot === i, `client ${i} connected in slot ${r.slot}`);
   }
   await host.waitForFunction(() => lobby.peers.size === 2 && lobby.state.peers.filter((p) => p.name.startsWith('Kid')).length === 2, null, { timeout: 10000 });
@@ -162,6 +198,7 @@ async function main() {
     const l = net.createLobby({ role: 'host', ui, camera: false, name: 'Mum' });
     l.start();
     await new Promise((r) => { const iv = setInterval(() => { if (l.state.offerCode) { clearInterval(iv); r(); } }, 50); });
+    l.confirmRadio();
     l.close({ keepPeers: false });
     return calls;
   });

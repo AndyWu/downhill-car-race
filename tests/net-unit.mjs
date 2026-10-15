@@ -2,7 +2,8 @@
 //   node tests/net-unit.mjs
 import assert from 'node:assert/strict';
 import { packSdp, unpackSdp, parseSdp } from '../src/net/sdpPack.js';
-import { encodeInputFrame, decodeInputFrame, packInputPacket, unpackInputPacket, packSnapshot, unpackSnapshot, SNAP_HEADER, SNAP_STRIDE } from '../src/net/protocol.js';
+import { encodeInputFrame, decodeInputFrame, packInputPacket, unpackInputPacket, packSnapshot, unpackSnapshot, createSnapshotEncoder, createSnapshotDecoder, packQuat, unpackQuat, SNAP_HEADER, SNAP_STRIDE } from '../src/net/protocol.js';
+import { createPredictor } from '../src/net/predictor.js';
 import { createInterpolator } from '../src/net/interpolator.js';
 import { createLicensing, MAX_SEATS } from '../src/net/licensing.js';
 
@@ -63,29 +64,118 @@ await t('input frame + redundancy packet', () => {
   assert.equal(pkt.byteLength, 4 + 3 * 24);
   assert.deepEqual(unpackInputPacket(pkt).map((x) => x[0]), [42, 41, 40]);
 });
-await t('snapshot quantisation 6 cars', () => {
-  const s = new Float32Array(SNAP_HEADER + 6 * SNAP_STRIDE); s[0] = 123456; s[1] = 6;
-  for (let i = 0; i < 6; i++) {
-    const b = SNAP_HEADER + i * SNAP_STRIDE; const h = Math.SQRT1_2;
-    s.set([i, 10.5 + i, -200.25, -2900.75, 0, h, 0, h, 12.34, -3.21, -25.5, 3100.5, 5], b);
+const mkSnap = (tick, cars) => { const s = new Float32Array(SNAP_HEADER + cars.length * SNAP_STRIDE); s[0] = tick; s[1] = cars.length; cars.forEach((c, i) => s.set(c, SNAP_HEADER + i * SNAP_STRIDE)); return s; };
+const randQuat = () => { const q = [Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]; const l = Math.hypot(...q); return q.map((v) => v / l); };
+await t('smallest-three 10-bit quaternion (worst-case angle error)', () => {
+  let worst = 0;
+  for (let i = 0; i < 20000; i++) {
+    const q = randQuat(); const r = unpackQuat(packQuat(...q));
+    const dot = Math.abs(q[0] * r[0] + q[1] * r[1] + q[2] * r[2] + q[3] * r[3]);
+    worst = Math.max(worst, 2 * Math.acos(Math.min(1, dot)) * 180 / Math.PI);
   }
-  const buf = packSnapshot(s, 1000);
-  const u = unpackSnapshot(buf);
-  assert.equal(u.tick, 123456);
-  for (let k = 0; k < s.length; k++) assert.ok(Math.abs(u.data[k] - s[k]) < 0.006, `field ${k}: ${u.data[k]} vs ${s[k]}`);
-  console.log(`        snapshot 6 cars = ${buf.byteLength} B  (${(buf.byteLength * 60 / 1024).toFixed(1)} KiB/s per client @60 Hz)`);
+  assert.ok(worst < 0.25, 'worst ' + worst);
+  console.log(`        worst rotation error over 20k random quats: ${worst.toFixed(3)}°`);
+});
+await t('snapshot v2: ≤64 B/car, keyframe+delta, acks, 30 Hz bandwidth', () => {
+  // 6 cars spread over 3 km of track, 2 parked at the start line (unchanged → 1 B in deltas)
+  const car = (id, z, moving, ev = 0) => { const q = randQuat(); return [id, 12.3 + id, 410 - z * 0.12, -z, ...q, moving ? 3.2 : 0, moving ? -1.1 : 0, moving ? -24.5 : 0, z * 1.01 - 5, ev, -1]; };
+  const parked = [car(4, 0, false), car(5, 2, false)];
+  const enc = createSnapshotEncoder({ keyframeEvery: 10 }), dec = createSnapshotDecoder();
+  const acks = new Map([[1, 300], [2, 77], [3, 1023], [4, 5], [5, 6]]);
+  let key = 0, delta = 0, nk = 0, nd = 0, maxErr = { p: 0, v: 0, s: 0 };
+  for (let tick = 0; tick < 60; tick += 2) {
+    const moving = [0, 1, 2, 3].map((id) => car(id, 100 + id * 900 + tick * 0.8, true, tick === 20 && id === 2 ? 4 : 0));
+    const src = mkSnap(tick, [...moving, ...parked]);
+    const buf = enc.encode(src, acks);
+    const isKey = new Uint8Array(buf)[2] & 1;
+    if (isKey) { key += buf.byteLength; nk++; } else { delta += buf.byteLength; nd++; }
+    const out = dec.decode(buf);
+    assert.equal(out.data[1], 6, 'all cars decoded');
+    for (let i = 0; i < 6; i++) {
+      const b = SNAP_HEADER + i * SNAP_STRIDE;
+      assert.equal(out.data[b], src[b]);
+      for (let k = 1; k <= 3; k++) maxErr.p = Math.max(maxErr.p, Math.abs(out.data[b + k] - src[b + k]));
+      for (let k = 8; k <= 10; k++) maxErr.v = Math.max(maxErr.v, Math.abs(out.data[b + k] - src[b + k]));
+      maxErr.s = Math.max(maxErr.s, Math.abs(out.data[b + 11] - src[b + 11]));
+      const id = src[b];
+      assert.equal(out.data[b + 13], acks.has(id) ? acks.get(id) & 255 : -1, 'ack');
+      if (tick === 20 && id === 2) assert.equal(out.data[b + 12], 4, 'event bits');
+    }
+  }
+  assert.ok(maxErr.p < 0.002 && maxErr.v <= 0.011 && maxErr.s <= 0.051, JSON.stringify(maxErr));
+  const avg = (key + delta) / (nk + nd);
+  const perCar = (key / nk - 25) / 6;
+  assert.ok(perCar <= 64, 'per car ' + perCar);
+  const total = avg * 30 * 5; // host upstream to 5 clients at 30 Hz
+  assert.ok(total < 25 * 1024, 'total ' + total);
+  console.log(`        keyframe ${(key / nk).toFixed(0)} B, delta ${(delta / nd).toFixed(0)} B (6 cars, 2 parked, 5 acks) → ~${perCar.toFixed(1)} B/car incl. ack`);
+  console.log(`        30 Hz: ${(avg * 30 / 1024).toFixed(2)} KiB/s per client, ${(total / 1024).toFixed(1)} KiB/s host total for 5 clients (v1 was 12.1 KiB/s per client)`);
+  console.log(`        max error: pos ${(maxErr.p * 1000).toFixed(2)} mm, vel ${maxErr.v.toFixed(3)} m/s, s ${maxErr.s.toFixed(3)} m`);
+  // all 6 moving, no acks: worst case
+  const worst = enc.encode(mkSnap(1000, [0, 1, 2, 3, 4, 5].map((id) => car(id, id * 600, true))));
+  console.log(`        worst case 6 moving cars: ${worst.byteLength} B → ${(worst.byteLength * 30 * 5 / 1024).toFixed(1)} KiB/s for 5 clients`);
+});
+await t('decoder skips unchanged cars when it missed the keyframe', () => {
+  const enc = createSnapshotEncoder({ keyframeEvery: 10 });
+  const still = [3, 1, 2, 3, 0, 0, 0, 1, 0, 0, 0, 10, 0, -1], mov = (z) => [1, 0, 0, z, 0, 0, 0, 1, 0, 0, -5, 20, 0, -1];
+  enc.encode(mkSnap(0, [mov(0), still])); // keyframe lost
+  const d = createSnapshotDecoder().decode(enc.encode(mkSnap(2, [mov(-1), still])));
+  assert.equal(d.data[1], 1); assert.equal(d.data[SNAP_HEADER], 1);
 });
 
 console.log('Interpolator');
-await t('hermite between snapshots, ~100 ms behind', () => {
+await t('hermite between 30 Hz snapshots, ~100 ms behind', () => {
   const ip = createInterpolator({ delayMs: 100 });
-  const mk = (tick) => { const s = new Float32Array(SNAP_HEADER + SNAP_STRIDE); s[0] = tick; s[1] = 1; s.set([7, 0, 0, -tick / 60 * 10, 0, 0, 0, 1, 0, 0, -10, tick / 6, tick === 30 ? 2 : 0], SNAP_HEADER); return s; };
-  for (let tick = 0; tick <= 60; tick++) ip.push(mk(tick), 1000 + tick * 1000 / 60);
+  const mk = (tick) => { const s = new Float32Array(SNAP_HEADER + SNAP_STRIDE); s[0] = tick; s[1] = 1; s.set([7, 0, 0, -tick / 60 * 10, 0, 0, 0, 1, 0, 0, -10, tick / 6, tick === 30 ? 2 : 0, -1], SNAP_HEADER); return s; };
+  for (let tick = 0; tick <= 60; tick += 2) ip.push(mk(tick), 1000 + tick * 1000 / 60); // 30 Hz
   const m = ip.sample(1000 + 1000 + 0); // local "now" = arrival of tick 60 → render tick 54
   const c = m.get(7);
   assert.ok(Math.abs(ip.renderTick - 54) < 0.01, 'renderTick ' + ip.renderTick);
   assert.ok(Math.abs(c.position[2] - (-9)) < 1e-3, 'z ' + c.position[2]);
   assert.equal(c.events & 2, 2, 'events OR-accumulated');
+});
+
+console.log('Client-side prediction');
+await t('predict + reconcile with acks: local car responds instantly, converges to host', () => {
+  // toy deterministic body following the physics contract (kinematic bicycle on a plane)
+  const mkBody = () => {
+    const st = { position: { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; } }, quaternion: { x: 0, y: 0, z: 0, w: 1, set(x, y, z, w) { Object.assign(this, { x, y, z, w }); } }, velocity: { x: 0, y: 0, z: -10, set(x, y, z) { Object.assign(this, { x, y, z }); } }, s: 0, yaw: 0 };
+    return {
+      state: st,
+      step(dt, inp) { st.yaw += (inp.steer || 0) * dt; const sp = Math.hypot(st.velocity.x, st.velocity.z) + (inp.paddleL || 0) * 0.5; st.velocity.x = -Math.sin(st.yaw) * sp; st.velocity.z = -Math.cos(st.yaw) * sp; st.position.x += st.velocity.x * dt; st.position.z += st.velocity.z * dt; st.s += sp * dt; st.quaternion.set(0, Math.sin(st.yaw / 2), 0, Math.cos(st.yaw / 2)); },
+      serialize(a, o = 0) { a[o] = st.position.x; a[o + 1] = st.position.y; a[o + 2] = st.position.z; a[o + 3] = st.quaternion.x; a[o + 4] = st.quaternion.y; a[o + 5] = st.quaternion.z; a[o + 6] = st.quaternion.w; a[o + 7] = st.velocity.x; a[o + 8] = st.velocity.y; a[o + 9] = st.velocity.z; a[o + 13] = st.s; return o + 20; },
+      deserialize(a, o = 0) { st.position.set(a[o], a[o + 1], a[o + 2]); st.quaternion.set(a[o + 3], a[o + 4], a[o + 5], a[o + 6]); st.yaw = 2 * Math.atan2(a[o + 4], a[o + 6]); st.velocity.set(a[o + 7], a[o + 8], a[o + 9]); st.s = a[o + 13]; return o + 20; },
+    };
+  };
+  const host = mkBody(), local = mkBody();
+  const pred = createPredictor({ body: local, slot: 2 });
+  const dt = 1 / 60, LAT = 6; // 100 ms one-way in steps
+  const inFlight = []; const snaps = [];
+  const enc = createSnapshotEncoder(), dec = createSnapshotDecoder();
+  let firstTurnLocal = null;
+  for (let seq = 0; seq < 240; seq++) {
+    const inp = { steer: seq > 30 && seq < 90 ? 0.8 : 0, paddleL: seq % 20 === 0 ? 1 : 0 };
+    pred.step(dt, inp, seq);
+    if (seq === 31) firstTurnLocal = local.state.yaw;
+    inFlight.push({ at: seq + LAT, seq, inp });
+    // host applies inputs that have arrived, one per tick
+    const arrived = inFlight.filter((m) => m.at === seq);
+    for (const m of arrived) { host.step(dt, m.inp); host.lastSeq = m.seq; }
+    if (seq % 2 === 0 && host.lastSeq !== undefined) {
+      const a = new Float32Array(20); host.serialize(a);
+      const snap = mkSnap(seq, [[2, a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[13], 0, -1]]);
+      snaps.push({ at: seq + LAT, buf: enc.encode(snap, new Map([[2, host.lastSeq]])) });
+    }
+    for (const sn of snaps.filter((x) => x.at === seq)) pred.onSnapshot(dec.decode(sn.buf).data);
+  }
+  assert.ok(firstTurnLocal > 0, 'local steering applied immediately (no round trip)');
+  // host is 6 inputs behind; compare predicted state against host state replayed with those inputs
+  const err = Math.hypot(local.state.position.x - host.state.position.x, local.state.position.z - host.state.position.z);
+  const r = pred.renderPose();
+  assert.ok(pred.stats.reconciles > 50, 'reconciled ' + pred.stats.reconciles);
+  assert.ok(pred.stats.lastError < 0.05, 'reconcile error ' + pred.stats.lastError);
+  assert.ok(Number.isFinite(r.position[0]) && Math.abs(Math.hypot(...r.quaternion) - 1) < 1e-6);
+  console.log(`        ${pred.stats.reconciles} reconciles, ${pred.pending} unacked inputs in flight, last correction ${(pred.stats.lastError * 1000).toFixed(1)} mm, local ahead of host by ${err.toFixed(2)} m (= latency)`);
 });
 
 console.log('Licensing (memory store in Node)');

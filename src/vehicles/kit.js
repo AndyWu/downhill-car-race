@@ -182,7 +182,7 @@ export class Collector {
     const gs = this.grime ? (o.grime === undefined ? 1 : o.grime) : 0;
     const tmp = new THREE.Color();
     const nrm = g.attributes.normal;
-    const wear = o.wear ? { paint: new THREE.Color(o.wear.paint), bare: new THREE.Color(o.wear.bare), amt: o.wear.amt ?? 0.5 } : null;
+    const wear = o.wear ? { paint: new THREE.Color(o.wear.paint).multiplyScalar(this.kind === 'wood' ? 1.7 : 1), bare: new THREE.Color(o.wear.bare), amt: o.wear.amt ?? 0.5 } : null;
     const mud = new Float32Array(pos.count);
     const seedOff = rand() * 50;
     for (let i = 0; i < pos.count; i++) {
@@ -202,7 +202,7 @@ export class Collector {
         tmp.copy(base);
         tmp.multiplyScalar(1 + (rand() - 0.5) * 0.08);
       }
-      if (o.colorFn) { const cc = o.colorFn(i, x, y, z, uv0[i * 2], uv0[i * 2 + 1]); if (cc) tmp.copy(cc); }
+      if (o.colorFn) { const cc = o.colorFn(i, x, y, z, uv0[i * 2], uv0[i * 2 + 1]); if (cc) tmp.copy(cc).multiplyScalar(this.kind === 'wood' ? 1.5 : 1); }
       tmp.multiplyScalar(1 - gs * 0.28 * (1 - t));
       if (gs) tmp.lerp(DIRT, gs * (1 - t) * 0.45);
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;

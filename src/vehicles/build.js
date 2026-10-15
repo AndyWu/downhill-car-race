@@ -1,6 +1,7 @@
 // Assembles a truck: model body + shared cockpit rig + wheels + moving parts.
 import * as THREE from 'three';
 import { Kit } from './kit.js';
+import { applyMudCoat } from '../graphics/mudcoat.js';
 import {
   buildWheelGeometry, makeWheelObject, buildSteeringWheelMesh, buildPaddle, buildLever,
   addSeat, addHeadlight, addFlagPole, buildDriver,
@@ -138,11 +139,27 @@ export function assemble(def, materials) {
   const mudBase = new Map();
   mudGeos.forEach((g) => mudBase.set(g, g.attributes.color.array.slice()));
   const MUD = new THREE.Color(0x2c1d10);
-  let mudNow = 0;
+  let mudNow = 0, handles = null;
   const setMudCoat = (t) => {
     t = Math.min(1, Math.max(0, t));
-    if (Math.abs(t - mudNow) < 0.01) return;
+    if (Math.abs(t - mudNow) < 0.005) return;
     mudNow = t;
+    // preferred: the graphics agent's shader mud coat (per-truck material clones, patched once)
+    if (!handles && t > 0.01) {
+      handles = [];
+      try {
+        const cache = new Map();
+        group.traverse((o) => {
+          if (!o.isMesh || o.material === k.mats.lens) return;
+          if (!cache.has(o.material)) { const m = o.material.clone(); cache.set(o.material, { m, h: applyMudCoat(m) }); }
+          const e = cache.get(o.material);
+          o.material = e.m;
+        });
+        cache.forEach((e) => handles.push(e.h));
+      } catch (err) { handles = null; }
+    }
+    if (handles && handles.length) { handles.forEach((h) => h.set(t)); return; }
+    // fallback: vertex-colour blend rising from the ground / tyres
     mudGeos.forEach((g) => {
       const c0 = mudBase.get(g), col = g.attributes.color, w = g.attributes.mud;
       for (let i = 0; i < w.count; i++) {

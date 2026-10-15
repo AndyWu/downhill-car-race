@@ -209,7 +209,8 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
   }
 
   // ---------------- optional planar reflection for water (one extra low-res scene pass) ----------------
-  const refl = { on: false, y: 0, scale: tier.reflScale ?? 0.4, rt: null, cam: new THREE.PerspectiveCamera(), hide: [], plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0) };
+  const refl = { on: false, y: 0, scale: tier.reflScale ?? 0.4, rt: null, cam: new THREE.PerspectiveCamera(), dummy: new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1), hide: [], plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0) };
+  refl.dummy.needsUpdate = true;
   const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _u = new THREE.Vector3();
   function allocRefl() {
     refl.rt?.dispose();
@@ -235,8 +236,11 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     refl.warm = true;
     renderer.clippingPlanes = [refl.plane];
     for (const m of refl.hide) m.visible = false;
+    // water materials (including clones made by the scene) must not sample the target we are rendering into
+    G.gfxReflTex.value = refl.dummy; G.gfxReflOn.value = 0;
     renderer.setRenderTarget(refl.rt);
     renderer.render(scene, rc);
+    G.gfxReflTex.value = refl.rt.texture; G.gfxReflOn.value = 1;
     for (const m of refl.hide) m.visible = true;
     renderer.clippingPlanes = prevClip;
     renderer.shadowMap.autoUpdate = prevShadow;
