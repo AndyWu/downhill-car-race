@@ -8,7 +8,7 @@ import { fmt } from './lobbyCopy.js';
 const CSS = `
 .sbd-net-actions{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;max-width:440px;font:inherit;text-align:center}
 .sbd-net-actions .row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
-.sbd-net-actions button{font:inherit;font-weight:700;font-size:15px;border:0;border-radius:10px;padding:10px 16px;min-height:44px;background:#b8401d;color:#fff;cursor:pointer}
+.sbd-net-actions button{font:inherit;font-weight:700;font-size:17px;border:0;border-radius:10px;padding:10px 16px;min-height:44px;background:#b8401d;color:#fff;cursor:pointer}
 .sbd-net-actions button.sec{background:rgba(0,0,0,.12);color:inherit}
 .sbd-net-actions button.link{background:none;color:inherit;text-decoration:underline;font-weight:500;padding:6px 8px;min-height:36px;opacity:.85}
 .sbd-net-actions .note{margin:0;font-size:14px;opacity:.85;line-height:1.3}

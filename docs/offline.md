@@ -19,6 +19,8 @@ Caching rules in `public/sw.js`:
 | Activate | Deletes every `sbd-*` cache that does not belong to the current manifest version, then `clients.claim()`. |
 | Updates | A first install activates at once. Later versions wait until the page calls `applyUpdate(reg)` after the `sbd:sw-update` event, so the game never swaps mid-race. |
 
+`offlineReady` / `onOfflineReady(cb)` / `getOfflineStatus()` / the window event `sbd:offline-ready` report ready only when the controlling SW is `activated` **and** the SW itself counts every manifest file in its versioned cache (`GET_STATUS` message). `tests/net-offline.mjs` checks this.
+
 Verified with Playwright against a production build: the SW takes control, the context goes offline, and both
 the reload and a `?autostart=1&truck=3` navigation still boot from cache.
 
@@ -56,8 +58,7 @@ Wi-Fi network. The full player-facing copy is in `src/net/lobbyCopy.js` (`LOBBY_
 
 ## 4. Serverless QR signaling
 
-Host: **Host Family Race** → `hostCreateOffer(slot, tag)` → a high-contrast **Offer QR**. The camera then keeps
-scanning for answers. Client: scans the offer (`createScanner`: getUserMedia + jsQR on an offscreen canvas,
+Host: confirms that the hotspot is on, sees a high-contrast **Offer QR**, and taps *Scan Player N's reply*. The camera opens only on that tap and never before. Each offer is single-use, because ICE latches onto the first iPad that tries it. So every offer carries its own 16-bit tag, and the *New code* button mints a fresh one. A client whose reply is never scanned gets *Try again* after 40 s. Client: scans the offer (`createScanner`: getUserMedia + jsQR on an offscreen canvas,
 rAF loop, decoding every second frame) → `clientAcceptOffer` → **Answer QR**. The host scans that, the peer
 locks in, and the next slot's offer appears. Every screen also has a copy/paste text-code fallback.
 
@@ -80,9 +81,12 @@ Two pre-negotiated DataChannels per peer: `fast` (id 0, `ordered:false, maxRetra
 - **Input** (client → host, 60 Hz): `Float32Array [seq, steer, paddleL, paddleR, handbrake, flags]` with
   `flags` = `1` headlight | `2` reverse. Each packet carries the last 3 frames (76 B), so a dropped packet
   never loses a paddle stroke. The host delivers each seq once, in order.
-- **Snapshot** (host → clients, 60 Hz): a 10 B header (type, count, tick u32, host ms), then 32 B per car:
-  id, events, float32 position, int16 quaternion (×32767), int16 velocity (cm/s), float32 `s`. Six cars
-  come to 202 B, about 12 KiB/s per client.
+- **Snapshot** (host → clients), **wire v2 at 30 Hz**. The host still calls `broadcastSnapshot` every 60 Hz tick; sync sends every second tick and ORs the event bits.
+  - **Header** (25 B): version byte, keyframe flag, tick, delta base age, and a per-snapshot origin plus scale.
+  - **Per car** (22 B): u24×3 position (0.2 mm precision at a 3 km spread), smallest-three 10-bit quaternion (≤ 0.21° error), i16 velocity (2 cm/s), u16 `s` in decimetres, plus an optional events byte and an optional ack byte (the last input seq the host applied, & 255).
+  - **Keyframes** every 10 snapshots. In between, a car that has not moved since the keyframe costs 1 B.
+  - **Measured:** 6 cars ≈ 157–162 B, which is ~4.7 KiB/s per client and ~23 KiB/s for 5 clients (v1 was 202 B at 60 Hz = 12 KiB/s per client).
+- **Prediction**: `createPredictor({ body, slot })` runs the local car on the client with its own inputs. On each snapshot it rewinds to the acked authoritative state, replays the inputs that haven't been acked yet, and fades out the visual correction (half-life 120 ms).
 - **Clock**: a ping/pong on `fast`. The sample with the lowest RTT out of the last 8 is kept.
   `sync.clock.toLocal(hostMs)` is used for the synchronized countdown (`sync.startCountdown()`).
 - **Interpolation**: `createInterpolator({ delayMs: 100 })`. It renders about 100 ms behind using cubic
