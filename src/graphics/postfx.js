@@ -190,7 +190,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     const sp = Math.min(1, lastSpeed / 14);
     for (let i = 0; i < n; i++) {
       const big = R() < 0.1 + amount * 0.15;
-      const r = mud ? (big ? 0.035 + R() * 0.03 : 0.011 + R() * 0.02) : (big ? 0.022 + R() * 0.018 : 0.007 + R() * 0.013);
+      const r = mud ? (big ? 0.045 + R() * 0.035 : 0.016 + R() * 0.025) : (big ? 0.022 + R() * 0.018 : 0.007 + R() * 0.013);
       const life = mud ? 9 + R() * 7 : 6 + R() * 5;
       // lower ~55% of the frame only, weighted to the bottom (wheel/road spray cannot reach the eye line)
       drops.push({ x: 0.06 + R() * 0.88, y: 0.02 + 0.53 * Math.pow(R(), 1.6), r, age: 0, life, kind: mud ? 1 : 0, seed: R(), trail: 0, elong: 1 + sp * (mud ? 1.2 : 2.0) * (0.4 + R()), delay: 0.3 + R() * (mud ? 3.5 : 1.8), vy: (mud ? 0.005 : 0.025) + R() * (mud ? 0.012 : 0.03) });

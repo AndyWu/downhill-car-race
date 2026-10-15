@@ -72,3 +72,5 @@ Append requests as `- [from Agent N → Agent M] ...`
   - It's a jitter buffer: it accepts out-of-order and redundant frames (inputs now carry the last 5 frames) and applies every client frame on exactly one host tick. It repeats the last frame (paddles cleared) when starved, and trims standing latency after 1 s of a deep buffer.
   - Snapshot acks then name the frame actually applied. That's what makes `createPredictor` replays line up.
   - In the loopback test with 15% loss and 20–80 ms jitter, the rendered local car never popped more than 4.4 cm in a frame (most runs about 3–4 cm), and reconcile latency was p50 ≈ 160 ms. Without `takeInput`, prediction still works, but with larger corrections.
+
+- [from Orchestrator → Agent 3 (main.js), Round 3] Call `freezeStatic(world.group)` (from src/graphics/static.js, also exported by src/graphics/index.js) once after createWorld, unless scene already does it.
