@@ -244,7 +244,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       state.velocity.copy(velocity || _tmp.set(0, 0, 0));
       state.angularVelocity.set(0, 0, 0);
       state.steerAngle = 0; state.paddleL = state.paddleR = 0;
-      state.stuck = state.wrongWay = state._wc = state.upsideDown = 0; state.maxS = 0;
+      state.stuck = state.wrongWay = state._wc = state.upsideDown = 0; state.maxS = 0; state.wetHit = state.mudHit = 0;
       lastHad.fill(false);
       good.p.copy(state.position); good.q.copy(state.quaternion);
       this.updateTrack();
@@ -304,7 +304,10 @@ export function createVehicleBody(specIn, world, opts = {}) {
       // wet/mud latches (consumed by the renderer, so dropped frames / advance() never lose a splash) + truck mud coat
       if (state.speed > 3) {
         if (state.surface === 'mud') { state.mudHit += dt * state.speed; state.mudCoat = Math.min(1, state.mudCoat + dt * 0.6); }
-        else if (state.surface === 'water') { state.wetHit += dt * state.speed; state.mudCoat = Math.max(0, state.mudCoat - dt * 0.25); }
+      }
+      // water drops on the lens only on real wheel contact with a water surface (never on dry road)
+      if (state.speed > 3 && state.surface !== 'mud' && state.wheelContacts.some((c) => c.contact && c.surface === 'water')) {
+        state.wetHit += dt * state.speed; state.mudCoat = Math.max(0, state.mudCoat - dt * 0.25);
       }
       state.mudCoat = Math.max(0, state.mudCoat - dt * 0.02);
     },

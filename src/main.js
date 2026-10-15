@@ -137,7 +137,7 @@ async function boot() {
   window.__game = game;
   let readyFrames = 0;
 
-  let cockpit = null, playerV = null, ui = null;
+  let cockpit = null, playerV = null, ui = null, chaseT = null;
   let cfg = { role: 'solo', truck: 0, ai: 5 };   // last race config (for rematch)
   const mp = { predictor: null, sync: null, interp: null, localSlot: 0, players: [], trucks: [], inputs: new Map(), tick: 0, goAtLocal: 0, picks: new Map(), info: null, results: [] };
   let aiNames = ['Barnaby', 'Clementine', 'Buster', 'Maeve', 'Ace'];
@@ -252,6 +252,7 @@ async function boot() {
         if (kind === 'local') playerV = v;
       }
     }
+    chaseT = null;
     cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam });
     const cd = o.countdown ?? 3;
     Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });
@@ -660,6 +661,14 @@ async function boot() {
     }
     if (playerV && cockpit) {
       const s = playerV.body.state;
+      if (cockpit.mode === 'chase') {
+        // debug chase view: follow the player; while the player sits still and the pack is well ahead, follow the leader instead
+        let lead = null;
+        for (const v of game.vehicles) if (!lead || v.body.state.s > lead.body.state.s) lead = v;
+        const far = lead && lead !== playerV && lead.body.state.s - s.s > 40 && s.speed < 1.5;
+        const want = far ? lead.group : playerV.group;
+        if (want !== chaseT) { chaseT = want; cockpit.setChaseTarget(want); }
+      }
       cockpit.update(dt, s, null);
       if (audio && audio.update && audio.ready) {
         let load = 0; for (let i = 0; i < 4; i++) { contactsArr[i] = !!s.wheelContacts[i].contact; load += s.wheelContacts[i].compression; }

@@ -62,19 +62,27 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
     camera.quaternion.copy(_gq).multiply(_lq);
   }
 
+  // chase target: the player's group by default; main may point it at the pack leader while the player sits still
+  let chaseTarget = group;
+  const _cf = new THREE.Vector3(), _cw = new THREE.Vector3(), _lookP = new THREE.Vector3();
   function chase(dt, state) {
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(group.quaternion); fwd.y = 0; fwd.normalize();
-    const want = group.position.clone().addScaledVector(fwd, -5.2); want.y += 2.3;
-    if (!chaseInit.v) { chasePos.copy(want); chaseInit.v = true; }
-    // exponential follow; a big jump (teleport / long advance() step / dropped frames) snaps instead of crawling
-    if (chasePos.distanceToSquared(want) > 400) chasePos.copy(want); else chasePos.lerp(want, 1 - Math.exp(-dt * 6));
+    const tg = chaseTarget || group;
+    tg.updateMatrixWorld(true);
+    _cf.set(0, 0, -1).applyQuaternion(tg.quaternion); _cf.y = 0;
+    if (_cf.lengthSq() < 1e-4) _cf.set(0, 0, -1); else _cf.normalize();
+    _cw.copy(tg.position).addScaledVector(_cf, -5.2); _cw.y += 2.3;
+    if (!chaseInit.v) { chasePos.copy(_cw); chaseInit.v = true; }
+    // critically damped-ish exponential follow; a big jump (teleport / target switch / long advance() step) snaps instead of crawling
+    if (chasePos.distanceToSquared(_cw) > 400 || dt >= 0.09) chasePos.copy(_cw); else chasePos.lerp(_cw, 1 - Math.exp(-dt * 6));
     camera.position.copy(chasePos);
-    camera.lookAt(group.position.x, group.position.y + 0.7, group.position.z);
+    _lookP.set(tg.position.x, tg.position.y + 0.7, tg.position.z);
+    camera.lookAt(_lookP);
   }
 
   return {
     update,
     setMode(mm) { camMode = mm; chaseInit.v = false; },
+    setChaseTarget(g) { chaseTarget = g || group; },
     get mode() { return camMode; },
     dispose() {
       for (const k in base) if (parts[k]) parts[k].rotation.copy(base[k]);
