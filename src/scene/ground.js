@@ -181,6 +181,25 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
     decals.push({ mesh, center: bs.center.clone(), radius: bs.radius, kind: 'decal' });
   }
 
+  // ---------- far-field cap (24 m cells, sunk 1.6 m under the ribbons) ----------
+  {
+    const { GX, GZ, G, gx0, gz0 } = terrain.grid, st = 4;
+    const nx = Math.floor((GX - 1) / st) + 1, nz2 = Math.floor((GZ - 1) / st) + 1;
+    const P = new Float32Array(nx * nz2 * 3), UV = new Float32Array(nx * nz2 * 2), C = new Float32Array(nx * nz2 * 3);
+    for (let j = 0; j < nz2; j++) for (let i = 0; i < nx; i++) {
+      const k = j * nx + i, x = gx0 + i * st * G, z = gz0 + j * st * G;
+      P[k * 3] = x; P[k * 3 + 1] = terrain.H[j * st * GX + i * st] - 1.6; P[k * 3 + 2] = z;
+      UV[k * 2] = x / 6; UV[k * 2 + 1] = z / 6;
+      terrainColor(cnz, x, z, col); C[k * 3] = col[0]; C[k * 3 + 1] = col[1]; C[k * 3 + 2] = col[2];
+    }
+    const idx = []; gridIndices(P, nz2, nx, 0, idx);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(UV, 2)); geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
+    geo.setIndex(idx); geo.computeVertexNormals(); geo.computeBoundingSphere();
+    const m = new THREE.Mesh(geo, grassMat); m.receiveShadow = true; m.name = 'farfield';
+    parent.add(m);
+  }
+
   // ---------- start ramp deck, gate; finish arch ----------
   const landmarks = buildLandmarks({ track, terrain, lib, parent, L });
 

@@ -102,7 +102,7 @@ function makeGrass() {
     const cx = Math.cos(ang) * r, cz = Math.sin(ang) * r, px = -Math.sin(ang) * w, pz = Math.cos(ang) * w;
     const lx = Math.cos(ang + 0.3) * lean, lz = Math.sin(ang + 0.3) * lean;
     const vs = [[cx - px, 0, cz - pz], [cx + px, 0, cz + pz], [cx + lx, h, cz + lz]];
-    const cols = [[0.16, 0.24, 0.08], [0.16, 0.24, 0.08], [0.46, 0.58, 0.2]];
+    const cols = [[0.16, 0.24, 0.08], [0.16, 0.24, 0.08], [0.34, 0.48, 0.15]];
     for (let i = 0; i < 3; i++) { P.push(...vs[i]); C.push(...cols[i]); N.push(0, 1, 0); }
   };
   for (let i = 0; i < 12; i++) blade(rng() * 6.28, rng() * 0.2 + 0.04, 0.25 + rng() * 0.38, 0.02 + rng() * 0.02, rng() * 0.2);
