@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 
 const NX = 16, NY = 10;
-const L = 0.52, Hh = 0.24, POLE = 0.75;
+const L = 0.5, Hh = 0.2, POLE = 0.4;
 
 function makeTexture() {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128;

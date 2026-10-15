@@ -4,6 +4,8 @@ import * as THREE from 'three';
 
 const G = 9.81;
 const RHO = 1.2;
+const MUD_ROLL = 0.045;   // extra rolling-resistance coefficient at drag = 1 (mud)
+const MUD_VISC = 0.12;    // speed-proportional deceleration (1/s) per unit drag
 export const STATE_FLOATS = 20;
 
 const DEFAULT_SPEC = {
@@ -45,6 +47,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
   spec.suspension = { ...DEFAULT_SPEC.suspension, ...((specIn && specIn.suspension) || {}) };
   const m = clamp(fin(spec.mass, 95), 20, 2000);
   const r = clamp(fin(spec.wheelRadius, 0.28), 0.1, 1);
+  const rf = clamp(fin(spec.wheelRadiusFront, r), 0.1, 1);
   const travel = clamp(fin(spec.suspension.travel, 0.22), 0.05, 0.6);
   const hx = spec.trackWidth / 2, hz = spec.wheelBase / 2, ay = travel * 0.5;
   const anchors = [
@@ -71,7 +74,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
     position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), velocity: new THREE.Vector3(),
     angularVelocity: new THREE.Vector3(), speed: 0, forwardSpeed: 0, s: 0, lateral: 0,
     steerAngle: 0, steerNorm: 0, paddleL: 0, paddleR: 0, handbrake: 0, reverse: false,
-    bump: 0, slip: 0, airborne: false, upsideDown: 0, surface: 'dirt',
+    bump: 0, slip: 0, draft: 0, airborne: false, upsideDown: 0, surface: 'dirt',
     wheelContacts: [0, 1, 2, 3].map(() => ({ contact: false, compression: 0, load: 0, surface: 'dirt', slip: 0, steer: 0 })),
   };
   state.quaternion.identity();
@@ -118,7 +121,8 @@ export function createVehicleBody(specIn, world, opts = {}) {
       const d = _anchor.y - g.h;
       const un = Math.max(_up.dot(_ws), 0.3);
       const t = (d * _ws.y) / un;
-      const len = t - r;
+      const rw = i < 2 ? rf : r;
+      const len = t - rw;
       wc.contact = false; wc.load = 0; wc.slip = 0;
       if (len > travel || d < -2) { wc.compression = 0; lastHad[i] = false; lastLen[i] = travel; continue; }
       const comp = travel - len;
@@ -167,15 +171,18 @@ export function createVehicleBody(specIn, world, opts = {}) {
       wc.slip = Math.abs(vs);
       slipMax = Math.max(slipMax, Math.abs(vs));
       _tmp.copy(_f).multiplyScalar(Fx).addScaledVector(_s, Fs);
-      // surface drag (mud etc.)
-      const sd = clamp(fin(surf.drag), 0, 80);
-      if (sd > 0) { _tmp.addScaledVector(_vp, -sd * 0.0 ); _tmp.addScaledVector(_f, -sd * vf).addScaledVector(_s, -sd * vs * 0.5); }
+      // surface drag (mud etc.): world drag is dimensionless 0..1 (mud = 1)
+      const sd = Math.pow(clamp(fin(surf.drag), 0, 1.5), 1.6);
+      if (sd > 0) {
+        _tmp.addScaledVector(_f, -sd * MUD_ROLL * N * Math.tanh(vf * 3) - sd * mEff * MUD_VISC * vf);
+        _tmp.addScaledVector(_s, -sd * mEff * MUD_VISC * 0.5 * vs);
+      }
       _tmp.addScaledVector(_ws, N);
       applyForce(_tmp, _cp);
     }
 
     // aero drag
-    if (speed > 1e-3) _F.addScaledVector(v, -cdA * speed);
+    if (speed > 1e-3) _F.addScaledVector(v, -cdA * speed * (1 - 0.3 * state.draft));
 
     // paddles: impulse along ground heading
     const pL = clamp(fin(inp.paddleL), 0, 1), pR = clamp(fin(inp.paddleR), 0, 1);
@@ -247,6 +254,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       dt = clamp(fin(dt, 1 / 60), 0, 0.05);
       if (dt <= 0) return;
       const inp = input || {};
+      state.draft = clamp(fin(inp.draft), 0, 1);
       state.reverse = !!inp.reverse;
       const hbT = clamp(fin(inp.handbrake), 0, 1);
       state.handbrake += (hbT - state.handbrake) * Math.min(1, dt * 14);
@@ -269,16 +277,19 @@ export function createVehicleBody(specIn, world, opts = {}) {
       _up.set(0, 1, 0).applyQuaternion(state.quaternion);
       state.upsideDown = _up.y < 0.25 && state.speed < 3 ? state.upsideDown + dt : 0;
       if (state.upsideDown > 2.0) this.recover();
+      // stuck (wedged on a rock / facing uphill with no momentum) for 5 s: lift back onto the road, a few metres on
+      state.stuck = state.speed < 0.4 && state.handbrake < 0.2 && state.s > 3 ? (state.stuck || 0) + dt : 0;
+      if (state.stuck > 5) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);
       if (wc0) state.surface = wc0.surface;
     },
-    recover() {
+    recover(ahead = 0) {
       const tr = world && world.track;
       state.upsideDown = 0;
       if (!tr) { state.quaternion.identity(); state.position.y += 1; return; }
       this.updateTrack();
-      const smp = tr.sampleAt(Math.max(0, state.s));
+      const smp = tr.sampleAt(Math.min(tr.length - 2, Math.max(0, state.s + ahead)));
       const x = smp.position.x, z = smp.position.z;
       placeOnGround(this, world, x, z, smp.tangent, new THREE.Vector3(0, 0, 0));
     },
@@ -366,4 +377,25 @@ export function collideBodies(a, b) {
     hit = true;
   }
   return hit;
+}
+
+// Slipstream: 0..1 strength when directly behind another car (cone-shaped, within 8 m).
+const _dd = new THREE.Vector3(), _df = new THREE.Vector3();
+export function draftFactor(self, others) {
+  const sp = self.state;
+  if (sp.speed < 2) return 0;
+  _df.set(0, 0, -1).applyQuaternion(sp.quaternion);
+  let best = 0;
+  for (const o of others) {
+    if (o === self) continue;
+    _dd.copy(o.state.position).sub(sp.position);
+    const along = _dd.dot(_df);
+    if (along < 1.2 || along > 8) continue;
+    const lat = Math.sqrt(Math.max(0, _dd.lengthSq() - along * along));
+    const cone = 0.5 + along * 0.2;
+    if (lat > cone) continue;
+    const f = (1 - (along - 1.2) / 6.8) * (1 - lat / cone * 0.6);
+    if (f > best) best = f;
+  }
+  return Math.min(1, best * 1.15);
 }

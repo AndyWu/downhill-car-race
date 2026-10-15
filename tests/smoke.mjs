@@ -9,7 +9,7 @@ let server = null;
 if (!process.env.BASE_URL) {
   const b = spawn('npx', ['vite', 'build'], { stdio: 'ignore' });
   await new Promise((r) => b.on('exit', r));
-  server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' });
+  server = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore', detached: true });
   for (let i = 0; i < 60; i++) { try { const r = await fetch(base); if (r.ok) break; } catch {} await new Promise((r) => setTimeout(r, 500)); }
 }
 fs.mkdirSync('/tmp/claude-0', { recursive: true });
@@ -58,5 +58,5 @@ check(r4.length === 6 && r4.every((x) => x > 300), 'player + 5 AI all advance');
 await page.screenshot({ path: '/tmp/claude-0/smoke-ai.png' });
 check(errors.length === 0, 'no console errors ' + JSON.stringify(errors.slice(0, 3)));
 await browser.close();
-if (server) server.kill();
+if (server) process.kill(-server.pid);
 process.exit(fail ? 1 : 0);

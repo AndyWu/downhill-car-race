@@ -1,6 +1,7 @@
-// Soap Box Derby — boot, game loop, mode machine. Every other module is optional (dynamic, with fallbacks).
+// Soap Box Derby — boot, game loop, mode machine, solo + host/client multiplayer.
+// Real modules are used end to end; fallbacks only kick in when a module genuinely fails.
 import * as THREE from 'three';
-import { createVehicleBody, collideBodies, placeOnGround } from './core/physics.js';
+import { createVehicleBody, collideBodies, placeOnGround, draftFactor } from './core/physics.js';
 import { createInput } from './core/input.js';
 import { createFlag } from './core/flag.js';
 import { createCockpitCamera } from './core/camera.js';
@@ -16,6 +17,11 @@ const P = {
   headlight: params.get('headlight') === '1',
   ai: params.has('ai') ? Math.max(0, Math.min(5, parseInt(params.get('ai'), 10) || 0)) : 5,
   cam: params.get('cam') || 'cockpit',
+  q: params.get('q') || 'default',
+  scene: params.get('scene') || null,
+  v: params.has('v') ? parseFloat(params.get('v')) : null,
+  menu: params.get('menu') || null,
+  norender: params.get('norender') === '1', // test hook: simulate without drawing (netcode tests)
 };
 
 const loaders = import.meta.glob('./{scene,vehicles,graphics,audio,ui,net,ai}/index.js');
@@ -27,12 +33,28 @@ async function tryImport(dir) {
 function safe(fn, label, fallback = null) {
   try { return fn(); } catch (e) { console.warn(`[main] ${label} failed:`, e && e.message); return fallback; }
 }
+const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+
+function createLoading(root) {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#1a120a;color:#f3e6c8;font:600 22px Georgia,serif;transition:opacity .5s';
+  el.innerHTML = '<div style="font-size:34px;letter-spacing:.08em">SOAP BOX DERBY</div><div class="lbl" style="font-size:17px;opacity:.8">warming up</div><div style="width:min(60vw,360px);height:10px;border:2px solid #f3e6c8;border-radius:8px;overflow:hidden"><div class="bar" style="height:100%;width:0;background:#c63a24;transition:width .2s"></div></div>';
+  document.body.appendChild(el);
+  return {
+    set(p, label) { el.querySelector('.bar').style.width = `${Math.round(Math.min(1, p) * 100)}%`; if (label) el.querySelector('.lbl').textContent = label; },
+    done() { el.style.opacity = '0'; el.style.pointerEvents = 'none'; setTimeout(() => el.remove(), 600); },
+  };
+}
+
 function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
 async function boot() {
   const canvas = document.getElementById('game');
   const uiRoot = document.getElementById('ui');
+  const loading = createLoading(uiRoot);
+  loading.set(0.01, 'loading modules');
   const [gfx, sceneMod, vehMod, audioMod, uiMod, netMod, aiMod] = await Promise.all(['graphics', 'scene', 'vehicles', 'audio', 'ui', 'net', 'ai'].map(tryImport));
+  if (netMod) { safe(() => netMod.injectPWAHead(), 'injectPWAHead'); safe(() => netMod.registerServiceWorker(), 'registerServiceWorker'); }
 
   // ---- renderer / scene ----
   let renderer = gfx && safe(() => gfx.createRenderer(canvas), 'createRenderer');
@@ -44,9 +66,13 @@ async function boot() {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 4000);
   scene.add(camera);
-  const materials = gfx ? safe(() => gfx.createMaterials(renderer), 'createMaterials') : null;
-  let lighting = gfx ? safe(() => gfx.setupLighting(scene, renderer, { time: P.time }), 'setupLighting') : null;
-  if (lighting && lighting.setTime) safe(() => lighting.setTime(P.time), 'setTime');
+  loading.set(0.04, 'mixing paints');
+  await nextFrame();
+  const materials = gfx ? safe(() => gfx.createMaterials(renderer, { quality: P.q }), 'createMaterials') : null;
+  loading.set(0.14, 'painting the sky');
+  await nextFrame();
+  let lighting = gfx ? safe(() => gfx.setupLighting(scene, renderer), 'setupLighting') : null;
+  if (lighting && lighting.setTime) safe(() => lighting.setTime(P.time, true), 'setTime');
   if (!lighting) {
     const sky = { day: 0x9ec9ee, dusk: 0xd9845a, night: 0x05080f }[P.time] ?? 0x9ec9ee;
     const k = { day: 1, dusk: 0.45, night: 0.06 }[P.time] ?? 1;
@@ -58,29 +84,48 @@ async function boot() {
     lighting = { sun, update() {} };
   }
   let post = gfx ? safe(() => gfx.createPostFX(renderer, scene, camera), 'createPostFX') : null;
+  const isDark = P.time === 'night' || P.time === 'dusk';
 
   // ---- world ----
+  loading.set(0.18, 'building the hill');
   let world = null;
-  if (sceneMod) world = await (async () => { try { return await sceneMod.createWorld(scene, { seed: 1, renderer, materials }); } catch (e) { console.warn('[main] createWorld failed:', e && e.message); return null; } })();
+  if (sceneMod) {
+    world = await (async () => {
+      try { return await sceneMod.createWorld(scene, { seed: 1, renderer, materials, onProgress: (p, l) => loading.set(0.18 + p * 0.78, l || 'building the hill') }); }
+      catch (e) { console.warn('[main] createWorld failed:', e && e.message); return null; }
+    })();
+  }
   if (!world) world = createFallbackWorld(scene);
   const TRACK_LENGTH = (sceneMod && sceneMod.TRACK_LENGTH) || world.track.length || 3218;
+  // alpha-tested foliage needs the cut-out depth material for shadows
+  const foliageDepth = materials && materials.foliage && materials.foliage.userData && materials.foliage.userData.depthMaterial;
+  if (foliageDepth && world.group) world.group.traverse((o) => { if (o.isMesh && o.material && o.material.alphaTest > 0 && !o.customDepthMaterial) o.customDepthMaterial = foliageDepth; });
 
   const TRUCKS = (vehMod && vehMod.TRUCKS && vehMod.TRUCKS.length) ? vehMod.TRUCKS : FALLBACK_TRUCKS;
   const input = createInput(canvas);
   const audio = audioMod ? safe(() => audioMod.createAudio(), 'createAudio') : null;
+  const AI_PROFILES = (aiMod && aiMod.AI_PROFILES) || [];
 
   function resize() {
     const w = innerWidth, h = innerHeight;
-    renderer.setSize(w, h, false);
+    if (post && post.setSize) post.setSize(w, h); else renderer.setSize(w, h, false);
     camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
-    if (post && post.setSize) post.setSize(w, h);
   }
   addEventListener('resize', resize); resize();
 
+  // water hazards for planar reflection
+  const waterSpots = [];
+  for (const h of world.hazards || []) {
+    if (h.type !== 'water') continue;
+    const smp = world.track.sampleAt(h.s);
+    const x = smp.position.x + smp.right.x * h.lateral, z = smp.position.z + smp.right.z * h.lateral;
+    waterSpots.push({ s: h.s, y: world.heightAt(x, z) });
+  }
+
   // ---- game state ----
   const game = {
-    state: { mode: 'title', raceTime: 0, countdown: 0, finished: false, finishTime: 0, place: 0, speed: 0, s: 0, truck: P.truck % TRUCKS.length },
-    world, vehicles: [], input, scene, camera, renderer,
+    state: { mode: 'title', raceTime: 0, countdown: 0, finished: false, finishTime: 0, place: 0, speed: 0, s: 0, truck: P.truck % TRUCKS.length, role: 'solo', paused: false, trial: true, quality: P.q },
+    world, vehicles: [], input, scene, camera, renderer, ui: null, lobby: null, sync: null,
     setDebugInput: (i) => input.setDebugInput(i),
     teleport: (s, speed = 0) => teleport(s, speed),
     advance: (sec) => advance(sec),
@@ -90,31 +135,37 @@ async function boot() {
   window.__game = game;
   let readyFrames = 0;
 
-  let cockpit = null, headlightCtl = null, playerV = null, ui = null;
-  const rngWorld = mulberry32(12345);
+  let cockpit = null, playerV = null, ui = null;
+  let cfg = { role: 'solo', truck: 0, ai: 5 };   // last race config (for rematch)
+  const mp = { sync: null, interp: null, localSlot: 0, players: [], trucks: [], inputs: new Map(), tick: 0, goAtLocal: 0, picks: new Map(), info: null, results: [] };
+  let aiNames = ['Barnaby', 'Clementine', 'Buster', 'Maeve', 'Ace'];
 
   // ---- vehicles ----
-  function makeVehicle(specIdx, slot, isPlayer, aiIdx) {
+  function makeVehicle(specIdx, slot, kind, aiIdx = 0, name = '') {
     const spec = TRUCKS[specIdx % TRUCKS.length];
     let built = null;
     if (vehMod && vehMod.buildTruck) built = safe(() => vehMod.buildTruck(spec, { materials }), 'buildTruck');
     if (!built || !built.group || !built.parts) built = buildFallbackTruck({ ...FALLBACK_TRUCKS[0], ...spec });
     scene.add(built.group);
+    const local = kind === 'local';
+    if (local && built.parts.driver) built.parts.driver.visible = false;
     const body = createVehicleBody(spec, world);
     const st = world.startTransform(slot);
     body.reset(st.position, st.quaternion);
     const flag = safe(() => createFlag({}), 'createFlag');
     if (flag) (built.parts.flagMount || built.group).add(flag.mesh);
     let ai = null;
-    if (!isPlayer) {
-      if (aiMod && aiMod.createAIDriver) ai = safe(() => aiMod.createAIDriver((aiMod.AI_PROFILES || [])[aiIdx % ((aiMod.AI_PROFILES || [1]).length)], { world, rng: mulberry32(1000 + aiIdx) }), 'createAIDriver');
+    if (kind === 'ai') {
+      if (aiMod && aiMod.createAIDriver && AI_PROFILES.length) ai = safe(() => aiMod.createAIDriver(AI_PROFILES[aiIdx % AI_PROFILES.length], { world, rng: aiMod.createRng(1000 + aiIdx), spec }), 'createAIDriver');
       if (!ai) ai = simpleDriver(aiIdx);
     }
-    const v = { spec, body, group: built.group, parts: built.parts, flag, ai, isPlayer, slot,
-      prevPos: body.state.position.clone(), prevQuat: body.state.quaternion.clone(), spin: 0, wheelBase: built.parts.wheels ? built.parts.wheels.map((w) => w.rotation.clone()) : [],
-      finished: false, finishTime: 0, headlight: null };
-    if (gfx && gfx.attachHeadlight && built.parts.headlight) v.headlight = safe(() => gfx.attachHeadlight(built.parts.headlight), 'attachHeadlight');
-    return v;
+    let headlight = null;
+    if (gfx && gfx.attachHeadlight && built.parts.headlight && (local || kind === 'proxy' || isDark)) {
+      headlight = safe(() => gfx.attachHeadlight(built.parts.headlight, local ? {} : { castShadow: false, intensity: 1500 }), 'attachHeadlight');
+    }
+    return { spec, body, group: built.group, parts: built.parts, flag, ai, kind, slot, name, headlight, lightOn: false,
+      isPlayer: local, prevPos: body.state.position.clone(), prevQuat: body.state.quaternion.clone(), spin: 0,
+      finished: false, finishTime: 0, lastInp: null, wheelLoad: 0 };
   }
 
   function simpleDriver(idx) {
@@ -137,29 +188,13 @@ async function boot() {
   }
 
   function clearRace() {
-    for (const v of game.vehicles) { scene.remove(v.group); }
+    for (const v of game.vehicles) {
+      scene.remove(v.group);
+      if (v.headlight && v.headlight.dispose) safe(() => v.headlight.dispose(), 'headlight.dispose');
+    }
     game.vehicles.length = 0; playerV = null;
     if (cockpit) cockpit.dispose();
     cockpit = null;
-  }
-
-  function startRace(o = {}) {
-    clearRace();
-    const truckIdx = o.truck ?? game.state.truck;
-    const nAI = o.ai ?? P.ai;
-    game.state.truck = truckIdx;
-    playerV = makeVehicle(truckIdx, 0, true, 0);
-    game.vehicles.push(playerV);
-    for (let i = 0; i < nAI; i++) game.vehicles.push(makeVehicle(truckIdx + 1 + i, i + 1, false, i));
-    cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam });
-    Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: o.countdown ?? 3 });
-    input.setEnabled(true); input.calibrate();
-    if (o.headlight ?? P.headlight) input.setHeadlight(true);
-    if (o.s != null) { game.vehicles.forEach((v, i) => teleportVehicle(v, o.s - Math.floor(i / 2) * 5, (i % 2 ? 1 : -1) * (i === 0 ? 0 : 1.6), 10)); }
-    if (audio && audio.oneShot) safe(() => audio.oneShot('start'), 'oneShot');
-    if (ui && ui.hide) safe(() => ui.hide(), 'ui.hide');
-    for (const v of game.vehicles) { v.prevPos.copy(v.body.state.position); v.prevQuat.copy(v.body.state.quaternion); }
-    readyFrames = 0;
   }
 
   const _t = new THREE.Vector3();
@@ -170,23 +205,73 @@ async function boot() {
     placeOnGround(v.body, world, p.x, p.z, smp.tangent, smp.tangent.clone().multiplyScalar(speed));
     v.prevPos.copy(v.body.state.position); v.prevQuat.copy(v.body.state.quaternion);
   }
-  function teleport(s, speed = 0) { if (playerV) { teleportVehicle(playerV, s, 0, speed); } }
+  function teleport(s, speed = 0) { if (playerV) teleportVehicle(playerV, s, 0, speed); }
 
-  // ---- finish overlay (only after the race; no HUD during it) ----
-  let finishEl = null;
-  function showFinish() {
-    finishEl = document.createElement('div');
-    finishEl.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,6,2,0.55);color:#f3e6c8;font:600 28px Georgia,serif;text-align:center;z-index:50;gap:12px;';
-    const t = game.state.finishTime, mm = Math.floor(t / 60), ss = (t % 60).toFixed(1).padStart(4, '0');
-    finishEl.innerHTML = `<div>${['', '1st place!', '2nd place', '3rd place'][game.state.place] || game.state.place + 'th place'}</div><div style="font-size:22px">${mm}:${ss}</div><button style="font:inherit;font-size:20px;padding:10px 26px;border-radius:10px;border:2px solid #f3e6c8;background:#5a3a1a;color:#f3e6c8">Race again</button>`;
-    finishEl.querySelector('button').onclick = () => { finishEl.remove(); finishEl = null; goTitle(); };
-    uiRoot.appendChild(finishEl);
+  // ---- start a race ----
+  // o: { truck, ai, s, countdown, headlight, role:'solo'|'host'|'client', players, trucks, localSlot, goAtLocal }
+  function startRace(o = {}) {
+    clearRace();
+    const role = o.role || 'solo';
+    const truckIdx = (o.truck ?? game.state.truck) % TRUCKS.length;
+    cfg = { role, truck: truckIdx, ai: o.ai ?? P.ai };
+    game.state.truck = truckIdx; game.state.role = role;
+    const vs = game.vehicles;
+    if (role === 'solo') {
+      playerV = makeVehicle(truckIdx, 0, 'local', 0, 'You'); vs.push(playerV);
+      for (let i = 0; i < cfg.ai; i++) vs.push(makeVehicle(truckIdx + 1 + i, i + 1, 'ai', i, aiNames[i % aiNames.length]));
+    } else {
+      // multiplayer: one car per slot 0..5; humans from players[], rest AI (host simulates them)
+      const humans = new Map(o.players.map((p) => [p.slot, p]));
+      let aiIdx = 0;
+      for (let slot = 0; slot < 6; slot++) {
+        const h = humans.get(slot);
+        const tIdx = (o.trucks && o.trucks[slot] != null ? o.trucks[slot] : slot) % TRUCKS.length;
+        let kind;
+        if (slot === o.localSlot) kind = 'local';
+        else if (role === 'client') kind = 'proxy';
+        else kind = h ? 'remote' : 'ai';
+        if (!h && kind === 'proxy') kind = 'proxy';
+        const v = makeVehicle(tIdx, slot, kind, aiIdx, h ? h.name : aiNames[aiIdx % aiNames.length]);
+        if (!h && kind !== 'local') aiIdx++;
+        if (kind === 'proxy' && h) v.human = true;
+        vs.push(v);
+        if (kind === 'local') playerV = v;
+      }
+    }
+    cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam });
+    const cd = o.countdown ?? 3;
+    Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });
+    mp.goAtLocal = o.goAtLocal || 0; mp.results = [];
+    input.setEnabled(true); input.calibrate();
+    if (o.headlight ?? P.headlight) input.setHeadlight(true);
+    const sOverride = o.s ?? null;
+    if (sOverride != null && role !== 'client') vs.forEach((v, i) => teleportVehicle(v, sOverride - Math.floor(i / 2) * 5, (i % 2 ? 1 : -1) * (i === 0 ? 0 : 1.6), o.v ?? 10));
+    if (ui && ui.show) safe(() => ui.show('race'), 'ui.show(race)');
+    audioOnce('go0');
+    for (const v of vs) { v.prevPos.copy(v.body.state.position); v.prevQuat.copy(v.body.state.quaternion); }
+    readyFrames = 0;
+    lastCountdownTick = 4;
   }
+  let lastCountdownTick = 4;
+  function audioOnce(name) { if (name === 'go0') return; if (audio && audio.oneShot) safe(() => audio.oneShot(name), 'oneShot'); }
+
+  // ---- UI wiring ----
+  function gestureStart() {
+    safe(() => input.requestPermissions().catch(() => {}), 'permissions');
+    if (audio && audio.unlock) safe(() => audio.unlock(), 'audio.unlock');
+  }
+  window.addEventListener('pointerdown', () => { if (audio && audio.unlock && !audio.ready) safe(() => audio.unlock(), 'audio.unlock'); }, { capture: true, passive: true });
+  window.addEventListener('keydown', () => { if (audio && audio.unlock && !audio.ready) safe(() => audio.unlock(), 'audio.unlock'); }, { passive: true });
 
   function goTitle() {
-    game.state.mode = 'title'; clearRace();
+    if (mp.sync) { safe(() => mp.sync.close(), 'sync.close'); mp.sync = null; }
+    if (game.lobby) { safe(() => game.lobby.close({ keepPeers: false }), 'lobby.close'); game.lobby = null; }
+    mp.info = null; mp.interp = null;
+    game.state.mode = 'title'; game.state.role = 'solo'; game.state.paused = false;
+    clearRace(); input.setEnabled(false);
     if (ui && ui.show) safe(() => ui.show('title'), 'ui.show');
     else showFallbackTitle();
+    if (pendingSW) { const r = pendingSW; pendingSW = null; safe(() => netMod.applyUpdate(r), 'applyUpdate'); }
   }
   let fbTitle = null;
   function showFallbackTitle() {
@@ -197,49 +282,228 @@ async function boot() {
     fbTitle.querySelector('button').onclick = () => { fbTitle.remove(); fbTitle = null; gestureStart(); startRace({}); };
     uiRoot.appendChild(fbTitle);
   }
-  function gestureStart() {
-    input.requestPermissions().catch(() => {});
-    if (audio && audio.unlock) safe(() => audio.unlock(), 'audio.unlock');
+  let pendingSW = null;
+  addEventListener('sbd:sw-update', (e) => {
+    const reg = e.detail && e.detail.registration;
+    if (game.state.mode === 'title') safe(() => netMod.applyUpdate(reg), 'applyUpdate'); else pendingSW = reg;
+  });
+
+  // garage preview (own small renderer, only drawn while the garage screen is up)
+  const preview = { r: null, scene: null, cam: null, truck: null, idx: -1, t: 0 };
+  function ensurePreview() {
+    if (preview.r || !ui || !ui.getPreviewSlot) return;
+    const slot = ui.getPreviewSlot(); if (!slot) return;
+    const r = safe(() => new THREE.WebGLRenderer({ antialias: true, alpha: true }), 'preview renderer');
+    if (!r) return;
+    r.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); r.outputColorSpace = THREE.SRGBColorSpace;
+    r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.1;
+    r.domElement.style.cssText = 'width:100%;height:100%;display:block';
+    slot.appendChild(r.domElement);
+    const s = new THREE.Scene();
+    s.add(new THREE.HemisphereLight(0xdfe9ff, 0x6a4a2a, 1.6));
+    const d = new THREE.DirectionalLight(0xfff0d8, 3); d.position.set(3, 5, 4); s.add(d);
+    const f = new THREE.DirectionalLight(0x9ab8ff, 1); f.position.set(-4, 2, -3); s.add(f);
+    preview.r = r; preview.scene = s; preview.cam = new THREE.PerspectiveCamera(35, 1.6, 0.1, 50);
   }
-  game.gestureStart = gestureStart;
+  function previewShow(i) {
+    ensurePreview(); if (!preview.r) return;
+    if (preview.truck) { preview.scene.remove(preview.truck); preview.truck = null; }
+    preview.idx = i;
+    const spec = TRUCKS[((i % TRUCKS.length) + TRUCKS.length) % TRUCKS.length];
+    let built = vehMod && vehMod.buildTruck ? safe(() => vehMod.buildTruck(spec, { materials }), 'preview buildTruck') : null;
+    if (!built) built = buildFallbackTruck({ ...FALLBACK_TRUCKS[0], ...spec });
+    preview.truck = built.group; preview.scene.add(built.group);
+  }
+  function previewTick(dt) {
+    if (!preview.r || !preview.truck) return;
+    const slot = preview.r.domElement.parentElement; const w = slot.clientWidth, h = slot.clientHeight;
+    if (!w || !h) return;
+    if (preview.r.domElement.width !== Math.round(w * preview.r.getPixelRatio())) { preview.r.setSize(w, h, false); preview.cam.aspect = w / h; preview.cam.updateProjectionMatrix(); }
+    preview.t += dt;
+    preview.truck.rotation.y = preview.t * 0.6 + 0.6;
+    preview.cam.position.set(0, 1.5, 4.8); preview.cam.lookAt(0, 0.35, 0);
+    preview.r.render(preview.scene, preview.cam);
+  }
+
+  // multiplayer lobby plumbing
+  function openLobby(role) {
+    if (!netMod) { ui && ui.toast && ui.toast('Multiplayer unavailable'); return; }
+    if (game.lobby) safe(() => game.lobby.close({ keepPeers: false }), 'lobby.close');
+    ui.show('lobby');
+    const lobby = netMod.createLobby({ role, ui, name: role === 'host' ? 'Host' : 'Racer' });
+    game.lobby = lobby; game.state.mode = 'lobby';
+    lobby.onReady((info) => { mp.info = info; if (role === 'host') hostReady(info); else clientReady(info); });
+    lobby.start();
+  }
+  function hostReady(info) {
+    mp.sync = createHostSync(info);
+    mp.players = info.players;
+    mp.localSlot = 0;
+    hostLaunch();
+  }
+  function createHostSync(info) {
+    const sync = netMod.createSync({ role: 'host', peers: info.peers });
+    game.sync = sync;
+    sync.onInput((slot, f) => {
+      const d = netMod.decodeInputFrame ? netMod.decodeInputFrame(f) : null; if (!d) return;
+      const cur = mp.inputs.get(slot) || { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false };
+      cur.steer = d.steer; cur.handbrake = d.handbrake; cur.headlight = d.headlight; cur.reverse = d.reverse;
+      cur.paddleL = Math.max(cur.paddleL, d.paddleL); cur.paddleR = Math.max(cur.paddleR, d.paddleR); // pulses held until consumed
+      mp.inputs.set(slot, cur);
+    });
+    sync.onControl((slot, m) => { if (m && m.t === 'pick') mp.picks.set(slot, m.truck); });
+    return sync;
+  }
+  function hostLaunch() {
+    const trucks = [];
+    for (const p of mp.players) trucks[p.slot] = p.slot === 0 ? game.state.truck : (mp.picks.get(p.slot) ?? p.slot);
+    for (let i = 0; i < 6; i++) if (trucks[i] == null) trucks[i] = i + 1;
+    const goAt = mp.sync.startCountdown(3, { players: mp.players, trucks, seed: 1 });
+    startRace({ role: 'host', players: mp.players, trucks, localSlot: 0, countdown: 0, goAtLocal: goAt });
+    game.state.countdown = Math.max(0, (goAt - performance.now()) / 1000);
+  }
+  function clientReady(info) {
+    const sync = netMod.createSync({ role: 'client', peers: info.peers });
+    mp.sync = sync; game.sync = sync; mp.localSlot = info.localSlot;
+    mp.interp = netMod.createInterpolator();
+    sync.onSnapshot((data) => mp.interp.push(data));
+    sync.sendControl({ t: 'pick', truck: game.state.truck });
+    sync.onControl((id, m) => {
+      if (!m) return;
+      if (m.t === 'countdown') {
+        const goAt = sync.clock.synced ? sync.clock.toLocal(m.goAtHostMs) : performance.now() + m.seconds * 1000;
+        mp.players = m.players || [];
+        mp.interp.clear();
+        startRace({ role: 'client', players: mp.players, trucks: m.trucks, localSlot: mp.localSlot, countdown: 0, goAtLocal: goAt });
+        game.state.countdown = Math.max(0, (goAt - performance.now()) / 1000);
+      } else if (m.t === 'result') {
+        mp.results[m.place - 1] = m;
+        if (m.slot === mp.localSlot) finishPlayer(m.time, m.place);
+      }
+    });
+    ui.setLobbyStatus && ui.setLobbyStatus('Connected — waiting for the host to start');
+  }
+
+  function standings() {
+    const vs = game.vehicles.slice().sort((a, b) => (a.finished && b.finished ? a.finishTime - b.finishTime : a.finished ? -1 : b.finished ? 1 : b.body.state.s - a.body.state.s));
+    return vs.map((v) => ({ name: v.isPlayer ? (v.name || 'You') : v.name || `Car ${v.slot + 1}`, time: v.finished ? v.finishTime : null, you: v.isPlayer }));
+  }
+  function finishPlayer(time, place) {
+    if (game.state.finished) return;
+    game.state.finished = true; game.state.finishTime = time; game.state.place = place; game.state.mode = 'finish';
+    if (playerV) playerV.finished = true;
+    audioOnce('finish');
+    if (ui && ui.showFinish) safe(() => ui.showFinish({ place, total: game.vehicles.length, time, standings: standings() }), 'showFinish');
+  }
+
+  async function onFamilyPass() {
+    if (!netMod) return;
+    try {
+      await netMod.licensing.init();
+      const st = netMod.licensing.status();
+      game.state.trial = !st.ok;
+      const text = st.ok ? `Family Pass active — ${st.seats.length}/${st.maxSeats} iPads${st.isOwner ? ' (owner)' : ''}.` : 'No Family Pass on this iPad: trial mode (full game, nag-free for now). Ask the owner iPad to add you.';
+      ui.setFamilyPass && ui.setFamilyPass(text);
+    } catch (e) { ui.setFamilyPass && ui.setFamilyPass('Could not read the pass: ' + e.message); }
+  }
 
   if (uiMod && uiMod.createUI) {
     ui = safe(() => uiMod.createUI(uiRoot, {
       trucks: TRUCKS,
-      onStartSolo: (a) => { gestureStart(); const t = typeof a === 'number' ? a : (a && (a.truck ?? a.truckIndex ?? a.index)); startRace(t != null ? { truck: t } : {}); },
-      onHost: () => { gestureStart(); game.state.mode = 'lobby'; safe(() => netMod && netMod.createLobby({ role: 'host', ui }), 'host lobby'); },
-      onJoin: () => { gestureStart(); game.state.mode = 'lobby'; safe(() => netMod && netMod.createLobby({ role: 'client', ui }), 'join lobby'); },
-      onSelectTruck: (i) => { game.state.truck = typeof i === 'number' ? i : (i && i.index) || 0; },
+      onStartSolo: () => { gestureStart(); startRace({ truck: game.state.truck, role: 'solo' }); },
+      onHost: () => { gestureStart(); openLobby('host'); },
+      onJoin: () => { gestureStart(); openLobby('client'); },
+      onStartRace: () => { if (game.lobby && game.lobby.role === 'host') game.lobby.startRace(); },
+      onLobbyBack: () => { if (game.lobby) { safe(() => game.lobby.close({ keepPeers: false }), 'lobby.close'); game.lobby = null; } game.state.mode = 'title'; },
+      onSelectTruck: (t, i) => { game.state.truck = typeof i === 'number' ? i : Math.max(0, TRUCKS.indexOf(t)); },
+      onPreviewTruck: (t, i) => previewShow(i),
+      onGyro: async () => { const r = await input.requestPermissions(); return r.motion !== false; },
+      onFamilyPass: onFamilyPass,
+      onFamilyPassAction: onFamilyPass,
+      onPause: () => { if (game.state.role === 'solo') game.state.paused = true; },
+      onResume: () => { game.state.paused = false; },
+      onQuit: () => goTitle(),
+      onRematch: () => {
+        if (cfg.role === 'solo') startRace({ truck: game.state.truck, role: 'solo' });
+        else if (cfg.role === 'host' && mp.sync) hostLaunch();
+        else if (cfg.role === 'client') { ui.toast && ui.toast('Waiting for the host to restart…'); }
+      },
+      onScreen: (name) => {
+        if (name === 'garage') { ensurePreview(); previewShow(game.state.truck); ui.selectTruck && ui.selectTruck(game.state.truck); }
+        if (name === 'title' && game.state.mode !== 'race') { game.state.mode = 'title'; input.setEnabled(false); }
+      },
     }), 'createUI');
+    game.ui = ui;
+    if (ui && !input.isTouch && ui.showGyroButton) safe(() => ui.showGyroButton(false), 'showGyroButton');
   }
   input.onOrientationChange((landscape) => {
     if (!input.isTouch) return;
     if (ui && ui.setOrientationBlocked) safe(() => ui.setOrientationBlocked(!landscape), 'orient');
   });
-  if (input.isTouch && !input.isLandscape() && ui && ui.setOrientationBlocked) safe(() => ui.setOrientationBlocked(true), 'orient');
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && game.state.mode === 'race') { goTitle(); } });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && game.state.mode === 'race' && ui && ui.show) { ui.show('pause'); if (game.state.role === 'solo') game.state.paused = true; } });
+  input.setEnabled(false);
 
   // ---- simulation ----
   const idle = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false };
   const others = [];
+  const bodies = [];
+  let netSeq = 0;
+  const frameImpulse = { l: 0, r: 0 };
+  function remoteInput(slot) {
+    const cur = mp.inputs.get(slot);
+    if (!cur) return idle;
+    const out = { ...cur }; cur.paddleL = 0; cur.paddleR = 0; return out;
+  }
+
   function fixedUpdate() {
-    if (game.state.mode !== 'race' && game.state.mode !== 'finish') return;
+    const mode = game.state.mode;
+    if (mode !== 'race' && mode !== 'finish') return;
+    if (game.state.paused) return;
     const vs = game.vehicles;
-    for (const v of vs) { v.prevPos.copy(v.body.state.position); v.prevQuat.copy(v.body.state.quaternion); }
+    const role = game.state.role;
+    // countdown
+    if (mp.goAtLocal) game.state.countdown = Math.max(0, (mp.goAtLocal - performance.now()) / 1000);
+    else if (game.state.countdown > 0) game.state.countdown = Math.max(0, game.state.countdown - STEP);
     const cd = game.state.countdown;
-    if (cd > 0) game.state.countdown = Math.max(0, cd - STEP); else game.state.raceTime += game.state.mode === 'race' ? STEP : 0;
+    const ct = Math.ceil(cd);
+    if (cd > 0 && ct < lastCountdownTick) { lastCountdownTick = ct; audioOnce('countdown'); }
+    else if (cd === 0 && lastCountdownTick > 0) { lastCountdownTick = 0; audioOnce('go'); }
+    if (cd === 0 && mode === 'race') game.state.raceTime += STEP;
+    else if (cd === 0 && mode === 'finish') game.state.raceTime += STEP;
+
+    if (role === 'client') {
+      const inp = input.read();
+      if (cd > 0) { inp.paddleL = inp.paddleR = 0; }
+      frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
+      playerV.lastInp = inp;
+      if (mp.sync) {
+        const f = netMod.encodeInputFrame(inp, netSeq++);
+        mp.sync.sendInput(f);
+      }
+      return;
+    }
+
+    for (const v of vs) { v.prevPos.copy(v.body.state.position); v.prevQuat.copy(v.body.state.quaternion); }
+    bodies.length = 0; for (const v of vs) bodies.push(v.body);
     for (const v of vs) {
       let inp;
-      if (v.isPlayer) {
+      if (v.kind === 'local') {
         inp = input.read();
         if (cd > 0) { inp.handbrake = 1; inp.paddleL = inp.paddleR = 0; }
         if (v.finished) { inp = { ...inp, handbrake: 0.7, paddleL: 0, paddleR: 0 }; }
+        frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
+      } else if (v.kind === 'remote') {
+        inp = remoteInput(v.slot);
+        if (cd > 0) inp = { ...idle, steer: inp.steer, handbrake: 1 };
+        if (v.finished) inp = { ...idle, handbrake: 0.7 };
       } else if (cd > 0) { inp = { ...idle, handbrake: 1 }; }
       else {
         others.length = 0; for (const o of vs) if (o !== v) others.push(o.body.state);
         inp = safe(() => v.ai.think(STEP, v.body.state, others), 'ai.think') || idle;
         if (v.finished) inp = { ...idle, handbrake: 0.7 };
       }
+      inp.draft = draftFactor(v.body, bodies);
+      v.lastInp = inp;
       v.body.step(STEP, inp);
     }
     for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) collideBodies(vs[i].body, vs[j].body);
@@ -247,61 +511,123 @@ async function boot() {
     for (const v of vs) {
       if (!v.finished && v.body.state.s >= TRACK_LENGTH - 3) {
         v.finished = true; v.finishTime = game.state.raceTime;
-        if (v.isPlayer) {
-          game.state.finished = true; game.state.finishTime = v.finishTime;
-          game.state.place = vs.filter((o) => o.finished).length;
-          game.state.mode = 'finish';
-          showFinish();
-        }
+        const place = vs.filter((o) => o.finished).length;
+        if (role === 'host' && mp.sync) mp.sync.sendControl({ t: 'result', slot: v.slot, place, time: v.finishTime });
+        if (v.kind === 'local') finishPlayer(v.finishTime, place);
       }
     }
     if (playerV) { game.state.s = playerV.body.state.s; game.state.speed = playerV.body.state.speed; }
+    // host: broadcast snapshot
+    if (role === 'host' && mp.sync) {
+      const n = vs.length, H = netMod.SNAP_HEADER, S = netMod.SNAP_STRIDE;
+      const snap = new Float32Array(H + n * S);
+      snap[0] = ++mp.tick; snap[1] = n;
+      vs.forEach((v, i) => {
+        const b = H + i * S, st = v.body.state;
+        snap[b] = v.slot; snap[b + 1] = st.position.x; snap[b + 2] = st.position.y; snap[b + 3] = st.position.z;
+        snap[b + 4] = st.quaternion.x; snap[b + 5] = st.quaternion.y; snap[b + 6] = st.quaternion.z; snap[b + 7] = st.quaternion.w;
+        snap[b + 8] = st.velocity.x; snap[b + 9] = st.velocity.y; snap[b + 10] = st.velocity.z; snap[b + 11] = st.s; snap[b + 12] = 0;
+      });
+      mp.sync.broadcastSnapshot(snap);
+    }
   }
 
-  let splatAcc = 0;
+  // client: pull interpolated remote states into the bodies
+  const _qv = new THREE.Vector3();
+  function applyProxies(dt) {
+    if (!mp.interp) return;
+    const m = mp.interp.sample(performance.now());
+    for (const v of game.vehicles) {
+      const st = v.body.state;
+      const c = m.get(v.slot);
+      if (c) {
+        st.position.set(c.position[0], c.position[1], c.position[2]);
+        st.quaternion.set(c.quaternion[0], c.quaternion[1], c.quaternion[2], c.quaternion[3]);
+        st.velocity.set(c.velocity[0], c.velocity[1], c.velocity[2]);
+        st.speed = st.velocity.length(); st.s = c.s;
+        st.forwardSpeed = st.velocity.dot(_qv.set(0, 0, -1).applyQuaternion(st.quaternion));
+        const sf = world.surfaceAt(st.position.x, st.position.z); st.surface = sf.type;
+        for (const wc of st.wheelContacts) { wc.contact = true; wc.compression = 0.5; }
+      }
+      if (v.isPlayer) {
+        const inp = v.lastInp || idle;
+        st.steerNorm += ((inp.steer || 0) - st.steerNorm) * Math.min(1, dt * 12);
+        st.steerAngle = st.steerNorm * (v.spec.steerLock || 0.5);
+        st.handbrake = inp.handbrake || 0; st.reverse = !!inp.reverse;
+        st.paddleL = Math.max(inp.paddleL || 0, st.paddleL - dt * 4.5); st.paddleR = Math.max(inp.paddleR || 0, st.paddleR - dt * 4.5);
+        game.state.s = st.s; game.state.speed = st.speed;
+        if (!game.state.finished && st.s >= TRACK_LENGTH - 3 && game.state.countdown === 0) finishPlayer(game.state.raceTime, game.vehicles.filter((o) => o.body.state.s > st.s).length + 1);
+      }
+      v.prevPos.copy(st.position); v.prevQuat.copy(st.quaternion);
+    }
+  }
+
+  const contactsArr = [false, false, false, false];
+  let reflOn = false, reflY = null, reflTimer = 0;
+  function updateReflection(dt) {
+    if (!post || !post.setPlanarReflection || !materials || !playerV) return;
+    reflTimer -= dt; if (reflTimer > 0) return; reflTimer = 0.25;
+    const s = playerV.body.state.s;
+    let best = null;
+    for (const w of waterSpots) { const d = w.s - s; if (d > -6 && d < 40 && (!best || d < best.s - s)) best = w; }
+    if (best) {
+      if (!reflOn || Math.abs(best.y - reflY) > 0.01) safe(() => post.setPlanarReflection({ enabled: true, y: best.y + 0.01, materials: materials.waterMaterials || [] }), 'planarReflection');
+      reflOn = true; reflY = best.y;
+    } else if (reflOn) { safe(() => post.setPlanarReflection({ enabled: false }), 'planarReflection'); reflOn = false; }
+  }
+
   function render(alpha, dt) {
+    const ap = game.state.paused ? 1 : alpha;
     for (const v of game.vehicles) {
       const s = v.body.state;
-      v.group.position.lerpVectors(v.prevPos, s.position, alpha);
-      v.group.quaternion.slerpQuaternions(v.prevQuat, s.quaternion, alpha);
+      v.group.position.lerpVectors(v.prevPos, s.position, ap);
+      v.group.quaternion.slerpQuaternions(v.prevQuat, s.quaternion, ap);
       v.group.updateMatrixWorld(true);
-      // wheels: steer + spin
       const ws = v.parts.wheels;
       if (ws && ws.length === 4) {
-        v.spin += (s.forwardSpeed / (v.spec.wheelRadius || 0.28)) * dt;
+        const rF = v.spec.wheelRadiusFront || v.spec.wheelRadius || 0.28, rR = v.spec.wheelRadius || 0.28;
+        v.spin += (s.forwardSpeed / rR) * dt;
         for (let i = 0; i < 4; i++) {
           const w = ws[i];
           w.rotation.order = 'YXZ';
           w.rotation.y = i < 2 ? -s.steerAngle : 0;
-          w.rotation.x = -v.spin;
+          w.rotation.x = -v.spin * (i < 2 ? rR / rF : 1);
         }
       }
       if (v.flag) v.flag.update(dt, s.speed, null);
-      if (v.headlight && v.headlight.setOn) { const on = v.isPlayer ? headlightState() : P.time === 'night'; v.headlight.setOn(!!on); }
+      if (v.headlight && v.headlight.setOn) {
+        const on = v.isPlayer ? !!(v.lastInp ? v.lastInp.headlight : P.headlight) : (v.lastInp && v.lastInp.headlight) || isDark;
+        if (on !== v.lightOn) { v.lightOn = on; v.headlight.setOn(on); if (v.isPlayer) audioOnce('headlight'); }
+      }
     }
     if (playerV && cockpit) {
       const s = playerV.body.state;
       cockpit.update(dt, s, null);
-      if (post && post.addSplatter && s.speed > 3) {
-        const sf = s.surface;
-        if (sf === 'mud' || sf === 'water') { splatAcc += dt * s.speed; if (splatAcc > 6) { splatAcc = 0; safe(() => post.addSplatter(sf, Math.min(1, s.speed / 12)), 'splatter'); } }
+      if (audio && audio.update && audio.ready) {
+        let load = 0; for (let i = 0; i < 4; i++) { contactsArr[i] = !!s.wheelContacts[i].contact; load += s.wheelContacts[i].compression; }
+        const oth = []; for (const v of game.vehicles) if (v !== playerV) oth.push({ position: v.body.state.position, speed: v.body.state.speed });
+        safe(() => audio.update(dt, { speed: s.speed, surface: s.surface, wheelContacts: contactsArr, paddleL: frameImpulse.l, paddleR: frameImpulse.r, handbrake: s.handbrake, bumps: s.bump, suspensionLoad: Math.min(1, load / 4), flagRipple: 2 + s.speed * 0.6, dusk: P.time === 'dusk' ? 1 : P.time === 'night' ? 1 : 0, others: oth, listener: camera }), 'audio.update');
       }
-      if (audio && audio.update) {
-        safe(() => audio.update(dt, { speed: s.speed, surface: s.surface, wheelContacts: s.wheelContacts, paddleL: s.paddleL, paddleR: s.paddleR, handbrake: s.handbrake, bumps: s.bump, listener: camera }), 'audio.update');
-      }
+      frameImpulse.l = frameImpulse.r = 0;
+      updateReflection(dt);
     }
     safe(() => world.update(dt, camera), 'world.update');
     if (lighting && lighting.update) safe(() => lighting.update(dt, camera), 'lighting.update');
-    const sp = playerV ? playerV.body.state.speed : 0;
-    if (post && post.render) safe(() => post.render(dt, { speed: sp, splatter: 0 }), 'post.render');
-    else renderer.render(scene, camera);
+    const ps = playerV ? playerV.body.state : null;
+    const sp = ps ? ps.speed : 0;
+    const wet = ps && ps.speed > 3 && (ps.surface === 'mud' || ps.surface === 'water');
+    if (post && post.render) {
+      try { post.render(dt, { speed: sp, splatter: wet ? { type: ps.surface, amount: Math.min(1, ps.speed / 12) } : 0 }); }
+      catch (e) { console.warn('[main] post.render failed, falling back', e && e.message); post = null; renderer.render(scene, camera); }
+    } else renderer.render(scene, camera);
   }
 
-  // title-mode camera: slow flyover of the start
+  // title-mode camera: slow orbit over the start line
   function titleCamera(t) {
     const smp = world.track.sampleAt(30);
-    camera.position.copy(smp.position).add(new THREE.Vector3(Math.sin(t * 0.1) * 6, 3.5, 8));
-    camera.lookAt(smp.position.x, smp.position.y + 1, smp.position.z - 12);
+    const a = t * 0.12;
+    camera.position.copy(smp.position).add(new THREE.Vector3(Math.sin(a) * 9, 3.2 + Math.sin(a * 0.7), 6 + Math.cos(a) * 3));
+    camera.lookAt(smp.position.x, smp.position.y + 1, smp.position.z - 10);
   }
 
   let acc = 0, last = performance.now(), simT = 0;
@@ -313,31 +639,46 @@ async function boot() {
     while (acc >= STEP && n < 6) { fixedUpdate(); acc -= STEP; n++; }
     if (n === 6) acc = 0;
     simT += dt;
-    if (game.state.mode === 'title' || game.state.mode === 'lobby' || game.state.mode === 'garage') titleCamera(simT);
-    render(acc / STEP, dt);
+    const m = game.state.mode;
+    if (m === 'title' || m === 'lobby' || m === 'garage') titleCamera(simT);
+    if (game.state.role === 'client') applyProxies(dt);
+    if (!P.norender) render(acc / STEP, dt);
+    if (ui && ui.screen === 'garage') previewTick(dt);
     if (++readyFrames === 3) resolveReady();
   }
-  let lastInp = null;
-  function headlightState() { return lastInp ? lastInp.headlight : P.headlight; }
-  // capture headlight from the last read inside the fixed step
-  const origRead = input.read.bind(input);
-  input.read = () => { lastInp = origRead(); return lastInp; };
-
   function advance(sec) {
     const n = Math.round(sec / STEP);
     for (let i = 0; i < n; i++) fixedUpdate();
     render(1, STEP);
   }
 
+  // ---- ?scene= shortcuts for screenshots ----
+  function sceneShortcutS(kind) {
+    const wanted = {
+      puddle: (h) => h.kind === 'puddle', water: (h) => h.type === 'water', stream: (h) => h.kind === 'stream',
+      mud: (h) => h.type === 'mud', rock: (h) => h.type === 'rock', sand: (h) => h.type === 'sand', gravel: (h) => h.type === 'gravel',
+    }[kind];
+    if (kind === 'barn' || kind === 'farm') { const f = world.info && world.info.farms && world.info.farms[0]; return f ? f.s - 25 : 400; }
+    if (wanted) { const h = (world.hazards || []).find(wanted); return h ? h.s - 28 : 300; }
+    return null;
+  }
+
   // ---- go ----
-  if (P.autostart) {
-    startRace({ truck: P.truck % TRUCKS.length, ai: P.ai, s: P.s, countdown: 0, headlight: P.headlight });
-  } else if (ui && ui.show) {
-    game.state.mode = 'title'; safe(() => ui.show('title'), 'ui.show');
-  } else {
+  loading.set(1, 'ready');
+  await nextFrame();
+  loading.done();
+  requestAnimationFrame((t) => { last = t; frame(t); });
+  const sc = P.scene;
+  if (sc === 'lobby' && ui) { game.state.mode = 'lobby'; openLobby('host'); return; }
+  if (sc === 'garage' && ui) { ui.show('garage'); game.state.mode = 'garage'; return; }
+  if (P.menu === 'host' && ui) { openLobby('host'); return; }
+  if (P.menu === 'join' && ui) { openLobby('client'); return; }
+  if (P.autostart || sc) {
+    const sShort = sc ? sceneShortcutS(sc) : null;
+    startRace({ truck: P.truck % TRUCKS.length, ai: P.ai, s: P.s ?? sShort, v: P.v ?? (sShort != null ? 9 : 10), countdown: 0, headlight: P.headlight });
+  } else if (!ui) {
     game.state.mode = 'title'; showFallbackTitle();
   }
-  requestAnimationFrame((t) => { last = t; frame(t); });
 }
 
 boot().catch((e) => { console.warn('[main] boot failed', e); throw e; });
