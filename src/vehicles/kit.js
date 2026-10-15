@@ -212,10 +212,10 @@ export class Collector {
       if (this.mud === 'height') {
         // ground-up coat plus flung splatter on everything below ~0.6 m (hood, panels) biased to the front
         const up = Math.min(1, Math.max(0, 1 - (y - this.kit.groundY - 0.1) / 0.75));
-        w = Math.max((1 - t) * (0.55 + 0.45 * vnoise(x * 14, y * 14, z * 14)), 0.85 * sp(0.5, 0.68) * up);
+        w = Math.max((1 - t) * (0.55 + 0.45 * vnoise(x * 14, y * 14, z * 14)), 0.9 * sp(0.4, 0.6) * up);
       } else if (this.mud === 'cockpit') {
         // hand-held parts: splatter flecks plus the lower part of the part (hinge end / wheel bottom)
-        w = Math.min(1, 0.95 * sp(0.45, 0.62) + 0.6 * Math.min(1, Math.max(0, (0.12 - (this.mudAxis === 'y' ? y : y)) / 0.2)) * (0.6 + 0.4 * vnoise(x * 20, y * 20, z * 20)));
+        w = Math.min(1, 1.0 * sp(0.32, 0.5) + 0.6 * Math.min(1, Math.max(0, (0.12 - (this.mudAxis === 'y' ? y : y)) / 0.2)) * (0.6 + 0.4 * vnoise(x * 20, y * 20, z * 20)));
       }
       if (this.mud === 'radial') {
         const r = Math.hypot(y, z) / (this.mudR || 0.25);

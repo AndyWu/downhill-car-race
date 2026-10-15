@@ -51,7 +51,7 @@ function show(i, view) {
   group.position.y = spec.wheelRadius; // wheels rest on the ground
   scene.add(group);
   group.updateMatrixWorld(true);
-  parts.driver.visible = view !== 'fp';
+  parts.driver.visible = view !== 'fp' && view !== 'fpmud';
   if (view === 'mech') { // exercise every articulated part
     parts.wheels[0].rotation.y = parts.wheels[1].rotation.y = -0.4;
     parts.wheels.forEach((w, n) => { w.rotation.x = 0.7 + n; });
@@ -61,10 +61,11 @@ function show(i, view) {
     parts.headlight.userData.setOn(true);
   }
   if (view === 'mud') current.setMudCoat(1);
+  if (view === 'fpmud') current.setMudCoat(0.6);
   if (view === 'chase') {
     cam.fov = 40; cam.aspect = W / H; cam.updateProjectionMatrix();
     cam.position.set(0, 1.9, 25); cam.lookAt(0, 0.4, 0);
-  } else if (view === 'fp') {
+  } else if (view === 'fp' || view === 'fpmud') {
     cam.fov = +(q.get('fov') || 65); cam.aspect = W / H; cam.updateProjectionMatrix();
     const p = new THREE.Vector3(); parts.driverEye.getWorldPosition(p);
     cam.position.copy(p); cam.lookAt(p.x, p.y - 0.05, p.z - 5);

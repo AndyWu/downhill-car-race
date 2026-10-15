@@ -180,8 +180,8 @@ const tinLizzie = {
     // tail
     hullSection(k, 'metal', tailR, 1.7, 1.2, 0x3ccfd0, { n: 6 });
     hullSection(k, 'metal', tailR, 1.2, 0.7, 0x58b8c4, { n: 6 });
-    k.paint.add(new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.34, 0.02), new THREE.Vector2(0.34, 0.2), new THREE.Vector2(0.0, 0.3)]), { depth: 0.012, bevelEnabled: false }).rotateX(PI / 2), { p: [-0.0, LZ.cy + 0.16, 1.3], c: 0x2fc2c4 }); // tailplane
-    k.paint.add(new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(-0.34, 0.02), new THREE.Vector2(-0.34, 0.2), new THREE.Vector2(0.0, 0.3)]), { depth: 0.012, bevelEnabled: false }).rotateX(PI / 2), { p: [-0.0, LZ.cy + 0.16, 1.3], c: 0x2fc2c4 });
+    k.paint.add(new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.62, 0.02), new THREE.Vector2(0.62, 0.2), new THREE.Vector2(0.0, 0.3)]), { depth: 0.012, bevelEnabled: false }).rotateX(PI / 2), { p: [-0.0, LZ.cy + 0.16, 1.3], c: 0x2fc2c4 }); // tailplane
+    k.paint.add(new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(-0.62, 0.02), new THREE.Vector2(-0.62, 0.2), new THREE.Vector2(0.0, 0.3)]), { depth: 0.012, bevelEnabled: false }).rotateX(PI / 2), { p: [-0.0, LZ.cy + 0.16, 1.3], c: 0x2fc2c4 });
     for (const z of [0.7, 1.2]) ringRivets(k, z, tailR(z));
     // fin
     const fin = new THREE.Shape([new THREE.Vector2(0.9, 0), new THREE.Vector2(1.7, 0.0), new THREE.Vector2(1.72, 0.2), new THREE.Vector2(1.5, 0.85), new THREE.Vector2(1.1, 0.88)]);

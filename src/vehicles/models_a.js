@@ -258,6 +258,9 @@ const wagonWheelWilly = {
     // canvas wagon bonnet over the back half: white dome visible from afar
     for (const z of [0.58, 0.8, 1.0]) k.wood.tube(Array.from({ length: 9 }, (_, i) => { const t = (i / 8) * PI; return [Math.cos(t) * 0.36, Math.sin(t) * 0.46 - 0.02, z]; }), 0.013, { c: 0xb59c70, uvScale: 1, rseg: 5 });
     k.paint.add(new THREE.CylinderGeometry(0.4, 0.4, 0.5, 18, 1, true, -PI / 2, PI).scale(0.95, 1, 1.25).rotateX(-PI / 2), { p: [0, -0.02, 0.8], c: 0xf0e8d0, v: 0.04, grime: 0.5 });
+    // canvas rear flap with the race number: closes the dome so it reads from behind
+    k.paint.add(new THREE.CircleGeometry(0.4, 20, 0, PI).scale(0.95, 1.15, 1), { p: [0, -0.02, 1.06], c: 0xf0e8d0, v: 0.04, grime: 0.5 });
+    k.paint.decal(DECAL.n5, [0, 0.2, 1.064], 0.3, 0.3);
     // bucket hung from tailgate
     k.metal.cyl(0.07, 0.14, [0.17, 0.0, 1.0], { r2: 0.055, seg: 12, open: true, c: 0xbab6aa });
     k.rope.tube([[0.1, 0.07, 0.99], [0.17, 0.14, 0.99], [0.24, 0.07, 0.99]], 0.005, {});

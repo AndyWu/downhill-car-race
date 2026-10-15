@@ -163,7 +163,7 @@ export function assemble(def, materials) {
     mudGeos.forEach((g) => {
       const c0 = mudBase.get(g), col = g.attributes.color, w = g.attributes.mud;
       for (let i = 0; i < w.count; i++) {
-        const a = Math.min(1, w.getX(i) * t * 1.7) * 0.92;
+        const a = Math.min(1, w.getX(i) * t * 2.3) * 0.92;
         col.array[i * 3] = c0[i * 3] + (MUD.r - c0[i * 3]) * a;
         col.array[i * 3 + 1] = c0[i * 3 + 1] + (MUD.g - c0[i * 3 + 1]) * a;
         col.array[i * 3 + 2] = c0[i * 3 + 2] + (MUD.b - c0[i * 3 + 2]) * a;
