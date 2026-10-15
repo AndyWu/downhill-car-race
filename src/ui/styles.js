@@ -174,6 +174,7 @@ export const CSS = `
 .sbd-placard.p1 .sbd-ribbon { display:block; }
 .sbd-standings { list-style:none; margin:0; padding:0; font-size: calc(2.2*var(--u)); display:grid; gap:.3vmin; text-align:left; }
 .sbd-standings li { display:flex; gap:1.2vmin; } .sbd-standings li b { width:2.4em; font-family: var(--stencil); } .sbd-standings li span { margin-left:auto; }
+.sbd-standings li.rolling span { font-style: italic; opacity:.7; }
 .sbd-standings li.me { color: var(--paint-red); font-weight:bold; }
 .sbd-row { display:flex; gap: calc(1.4*var(--u)); justify-content:center; flex-wrap:wrap; }
 

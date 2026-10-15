@@ -183,16 +183,32 @@ export function createUI(root, opts = {}) {
   let gTimer = null, idleTimer = null, safetyTimer = null;
   const glyphOn = () => { glyphs.classList.add('on'); };
   const glyphOff = () => { glyphs.classList.remove('on'); };
-  function armIdle() { clearTimeout(idleTimer); idleTimer = setTimeout(idleFlash, 10000); }
+  // Idle flash is a newcomer hint only: before the first paddle stroke AND within the first 20 s of the race.
+  let raceT0 = 0, stroke = false, dragStart = null;
+  const hintsAllowed = () => !stroke && performance.now() - raceT0 < 20000;
+  function armIdle() { clearTimeout(idleTimer); if (hintsAllowed()) idleTimer = setTimeout(idleFlash, 10000); }
   function idleFlash() {
-    if (current !== 'race') return;
+    if (current !== 'race' || !hintsAllowed()) return;
     glyphs.classList.add('on', 'faint'); clearTimeout(gTimer);
     gTimer = setTimeout(() => { glyphOff(); glyphs.classList.remove('faint'); armIdle(); }, 2200);
   }
-  function noteInput() { if (current === 'race') { armIdle(); } } // touches never keep glyphs up
+  function noteStroke() { stroke = true; clearTimeout(idleTimer); }
+  function noteInput() { if (current === 'race') armIdle(); } // touches never keep glyphs up
+  window.addEventListener('pointerdown', (e) => { dragStart = [e.clientX, e.clientY]; }, { passive: true, capture: true });
+  window.addEventListener('pointermove', (e) => { if (dragStart && current === 'race' && Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) > 40) noteStroke(); }, { passive: true, capture: true });
+  window.addEventListener('pointerup', () => { dragStart = null; }, { passive: true, capture: true });
+  window.addEventListener('keydown', (e) => { if (['a', 'd', 'A', 'D', 'ArrowLeft', 'ArrowRight', 'q', 'e', 'z', 'x'].includes(e.key)) noteStroke(); }, { passive: true });
   window.addEventListener('pointerdown', noteInput, { passive: true, capture: true });
   window.addEventListener('keydown', noteInput, { passive: true });
 
+  let standingsEl = null;
+  function renderStandings(ul, list) {
+    ul.replaceChildren(...list.map((e, i) => {
+      const running = e.status === 'running' || (e.time == null && e.status !== 'dnf');
+      const txt = e.time != null ? fmtTime(e.time) : running ? (e.eta != null ? `still rolling\u2026 ~${Math.max(1, Math.round(e.eta))}s` : 'still rolling\u2026') : 'DNF';
+      return h('li', { class: (e.you ? 'me ' : '') + (running && e.time == null ? 'rolling' : '') }, h('b', {}, `${i + 1}.`), e.name, h('span', {}, txt));
+    }));
+  }
   // ---------- api ----------
   const api = {
     el, screens,
@@ -203,6 +219,7 @@ export function createUI(root, opts = {}) {
       screens.race.classList.toggle('on', name === 'race' || name === 'pause');
       el.style.pointerEvents = 'none';
       if (name === 'race' && leaving !== 'pause') {
+        raceT0 = performance.now(); stroke = false;
         clearTimeout(gTimer); clearTimeout(idleTimer); clearTimeout(safetyTimer); glyphs.classList.remove('faint'); glyphOn();
         safetyTimer = setTimeout(() => { glyphOff(); armIdle(); }, 6000); // if main never calls raceStarted()
         armIdle();
@@ -269,19 +286,24 @@ export function createUI(root, opts = {}) {
     showGyroButton(b) { gyroBtn.style.display = b ? '' : 'none'; },
     setFamilyPass(textOrNode) { passBody.replaceChildren(textOrNode.nodeType ? textOrNode : document.createTextNode(textOrNode)); },
     notifyInput: noteInput,
+    /** Optional: main can call on the player's first paddle stroke (UI also detects drags/keys itself). */
+    notifyStroke: noteStroke,
     /** Call at GO: glyphs fade out over 3 s from now. */
-    raceStarted() { clearTimeout(safetyTimer); clearTimeout(gTimer); glyphs.classList.remove('faint'); glyphOff(); armIdle(); },
+    raceStarted() { raceT0 = performance.now(); clearTimeout(safetyTimer); clearTimeout(gTimer); glyphs.classList.remove('faint'); glyphOff(); armIdle(); },
     glyphOpacity() { return parseFloat(getComputedStyle(glyphs).opacity); },
     toast(text, ms = 2200) { toast.textContent = text; toast.classList.add('on'); setTimeout(() => toast.classList.remove('on'), ms); },
     /** info: {place, total, time (s), standings?: [{name, time, you}], name?} */
+    /** Live-update the results list. standings: [{name, you, time?, status?:'finished'|'running'|'dnf', eta?}]. */
+    updateFinish(standings) { if (standingsEl && standings) renderStandings(standingsEl, standings); },
     showFinish(info = {}) {
       const { place = 1, total = 6, time, standings } = info;
+      standingsEl = standings ? h('ul', { class: 'sbd-standings' }) : null; if (standings) renderStandings(standingsEl, standings);
       const card = h('div', { class: `sbd-ply sbd-placard p${place}` },
         h('div', { class: 'sbd-ribbon', html: `<svg viewBox="0 0 100 100"><path d="M30 50 L18 98 L38 86 L50 98 L50 60Z" fill="#c63a24"/><path d="M70 50 L82 98 L62 86 L50 98 L50 60Z" fill="#a42c19"/><circle cx="50" cy="38" r="30" fill="#f2c230" stroke="#2a170a" stroke-width="4"/><circle cx="50" cy="38" r="20" fill="none" stroke="#a87e10" stroke-width="3"/></svg>` }),
         h('div', { class: 'sbd-place' }, String(place), h('sup', {}, ordinal(place))),
         h('div', { class: 'of' }, `out of ${total}`),
         time != null ? h('div', { class: 'time' }, fmtTime(time)) : null,
-        standings ? h('ul', { class: 'sbd-standings' }, standings.map((s, i) => h('li', { class: s.you ? 'me' : '' }, h('b', {}, `${i + 1}.`), s.name, h('span', {}, s.time != null ? fmtTime(s.time) : 'DNF')))) : null,
+        standingsEl,
         h('div', { class: 'sbd-row' }, btn('Race again', 'primary', () => cb('onRematch')), btn('Garage', 'small', () => api.show('garage')), btn('Barn', 'small chalk', () => { cb('onQuit'); api.show('title'); })));
       const flags = Array.from({ length: 14 }, (_, i) => `<path d="M${20 + i * 70} ${28 + Math.sin(i / 13 * Math.PI) * 18} l30 0 l-15 46z" fill="${['#c63a24', '#f2c230', '#f6f2e4', '#3f7d3a', '#2f7bbf'][i % 5]}" stroke="#2a170a" stroke-width="2"/>`).join('');
       const bunting = h('div', { class: 'sbd-bunting', html: `<svg viewBox="0 0 1000 110" preserveAspectRatio="none"><path d="M0 14 Q500 74 1000 14" fill="none" stroke="#2a170a" stroke-width="3"/>${flags}</svg>` });

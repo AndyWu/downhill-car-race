@@ -13,7 +13,7 @@ const SURF = {
   dirt:   { f: 900,  q: 0.8, g: 0.10, rate: 3.0, gf: 1400, gq: 1.2, hiss: 0.0 },
   gravel: { f: 2200, q: 0.7, g: 0.14, rate: 6.0, gf: 3200, gq: 0.9, hiss: 0.0 },
   rock:   { f: 500,  q: 1.5, g: 0.09, rate: 1.4, gf: 700,  gq: 2.5, hiss: 0.0 },
-  sand:   { f: 4500, q: 0.5, g: 0.12, rate: 0.6, gf: 5200, gq: 0.5, hiss: 1.0 },
+  sand:   { f: 2800, q: 0.5, g: 0.12, rate: 0.6, gf: 3200, gq: 0.5, hiss: 0.7 },
   mud:    { f: 260,  q: 1.8, g: 0.14, rate: 1.2, gf: 320,  gq: 3.0, hiss: 0.0 },
   water:  { f: 1800, q: 0.6, g: 0.16, rate: 4.0, gf: 2600, gq: 0.7, hiss: 0.5 },
   grass:  { f: 1200, q: 0.5, g: 0.06, rate: 1.0, gf: 2000, gq: 0.6, hiss: 0.4 },
@@ -21,7 +21,9 @@ const SURF = {
 
 import { renderBank } from './bank.js';
 
-export function createAudio() {
+export function createAudio(options = {}) {
+  // options.context: inject an (Offline)AudioContext for offline rendering / tests; it is treated as always running.
+  const offlineMode = !!options.context;
   let ctx = null, master = null, comp = null, bus = null;
   let noiseBuf = null, brownBuf = null, bank = null;
   let ready = false;
@@ -175,7 +177,7 @@ export function createAudio() {
     water() { play('splash', { vol: 1.0, rate: rnd(0.9, 1.1) }); play('drip', { vol: 0.5, when: 0.2, rate: rnd(0.8, 1.2) }); },
     paddle() { play('plank', { vol: 0.55, rate: rnd(0.65, 0.85) }); play('creak', { vol: 0.12, rate: rnd(1.1, 1.6), when: 0.02 }); },
     handbrake() { for (let i = 0; i < 5; i++) { metalClick(0.1, bus, i * 0.045); woodTick(0.12, 500 + i * 60); } },
-    bump() { play('plank', { vol: 0.7, rate: rnd(0.55, 0.8) }); },
+    bump() { play('plank', { vol: 0.45, rate: rnd(0.55, 0.8) }); },
     rockHit() { play('knock', { vol: 0.8, rate: rnd(0.6, 0.9) }); metalClick(0.15); },
     splat() { SOUNDS.mud(); },
     cowbell() { const r = rnd(0.95, 1.08); play('cowbell', { vol: 0.35, rate: r }); play('cowbell', { vol: 0.28, rate: r, when: 0.16 }); },
@@ -240,11 +242,11 @@ export function createAudio() {
       try {
         if (!ctx) {
           const AC = window.AudioContext || window.webkitAudioContext;
-          if (!AC) return false;
-          ctx = new AC({ latencyHint: 'interactive' });
+          if (!AC && !offlineMode) return false;
+          ctx = offlineMode ? options.context : new AC({ latencyHint: 'interactive' });
           build();
         }
-        if (ctx.state !== 'running') ctx.resume();
+        if (!offlineMode && ctx.state !== 'running') ctx.resume();
         // iOS: play a silent buffer inside the gesture
         const b = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0);
         return true;
@@ -256,7 +258,7 @@ export function createAudio() {
     suspend() { ctx && ctx.suspend(); }, resume() { ctx && ctx.resume(); },
 
     update(dt, p = {}) {
-      if (!ready || ctx.state !== 'running') return;
+      if (!ready || (!offlineMode && ctx.state !== 'running')) return;
       dt = clamp(dt || 0.016, 0.001, 0.1);
       const t = ctx.currentTime, tc = 0.06;
       const speed = Math.max(0, p.speed || 0);
@@ -293,12 +295,12 @@ export function createAudio() {
       n.rollGain.gain.setTargetAtTime(rollG, t, tc);
       n.rollBP.frequency.setTargetAtTime(S.f * (0.7 + sp * 0.7), t, 0.1);
       n.rollBP.Q.setTargetAtTime(S.q, t, 0.1);
-      n.hissHP.frequency.setTargetAtTime(S.f > 3000 ? 3500 : 2500, t, 0.1);
+      n.hissHP.frequency.setTargetAtTime(S.f > 2800 ? 2000 : 2500, t, 0.1);
       n.hissGain.gain.setTargetAtTime(S.hiss * 0.1 * sp * ground, t, tc);
       if (ground > 0.1 && speed > 0.8) {
         const rate = S.rate * speed * ground * 0.8, v = 0.55 * Math.min(1, 0.3 + sp);
-        const GR = { dirt: ['dirt', 1, 0], gravel: ['gravel', 1, 0], rock: ['knock', 0.9, 0], sand: ['dirt', 0.9, 2200], grass: ['dirt', 0.8, 1800], mud: ['mud', 0.9, 0], water: ['drip', 1, 0] }[surfName] || ['dirt', 1, 0];
-        poisson('grain', dt, rate, () => play(GR[0], { rate: GR[1] * rnd(0.8, 1.25) * (0.85 + sp * 0.3), vol: v * rnd(0.4, 1) * (GR[0] === 'mud' ? 0.8 : GR[0] === 'knock' ? 0.6 : 0.5), lp: GR[2] }));
+        const GR = { dirt: ['dirt', 1, 0], gravel: ['gravel', 1, 0], rock: ['knock', 1.35, 0], sand: ['dirt', 0.8, 1400], grass: ['dirt', 0.8, 1800], mud: ['mud', 0.9, 0], water: ['drip', 1, 0] }[surfName] || ['dirt', 1, 0];
+        poisson('grain', dt, rate, () => play(GR[0], { rate: GR[1] * rnd(0.8, 1.25) * (0.85 + sp * 0.3), vol: v * rnd(0.4, 1) * (GR[0] === 'mud' ? 0.42 : GR[0] === 'knock' ? 0.3 : GR[0] === 'drip' ? 0.7 : 0.7), lp: GR[2] }));
         if (surfName === 'rock' || surfName === 'gravel') poisson('ping', dt, 0.2 * speed * bumps, () => metalClick(0.05));
       }
       // bumps thump
@@ -367,7 +369,7 @@ export function createAudio() {
 
     /** names: headlight gear mud water paddle handbrake bump rockHit splat finish countdown go click */
     oneShot(name) {
-      if (!ready || ctx.state !== 'running') return;
+      if (!ready || (!offlineMode && ctx.state !== 'running')) return;
       const f = SOUNDS[name]; if (f) { try { f(); } catch (e) { console.warn('oneShot', name, e); } }
     },
     names: Object.keys(SOUNDS),
