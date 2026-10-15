@@ -1,0 +1,75 @@
+{
+  "tilt": {
+    "hasMotionBefore": false,
+    "neutral": {
+      "raw": 0,
+      "steer": 0,
+      "wheelRotZ": 0,
+      "angVelY": -0.01
+    },
+    "upright": {
+      "raw": 0,
+      "steer": 0,
+      "wheelRotZ": 0,
+      "angVelY": -0.057
+    },
+    "tiltA": {
+      "raw": 6.4,
+      "steer": 0.08,
+      "wheelRotZ": -0.16,
+      "angVelY": -0.127
+    },
+    "tiltB": {
+      "raw": -50.9,
+      "steer": -1,
+      "wheelRotZ": 2.079,
+      "angVelY": 0.688
+    },
+    "screenAngle": 0,
+    "isTouch": true,
+    "hasMotion": true
+  },
+  "swipe": {
+    "noInput": [
+      1.38,
+      3.6
+    ],
+    "swipes": [
+      3.6,
+      7.99
+    ],
+    "strokePairs": 1
+  },
+  "handbrake": {
+    "before": 7.99,
+    "after1500ms": 4.27,
+    "leverRotX": 0.7
+  },
+  "physics": {
+    "coast2s": [
+      12.02,
+      12.61
+    ],
+    "hb2s": [
+      11.92,
+      5.8
+    ],
+    "hbDecel": 3.06,
+    "coast10s": {
+      "ds": 48.4,
+      "v": 7.76
+    },
+    "paddle10s": {
+      "ds": 38.3,
+      "v": 6.85
+    }
+  },
+  "glyphOpacityAfterControls": 0.00289657,
+  "zones": {
+    "headlightBefore": false,
+    "headlightAfterTap": false,
+    "reverseAfterGearDragDown": true
+  },
+  "fps": {},
+  "errors": []
+}
