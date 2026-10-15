@@ -113,6 +113,10 @@ const crateComet = {
       k.paint.cyl(0.05, 0.006, [x, y, 0.72], { axis: 'z', seg: 12, c: 0x2a2622 });
     }
     k.rope.lash([0, 0.0, 0.76], 'z', 0.19, 0.04, 4);
+    // tall flame billboard on the tail: red board with flames, readable from behind
+    k.paint.box([0.56, 0.62, 0.02], [0, 0.4, 0.68], { c: 0xc1272d, r: [-0.1, 0, 0] });
+    k.paint.decal(DECAL.flames, [0, 0.36, 0.693], 0.5, 0.45, { r: [-0.1, 0, 0] });
+    for (const x of [-0.22, 0.22]) k.wood.bar([x, -0.03, 0.62], [x, 0.4, 0.68], 0.03, 0.03, { c: 0xa68c62 });
     // backrest crate lid
     k.wood.box([0.5, 0.3, 0.02], [0, 0.25, 0.63], { c: 0xc8b084, r: [-0.15, 0, 0] });
     // headlight mount board
@@ -148,7 +152,7 @@ const tinLizzie = {
     R: 0.3, Rf: 0.3, WB: 1.4, T: 0.68, eyeY: 0.6, eyeZ: 0.32, floorY: -0.2, noRopes: true,
     wheel: { type: 'bike', W: 0.045, spokes: 32, tyre: 0x161616 }, axleF: 'metal',
     steer: { type: 'car', r: 0.15, col: 0x2a1c12, col2: 0xb09a58 },
-    seat: { kind: 'seatback', color: 0x6a3a22 }, paddleCol: 0xb09a58, gearCol: 0x2a1c12, px: 0.19, lx: 0.2, ldz: -0.3,
+    seat: { kind: 'seatback', color: 0x6a3a22 }, paddleCol: 0xb09a58, gearCol: 0x2a1c12, px: 0.19, lx: 0.2, ldz: -0.36,
     hl: { p: [0, 0.37, -0.6], style: 'can' }, flag: { p: [0, 0.245, -0.95], side: -1, h: 0.42, col: 0xb09a58 },
     driver: { shirt: 0xe0d8c0, helmet: 0x5a8a96 },
   },
@@ -172,8 +176,10 @@ const tinLizzie = {
     k.paint.decal(DECAL.n88, [-LZ.R0 - 0.003, LZ.cy - 0.0, 0.1], 0.24, 0.24, { r: [0, -PI / 2, 0] });
     k.paint.decal(DECAL.plateB, [LZ.R0 + 0.003, LZ.cy - 0.08, 0.5], 0.2, 0.13, { r: [0, PI / 2, 0] });
     // tail
-    hullSection(k, 'metal', tailR, 1.7, 1.2, silver, { n: 6 });
-    hullSection(k, 'metal', tailR, 1.2, 0.7, 0xffffff, { n: 6 });
+    hullSection(k, 'metal', tailR, 1.7, 1.2, 0x3ccfd0, { n: 6 });
+    hullSection(k, 'metal', tailR, 1.2, 0.7, 0x58b8c4, { n: 6 });
+    k.paint.add(new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.34, 0.02), new THREE.Vector2(0.34, 0.2), new THREE.Vector2(0.0, 0.3)]), { depth: 0.012, bevelEnabled: false }).rotateX(PI / 2), { p: [-0.0, LZ.cy + 0.16, 1.3], c: 0x2fc2c4 }); // tailplane
+    k.paint.add(new THREE.ExtrudeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(-0.34, 0.02), new THREE.Vector2(-0.34, 0.2), new THREE.Vector2(0.0, 0.3)]), { depth: 0.012, bevelEnabled: false }).rotateX(PI / 2), { p: [-0.0, LZ.cy + 0.16, 1.3], c: 0x2fc2c4 });
     for (const z of [0.7, 1.2]) ringRivets(k, z, tailR(z));
     // fin
     const fin = new THREE.Shape([new THREE.Vector2(0.9, 0), new THREE.Vector2(1.7, 0.0), new THREE.Vector2(1.72, 0.2), new THREE.Vector2(1.5, 0.85), new THREE.Vector2(1.1, 0.88)]);
@@ -187,7 +193,6 @@ const tinLizzie = {
     k.wood.box([0.3, 0.1, 0.02], [0, 0.0, 0.62], { c: 0xb59c70, r: [-0.3, 0, 0] });
     // lamp bracket
     k.metal.rod([0, 0.28, -0.6], [0, 0.32, -0.6], 0.012, { seg: 5, c: 0x8a8a84 });
-    k.rope.lash([0, LZ.cy + noseR(-0.6) - 0.01, -0.6], 'z', noseR(-0.6) + 0.01, 0.05, 4);
   },
 };
 

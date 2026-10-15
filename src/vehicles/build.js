@@ -78,7 +78,7 @@ export function assemble(def, materials) {
   k.wood.box([2 * px + 0.2, 0.025, 0.12], [0, py - 0.045, pz], { c: 0xa88e62 }); // hinge board
 
   // levers
-  const lx = L.lx ?? 0.29, ly = eyeY - 0.52, lz = eyeZ + (L.ldz ?? -0.4);
+  const lx = L.lx ?? 0.25, ly = eyeY - 0.52, lz = eyeZ + (L.ldz ?? -0.36);
   const handbrakeLever = buildLever(k, 'hand'); handbrakeLever.position.set(-lx, ly, lz); handbrakeLever.name = 'handbrakeLever';
   const gearLever = buildLever(k, 'gear', L.gearCol); gearLever.position.set(lx, ly, lz); gearLever.name = 'gearLever';
   for (const sx of [-1, 1]) {

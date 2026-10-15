@@ -50,7 +50,7 @@ const barrelBomber = {
     // backrest planks + stovepipe
     for (let i = 0; i < 3; i++) k.wood.box([0.52, 0.1, 0.02], [0, 0.18 + i * 0.12, 0.62 + i * 0.03], { r: [-0.25, 0, 0], c: 0xc6ab7e });
     for (const x of [-0.24, 0.24]) k.wood.bar([x, -0.04, 0.6], [x, 0.5, 0.74], 0.04, 0.03, { c: 0xa68c62 });
-    k.metal.cyl(0.055, 0.5, [0.3, 0.2, 0.92], { seg: 10, open: true, c: 0xd04a34 });
+    k.metal.cyl(0.055, 0.5, [0.3, 0.2, 0.92], { seg: 10, open: true, c: 0xe8b820 });
     k.metal.cyl(0.055, 0.55, [0.3, 0.72, 0.92], { seg: 10, open: true, c: 0x3a3632 });
     k.metal.cyl(0.0, 0.1, [0.3, 1.04, 0.92], { seg: 10, r2: 0.09, c: 0x6a625a });
     k.metal.tor(0.058, 0.01, [0.3, 0.46, 0.92], { r: [PI / 2, 0, 0], seg: 10, rseg: 4, c: 0x8a8a84 });
@@ -143,7 +143,7 @@ const rustBucket = {
     for (const x of [-0.25, 0.25]) k.wood.bar([x, -0.115, -0.7], [x, -0.115, 0.85], 0.05, 0.05, { c: 0xa88e62 });
     // side panels (ridges along z, standing)
     for (const sx of [-1, 1]) {
-      k.metal.corr(0.26, 1.15, [sx * 0.32, 0.06, 0.18], { r: [0, 0, PI / 2], c: sx > 0 ? 0xffffff : 0xe8d8d0 });
+      k.metal.corr(0.26, 1.15, [sx * 0.32, 0.06, 0.18], { r: [0, 0, PI / 2], c: 0xa8c4de });
       k.metal.cyl(0.013, 1.15, [sx * 0.32, 0.19, 0.18], { axis: 'z', seg: 8, c: 0x7a6a5e }); // rolled hem
       k.metal.rivets([sx * 0.325, 0.12, -0.3], [sx * 0.325, 0.12, 0.7], 11, 0.008);
       k.metal.rivets([sx * 0.325, -0.03, -0.3], [sx * 0.325, -0.03, 0.7], 11, 0.008);
@@ -165,7 +165,7 @@ const rustBucket = {
     k.paint.decal(DECAL.n9, [0.0, 0.185, -0.74], 0.26, 0.26, { r: [-PI / 2 - th, 0, 0] });
     k.paint.decal(DECAL.plateA, [0.315 + 0.012, 0.06, 0.62], 0.3, 0.19, { r: [0, PI / 2, 0] });
     // curved tin backrest
-    k.metal.corr(0.56, 0.5, [0, 0.3, 0.65], { r: [PI / 2 - 0.18, 0, 0], c: 0xe8d8d0 });
+    k.metal.corr(0.56, 0.5, [0, 0.3, 0.65], { r: [PI / 2 - 0.18, 0, 0], c: 0xa8c4de });
     k.metal.cyl(0.014, 0.56, [0, 0.53, 0.69], { axis: 'x', seg: 8, c: 0x6a5a50 });
     // exhaust pipe made from stove-pipe along the right side
     k.metal.cyl(0.04, 0.9, [0.37, 0.01, 0.35], { axis: 'z', seg: 10, open: true, c: 0xb0a090 });
@@ -173,7 +173,7 @@ const rustBucket = {
     for (const z of [0.0, 0.5, 0.75]) k.rope.lash([0.37, 0.01, z], 'z', 0.048, 0.03, 3, { r: 0.006 });
     k.wood.bar([0.34, -0.03, 0.0], [0.37, -0.03, 0.75], 0.03, 0.03, { c: 0xa88e62 });
     // tall tin chimney with a rain cap (bold silhouette)
-    k.metal.cyl(0.06, 1.0, [-0.3, 0.45, 0.62], { seg: 12, open: true, c: 0xffffff });
+    k.metal.cyl(0.06, 1.0, [-0.3, 0.45, 0.62], { seg: 12, open: true, c: 0xa8c4de });
     k.metal.cyl(0.0, 0.12, [-0.3, 1.01, 0.62], { seg: 12, r2: 0.11, c: 0xd8c8c0 });
     k.metal.tor(0.064, 0.01, [-0.3, 0.5, 0.62], { r: [PI / 2, 0, 0], seg: 12, rseg: 4, c: 0x7a6a5e });
     k.metal.tor(0.064, 0.01, [-0.3, 0.8, 0.62], { r: [PI / 2, 0, 0], seg: 12, rseg: 4, c: 0x7a6a5e });
@@ -245,7 +245,7 @@ const wagonWheelWilly = {
     for (const sx of [-1, 1]) k.wood.bar([sx * 0.3, -0.1, 0.1], [sx * 0.3, 0.07, 0.4], 0.04, 0.04, { c: 0xa88e62 });
     // canvas wagon bonnet over the back half: white dome visible from afar
     for (const z of [0.58, 0.8, 1.0]) k.wood.tube(Array.from({ length: 9 }, (_, i) => { const t = (i / 8) * PI; return [Math.cos(t) * 0.36, Math.sin(t) * 0.46 - 0.02, z]; }), 0.013, { c: 0xb59c70, uvScale: 1, rseg: 5 });
-    k.paint.add(new THREE.CylinderGeometry(0.4, 0.4, 0.5, 18, 1, true, -PI / 2, PI).scale(0.9, 1, 1.15).rotateX(-PI / 2), { p: [0, -0.02, 0.8], c: 0xf0e8d0, v: 0.04, grime: 0.5 });
+    k.paint.add(new THREE.CylinderGeometry(0.4, 0.4, 0.5, 18, 1, true, -PI / 2, PI).scale(0.95, 1, 1.25).rotateX(-PI / 2), { p: [0, -0.02, 0.8], c: 0xf0e8d0, v: 0.04, grime: 0.5 });
     // bucket hung from tailgate
     k.metal.cyl(0.07, 0.14, [0.17, 0.0, 1.0], { r2: 0.055, seg: 12, open: true, c: 0xbab6aa });
     k.rope.tube([[0.1, 0.07, 0.99], [0.17, 0.14, 0.99], [0.24, 0.07, 0.99]], 0.005, {});
