@@ -9,6 +9,9 @@ export const G = {
   gfxFogH: { value: new THREE.Vector2(0, 0.045) },      // x: base height, y: falloff /m
   gfxNight: { value: 0 },                                // 0 day .. 1 night
   gfxTime: { value: 0 },
+  gfxReflTex: { value: null },                           // planar reflection (set by postFX.setPlanarReflection)
+  gfxReflVP: { value: new THREE.Matrix4() },
+  gfxReflOn: { value: 0 },
 };
 
 export function injectGlobals(shader) {

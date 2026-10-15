@@ -75,13 +75,22 @@ export function createMaterials(renderer, opts = {}) {
   // UVs expected in metres (1 UV unit = 1 ripple tile).
   T.water = RECIPES.waterNormal(256, aniso);
   M.water = timed(new THREE.MeshStandardMaterial({
-    name: 'water', color: new THREE.Color(0x2a2214), roughness: 0.04, metalness: 0.0,
-    normalMap: T.water.normalMap, normalScale: new THREE.Vector2(0.28, 0.28),
-    transparent: true, opacity: 0.95, depthWrite: false, envMapIntensity: 0.85,
+    name: 'water', color: new THREE.Color(0x1e180e), roughness: 0.05, metalness: 0.0,
+    normalMap: T.water.normalMap, normalScale: new THREE.Vector2(0.22, 0.22),
+    transparent: true, opacity: 0.96, depthWrite: false, envMapIntensity: 0.5,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, // decal-like: sits on terrain without z-fighting
   }));
   M.water.onBeforeCompile = (shader) => {
     injectGlobals(shader);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nuniform float gfxTime;').replace('#include <normal_fragment_maps>', /* glsl */`
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nuniform float gfxTime; uniform sampler2D gfxReflTex; uniform mat4 gfxReflVP; uniform float gfxReflOn;').replace('#include <lights_fragment_end>', /* glsl */`#include <lights_fragment_end>
+	if ( gfxReflOn > 0.5 ) {
+		vec3 gwp = cameraPosition + transpose( mat3( viewMatrix ) ) * ( - vViewPosition );
+		vec4 grc = gfxReflVP * vec4( gwp, 1.0 );
+		vec2 gruv = grc.xy / grc.w * 0.5 + 0.5 + ( normal.xy - nonPerturbedNormal.xy ) * 0.08;
+		vec3 grcol = texture2D( gfxReflTex, gruv ).rgb;
+		float gfres = 0.12 + 0.88 * pow( 1.0 - saturate( dot( normal, geometryViewDir ) ), 4.0 );
+		reflectedLight.indirectSpecular = grcol * gfres * 1.25;
+	}`).replace('#include <normal_fragment_maps>', /* glsl */`
 	{
 		vec2 wuv = vNormalMapUv; float t = gfxTime;
 		vec3 n1 = texture2D( normalMap, wuv + vec2( t * 0.021, t * 0.013 ) ).xyz * 2.0 - 1.0;
@@ -100,6 +109,43 @@ export function createMaterials(renderer, opts = {}) {
 	}`);
   };
   M.water.customProgramCacheKey = () => 'gfxWater';
+  // Puddle variant: expects geometry from makePuddleGeometry (RGBA vertex colours: alpha fades the rim into the mud).
+  M.waterMaterials = [];
+  M.waterPuddle = M.water.clone();
+  M.waterPuddle.vertexColors = true; M.waterPuddle.name = 'waterPuddle';
+  M.waterPuddle.onBeforeCompile = M.water.onBeforeCompile;
+  M.waterPuddle.onBeforeRender = tickTime;
+  M.waterPuddle.customProgramCacheKey = () => 'gfxWaterPuddle';
+  M.waterMaterials.push(M.water, M.waterPuddle); // pass to postFX.setPlanarReflection({ materials: mats.waterMaterials })
+  /** Irregular puddle outline (flat, y=0, normals up, UV in metres, soft alpha rim, deeper = darker). */
+  M.makePuddleGeometry = (rx = 2, rz = 1.5, seed = 1, seg = 40) => {
+    const rings = 5, pos = [], col = [], uv = [], idx = [];
+    const ph = [seed * 1.7, seed * 3.1, seed * 5.3];
+    const outline = (a) => 1 + 0.16 * Math.sin(a * 2 + ph[0]) + 0.09 * Math.sin(a * 3 + ph[1]) + 0.05 * Math.sin(a * 5 + ph[2]);
+    for (let k = 0; k <= rings; k++) {
+      for (let j = 0; j < (k ? seg : 1); j++) {
+        const a = k ? (j / seg) * Math.PI * 2 : 0, rr = (k / rings) * (k ? outline(a) : 0);
+        const x = Math.cos(a) * rr * rx, z = Math.sin(a) * rr * rz;
+        pos.push(x, 0, z); uv.push(x, z);
+        const t = k / rings, alpha = t < 0.6 ? 1 : 1 - ((t - 0.6) / 0.4) ** 1.2;
+        const dk = 0.55 + 0.45 * t;
+        col.push(dk, dk, dk, Math.max(0, alpha));
+      }
+    }
+    const ringStart = (k) => (k === 0 ? 0 : 1 + (k - 1) * seg);
+    for (let j = 0; j < seg; j++) idx.push(0, ringStart(1) + ((j + 1) % seg), ringStart(1) + j);
+    for (let k = 1; k < rings; k++) for (let j = 0; j < seg; j++) {
+      const a = ringStart(k) + j, b = ringStart(k) + ((j + 1) % seg), c = ringStart(k + 1) + j, d = ringStart(k + 1) + ((j + 1) % seg);
+      idx.push(a, b, c, b, d, c);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
+    g.setIndex(idx);
+    return g;
+  };
 
   // ---- foliage: alpha-tested leaf cards, wind sway, sun back-light translucency
   T.foliage = bakeFoliage(512, aniso);
@@ -139,6 +185,9 @@ export function createMaterials(renderer, opts = {}) {
   M.foliage.customProgramCacheKey = () => 'gfxFoliage';
   // assign to foliage meshes so shadows honour the alpha cutout
   M.foliage.userData.depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: T.foliage, alphaTest: 0.5, side: THREE.DoubleSide });
+
+  /** Make any material decal-safe (polygon offset) so thin patches (mud, puddles) don't z-fight with terrain. */
+  M.asDecal = (m, k = 1) => { m.polygonOffset = true; m.polygonOffsetFactor = -1 * k; m.polygonOffsetUnits = -2 * k; return m; };
 
   M.glass = new THREE.MeshStandardMaterial({
     name: 'glass', color: 0xa9c3cc, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.2,

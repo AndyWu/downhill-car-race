@@ -26,13 +26,13 @@ const W = +(q.get('w') || innerWidth), H = +(q.get('h') || innerHeight);
 const canvas = document.getElementById('c');
 const renderer = createRenderer(canvas, { preserveDrawingBuffer: true, dynamicResolution: q.get('dyn') === '1' });
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(42, W / H, 0.1, 4000);
+const camera = new THREE.PerspectiveCamera(42, W / H, 0.2, 2500);
 const t0 = performance.now();
 const mats = createMaterials(renderer);
 const matMs = performance.now() - t0;
 const light = setupLighting(scene, renderer);
 light.setTime(time, true);
-const post = createPostFX(renderer, scene, camera);
+const post = createPostFX(renderer, scene, camera, { msaa: +(q.get('msaa') ?? 4) });
 post.setSize(W, H);
 window.__gfx = { renderer, scene, camera, mats, light, post };
 
@@ -45,7 +45,7 @@ const scaleUV = (geo, su, sv) => { const a = geo.attributes.uv; for (let i = 0; 
 
 // ---------------- common ground ----------------
 const groundMat = mats.worldUV('dirtRoad', { scale: 5, mode: 'planar' });
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000).rotateX(-Math.PI / 2), groundMat);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000, 150, 150).rotateX(-Math.PI / 2), groundMat);
 ground.receiveShadow = true; ground.position.y = 0; scene.add(ground);
 const grassGround = mats.worldUV('grass', { scale: 2.5, mode: 'planar' });
 function addGrassStrip(x, z, w, d) {
@@ -95,11 +95,9 @@ const foliageCardGeo = new THREE.PlaneGeometry(1.8, 1.8).translate(0, 0.9, 0);
 // ---------------- station: puddle ----------------
 {
   const cx = 120, cz = 0;
-  const mudPatch = new THREE.Mesh(scaleUV(new THREE.PlaneGeometry(9, 6).rotateX(-Math.PI / 2), 3, 2), mats.worldUV('mud', { scale: 2.5 }));
-  mudPatch.position.set(cx, 0.012, cz); mudPatch.receiveShadow = true; scene.add(mudPatch);
-  const wg = new THREE.CircleGeometry(2.6, 48).rotateX(-Math.PI / 2);
-  const uv = wg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) - 0.5) * 5.2, (uv.getY(i) - 0.5) * 5.2);
-  const water = new THREE.Mesh(wg, mats.water); water.position.set(cx, 0.03, cz); water.scale.set(1.25, 1, 0.8); water.renderOrder = 2; scene.add(water);
+  const mudPatch = new THREE.Mesh(scaleUV(new THREE.PlaneGeometry(9, 6).rotateX(-Math.PI / 2), 3, 2), mats.asDecal(mats.worldUV('mud', { scale: 2.5 })));
+  mudPatch.position.set(cx, 0.02, cz); mudPatch.receiveShadow = true; scene.add(mudPatch);
+  const water = new THREE.Mesh(mats.makePuddleGeometry(3.2, 2.0, 3), mats.waterPuddle); water.position.set(cx, 0.03, cz); water.renderOrder = 2; scene.add(water);
   // things to be reflected + context
   for (const [dx, dz, s] of [[-3.5, -2.8, 1.1], [3.8, -2.2, 0.8], [4.4, 2.0, 1.3]]) put(new THREE.Mesh(new THREE.DodecahedronGeometry(s, 1), mats.rock), cx + dx, s * 0.5, cz + dz);
   put(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 2.6, 12), mats.woodWeathered), cx - 2.3, 1.3, cz - 3.2);
@@ -146,8 +144,7 @@ let hl;
   }
   for (const [dx, dz, s] of [[1.2, -6, 0.5], [-1.4, -10, 0.8], [0.6, -15, 0.7], [-0.5, -19, 0.9]]) put(new THREE.Mesh(new THREE.DodecahedronGeometry(s, 1), mats.rock), cx + dx, s * 0.4, cz + dz);
   const fol = put(new THREE.Mesh(foliageCardGeo, mats.foliage), cx - 3, 0, cz - 5); fol.scale.setScalar(2.2); fol.customDepthMaterial = mats.foliage.userData.depthMaterial;
-  const wg = new THREE.CircleGeometry(1.8, 32).rotateX(-Math.PI / 2); const uv = wg.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) - 0.5) * 3.6, (uv.getY(i) - 0.5) * 3.6);
-  const water = new THREE.Mesh(wg, mats.water); water.position.set(cx + 0.3, 0.025, cz - 7.5); water.renderOrder = 2; scene.add(water);
+  const water = new THREE.Mesh(mats.makePuddleGeometry(2.0, 1.4, 7), mats.waterPuddle); water.position.set(cx + 0.3, 0.025, cz - 7.5); water.renderOrder = 2; scene.add(water);
   addGrassStrip(cx - 8, cz - 10, 6, 40);
 }
 
@@ -155,14 +152,17 @@ let hl;
 const rigs = {
   materialsA: { p: [0, 3.6, 11.5], t: [0, 0.5, 0.8], fov: 46 },
   materialsB: { p: [60, 3.6, 11.5], t: [60, 0.5, 0.8], fov: 46 },
-  puddle: { p: [120, 0.9, 7.5], t: [120, 0.4, -1.5], fov: 55 },
+  puddle: { p: [120, 1.25, 6.5], t: [120, 0.5, -1.8], fov: 55 },
   barn: { p: [182, 1.6, 5.6], t: [181, 2.4, -3.0], fov: 55 },
   headlight: { p: [301.6, 1.3, 3.4], t: [300, 0.6, -10], fov: 58 },
+  beam: { p: [304.8, 1.5, -2.5], t: [300, 0.7, -9], fov: 60 },
   post: { p: [182, 1.6, 5.0], t: [181, 2.2, -3.0], fov: 62 },
 };
 const rig = rigs[shot];
 camera.position.set(...rig.p); camera.lookAt(...rig.t); camera.fov = rig.fov; camera.updateProjectionMatrix();
-if (shot === 'headlight' || q.get('headlight') === '1') hl.setOn(true);
+if (shot === 'headlight' || shot === 'beam' || q.get('headlight') === '1') hl.setOn(true);
+if (shot === 'puddle' && q.get('refl') !== '0') post.setPlanarReflection({ y: 0.03, materials: mats.waterMaterials });
+if (shot === 'headlight') post.setPlanarReflection({ y: 0.025, materials: mats.waterMaterials });
 if (shot === 'post') {
   post.addSplatter('mud', 0.9); post.addSplatter('water', 0.9); post.addSplatter('mud', 0.4);
   // age the drops a touch so some water trails exist
@@ -176,14 +176,14 @@ const v = new THREE.Vector3();
 function tick() {
   frame++;
   light.update(1 / 30, camera);
-  if (shot === 'headlight') hl.update(1 / 30);
-  post.render(1 / 30, { speed: shot === 'post' || shot === 'headlight' ? 38 : 0 });
+  if (shot === 'headlight' || shot === 'beam') hl.update(1 / 30);
+  post.render(1 / 30, { speed: shot === 'post' ? 22 : shot === 'headlight' ? 24 : 0 });
   for (const l of labels) {
     v.copy(l.pos).project(camera);
     l.el.style.left = ((v.x * 0.5 + 0.5) * innerWidth) + 'px'; l.el.style.top = ((-v.y * 0.5 + 0.5) * innerHeight) + 'px';
   }
   if (frame === 6) window.__ready = true;
-  if (frame >= 8 && window.__ready && q.get('stop') !== '0') { window.__stopped = true; return; }
+  if (frame >= +(q.get('stopAt') || 8) && window.__ready && q.get('stop') !== '0') { window.__stopped = true; return; }
   requestAnimationFrame(tick);
 }
 tick();

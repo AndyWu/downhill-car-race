@@ -1,7 +1,7 @@
 // Single combined post pass (+ tiny bloom chain). Scene -> HDR MSAA target -> bloom (1/2, 1/4, 1/8) -> final:
 // refractive lens splatter, radial speed blur, bloom add, ACES, grading, vignette, grain, sRGB.
 import * as THREE from 'three';
-import { tickTime } from './shared.js';
+import { tickTime, G } from './shared.js';
 
 const MAXD = 32;
 const VS = /* glsl */`varying vec2 vUv; void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4( position.xy, 0.0, 1.0 ); }`;
@@ -57,7 +57,7 @@ void main() {
 		float tl = B.z;
 		float ty = clamp( d.y, 0.0, tl );
 		float td = length( vec2( d.x, d.y - ty ) );
-		float tw = r * 0.3 * ( 1.0 - 0.6 * ty / max( tl, 1e-4 ) );
+		float tw = r * 0.34 * ( 1.0 - 0.6 * ty / max( tl, 1e-4 ) );
 		float trailM = tl > 0.0 ? ( 1.0 - smoothstep( tw * 0.55, tw, td ) ) * A.w : 0.0;
 		if ( B.x < 0.5 ) {
 			float dist = length( d );
@@ -72,13 +72,13 @@ void main() {
 			rim += trailM * 0.12; spec += trailM * 0.05;
 		} else {
 			float ang = atan( d.y, d.x );
-			float wob = 1.0 + 0.22 * sin( ang * 5.0 + B.y * 6.28 ) + 0.12 * sin( ang * 9.0 + B.y * 17.0 ) + 0.07 * sin( ang * 17.0 + B.y * 5.0 );
+			float wob = 1.0 + 0.1 * sin( ang * 3.0 + B.y * 6.28 ) + 0.06 * sin( ang * 5.0 + B.y * 17.0 ) + 0.03 * sin( ang * 9.0 + B.y * 5.0 );
 			float dist = length( d ) / wob;
-			float m = ( 1.0 - smoothstep( r * 0.82, r, dist ) ) * A.w;
+			float m = ( 1.0 - smoothstep( r * 0.93, r, dist ) ) * A.w;
 			float thick = smoothstep( 1.0, 0.35, dist / r );
-			vec3 col = mix( vec3( 0.16, 0.11, 0.07 ), vec3( 0.045, 0.03, 0.02 ), thick );
+			vec3 col = mix( vec3( 0.26, 0.18, 0.11 ), vec3( 0.1, 0.067, 0.042 ), thick );
 			col += vec3( 1.0, 0.95, 0.85 ) * smoothstep( 0.3, 0.0, length( d / r - vec2( -0.3, 0.35 ) ) ) * 0.12 * thick; // wet glint
-			float ma = max( m * mix( 0.6, 0.97, thick ), trailM * 0.85 );
+			float ma = max( m * mix( 0.78, 0.98, thick ), trailM * 0.9 );
 			mudRGB = mix( mudRGB, col, ma ); mudA = mudA + ma * ( 1.0 - mudA );
 		}
 	}
@@ -95,7 +95,7 @@ void main() {
 	c += ( texture2D( tB1, suv ).rgb * 0.5 + texture2D( tB2, suv ).rgb * 0.75 ) * uBloom;
 	// ---- splatter composite (scene-lit) ----
 	float L = dot( c, vec3( 0.3, 0.59, 0.11 ) );
-	c = mix( c, mudRGB * ( 0.35 + 1.6 * clamp( L, 0.0, 1.5 ) ), mudA );
+	c = mix( c, mudRGB * ( 0.45 + 0.9 * clamp( L, 0.0, 1.5 ) ), mudA );
 	c *= 1.0 - clamp( rim, 0.0, 1.0 ) * 0.35;
 	c += vec3( 1.0, 0.98, 0.94 ) * spec * ( 0.15 + 0.6 * L );
 	// ---- tone map + grade (display space) ----
@@ -154,7 +154,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     rtA2 = mk(Math.max(2, W >> 3), Math.max(2, H >> 3)); rtB2 = mk(rtA2.width, rtA2.height);
     finalM.uniforms.uAspect.value = size.x / size.y;
   }
-  gfx.onScale?.(() => allocate());
+  gfx.onScale?.(() => { allocate(); if (refl.rt) allocRefl(); });
   allocate();
 
   function pass(mat, target) { quad.material = mat; renderer.setRenderTarget(target); renderer.render(qScene, qCam); }
@@ -171,7 +171,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     const n = Math.max(1, Math.round(2 + amount * (mud ? 9 : 13)));
     for (let i = 0; i < n; i++) {
       const big = R() < 0.12 + amount * 0.25;
-      const r = mud ? (big ? 0.07 + R() * 0.07 * (0.5 + amount) : 0.014 + R() * 0.035) : (big ? 0.035 + R() * 0.03 : 0.008 + R() * 0.02);
+      const r = mud ? (big ? 0.05 + R() * 0.05 * (0.5 + amount) : 0.014 + R() * 0.035) : (big ? 0.035 + R() * 0.03 : 0.008 + R() * 0.02);
       const life = mud ? 9 + R() * 8 : 6 + R() * 6;
       drops.push({ x: 0.08 + R() * 0.84, y: 0.15 + R() * 0.8, r, age: 0, life, kind: mud ? 1 : 0, seed: R(), trail: 0, delay: 0.4 + R() * 2.5 * (mud ? 2 : 1), vy: (mud ? 0.004 : 0.012) + R() * 0.02 * (r / 0.03) });
     }
@@ -199,6 +199,50 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     finalM.uniforms.uDropN.value = Math.min(drops.length, MAXD);
   }
 
+  // ---------------- optional planar reflection for water (one extra low-res scene pass) ----------------
+  const refl = { on: false, y: 0, scale: 0.4, rt: null, cam: new THREE.PerspectiveCamera(), hide: [], plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0) };
+  const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _u = new THREE.Vector3();
+  function allocRefl() {
+    refl.rt?.dispose();
+    renderer.getDrawingBufferSize(size);
+    refl.rt = new THREE.WebGLRenderTarget(Math.max(16, Math.round(size.x * refl.scale)), Math.max(16, Math.round(size.y * refl.scale)), { type, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true, generateMipmaps: false });
+    G.gfxReflTex.value = refl.rt.texture;
+  }
+  function renderReflection() {
+    camera.updateMatrixWorld();
+    const rc = refl.cam;
+    rc.fov = camera.fov; rc.aspect = camera.aspect; rc.near = camera.near; rc.far = Math.min(camera.far, 600); rc.updateProjectionMatrix();
+    _p.setFromMatrixPosition(camera.matrixWorld);
+    camera.getWorldDirection(_d);
+    _u.setFromMatrixColumn(camera.matrixWorld, 1);
+    rc.position.set(_p.x, 2 * refl.y - _p.y, _p.z);
+    rc.up.set(_u.x, -_u.y, _u.z);
+    rc.lookAt(rc.position.x + _d.x, rc.position.y - _d.y, rc.position.z + _d.z);
+    rc.updateMatrixWorld();
+    G.gfxReflVP.value.multiplyMatrices(rc.projectionMatrix, rc.matrixWorldInverse);
+    refl.plane.constant = -refl.y + 0.02;
+    const prevShadow = renderer.shadowMap.autoUpdate, prevClip = renderer.clippingPlanes;
+    renderer.shadowMap.autoUpdate = !refl.warm; // reuse last frame's shadow maps (allocate on the very first pass)
+    refl.warm = true;
+    renderer.clippingPlanes = [refl.plane];
+    for (const m of refl.hide) m.visible = false;
+    renderer.setRenderTarget(refl.rt);
+    renderer.render(scene, rc);
+    for (const m of refl.hide) m.visible = true;
+    renderer.clippingPlanes = prevClip;
+    renderer.shadowMap.autoUpdate = prevShadow;
+  }
+  /** Mirror the scene about the horizontal plane y at ~0.4x res and feed it to the water materials.
+   *  Costs one extra scene render: enable only while a puddle is on screen; call again each frame to track y. */
+  function setPlanarReflection({ enabled = true, y, scale, materials = [] } = {}) {
+    if (scale && scale !== refl.scale) { refl.scale = scale; if (refl.rt) allocRefl(); }
+    if (y !== undefined) refl.y = y;
+    if (materials.length) refl.hide = materials;
+    refl.on = enabled;
+    if (enabled && !refl.rt) allocRefl();
+    G.gfxReflOn.value = enabled ? 1 : 0;
+  }
+
   let lastAuto = 0, time = 0;
   function render(dt = 1 / 60, state = {}) {
     gfx.tick?.(dt);
@@ -211,6 +255,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     }
     stepDrops(dt);
 
+    if (refl.on) renderReflection();
     renderer.setRenderTarget(rtScene);
     renderer.render(scene, camera);
 
@@ -227,7 +272,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     const U = finalM.uniforms;
     U.tScene.value = rtScene.texture; U.tB1.value = rtB1.texture; U.tB2.value = rtB2.texture;
     U.uTime.value = time; U.uBloom.value = bloomOn ? P.bloom : 0;
-    U.uMotion.value = P.motion * 0.04 * Math.min(1, Math.max(0, (speed - 10) / 30));
+    U.uMotion.value = P.motion * 0.02 * Math.min(1, Math.max(0, (speed - 10) / 30));
     U.uVig.value = P.vignette + Math.min(0.2, speed * 0.004); U.uGrain.value = P.grain; U.uGrade.value = P.grade;
     U.uExposure.value = renderer.toneMappingExposure;
     pass(finalM, null);
@@ -237,10 +282,12 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     renderer.setSize(w, h);
     if (camera.isPerspectiveCamera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
     allocate();
+    if (refl.rt) allocRefl();
   }
 
   return {
-    render, setSize, addSplatter,
+    render, setSize, addSplatter, setPlanarReflection,
+    get reflectionTarget() { return refl.rt; },
     clearSplatter() { drops.length = 0; finalM.uniforms.uDropN.value = 0; },
     /** tweak at runtime: { bloom, bloomThreshold, vignette, grain, grade, motion } */
     setParams(o) { Object.assign(P, o); },

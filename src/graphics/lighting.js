@@ -29,10 +29,10 @@ export const TIME_PRESETS = {
     cover: 0.35, cloudLit: C(0xff8a68), cloudShade: C(0x3a3e66), glow: 0.9, disc: 30, stars: 0.25, night: 0.55,
   },
   night: {
-    elev: 36, azim: 205, sunColor: C(0x9db6ff), sunInt: 0.42,
-    hemiSky: C(0x22345c), hemiGround: C(0x0c0e16), hemiInt: 0.32,
+    elev: 36, azim: 205, sunColor: C(0x9db6ff), sunInt: 1.15,
+    hemiSky: C(0x2c4474), hemiGround: C(0x141824), hemiInt: 0.85,
     zenith: C(0x050a18), horizon: C(0x16233c), ground: C(0x0a0e18), haze: C(0x1a2a46),
-    fog: C(0x0d1624), fogDensity: 0.0062, fogSun: C(0x1a2442), exposure: 1.35, env: 0.18,
+    fog: C(0x0d1624), fogDensity: 0.0062, fogSun: C(0x1a2442), exposure: 1.55, env: 0.4,
     cover: 0.3, cloudLit: C(0x6a7aa8), cloudShade: C(0x0c1224), glow: 0.5, disc: 3.5, stars: 1, night: 1,
   },
 };

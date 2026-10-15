@@ -42,30 +42,34 @@ void main() {
 	float a = D.x * D.x + D.y * D.y - k2 * D.z * D.z;
 	float b = 2.0 * ( O.x * D.x + O.y * D.y - k2 * O.z * D.z );
 	float c = O.x * O.x + O.y * O.y - k2 * O.z * O.z;
-	float t0 = 0.0;
 	float disc = b * b - 4.0 * a * c;
-	if ( disc > 0.0 && abs( a ) > 1e-7 ) {
+	float t0 = 0.0, t1 = -1.0;
+	if ( disc > 0.0 && abs( a ) > 1e-8 ) {
 		float sq = sqrt( disc );
 		float r1 = ( - b - sq ) / ( 2.0 * a ), r2 = ( - b + sq ) / ( 2.0 * a );
-		if ( r1 < tFar - 1e-3 && r1 > t0 ) t0 = r1;
-		if ( r2 < tFar - 1e-3 && r2 > t0 ) t0 = r2;
-	}
-	float t1 = tFar;
+		if ( r1 > r2 ) { float tmp = r1; r1 = r2; r2 = tmp; }
+		if ( a > 0.0 ) { t0 = r1; t1 = r2; }                     // inside between the roots
+		else if ( D.z > 0.0 ) { t0 = r2; t1 = 1e4; }              // heading down the cone: inside after the far root
+		else { t0 = 0.0; t1 = r1; }
+	} else if ( a < 0.0 && disc <= 0.0 ) { t0 = 0.0; t1 = 1e4; }  // ray lies entirely inside the (double) cone
 	if ( abs( D.z ) > 1e-5 ) {
 		float za = - O.z / D.z, zb = ( uLen - O.z ) / D.z;
 		t0 = max( t0, min( za, zb ) ); t1 = min( t1, max( za, zb ) );
-	}
+	} else if ( O.z < 0.0 || O.z > uLen ) t1 = -1.0;
+	t0 = max( t0, 0.0 );
+	t1 = min( t1, tFar + 60.0 );
+	float wgt = ( c < 0.0 && O.z > 0.0 && O.z < uLen ) ? 1.0 : 0.5;
 	float chord = max( 0.0, t1 - t0 );
 	if ( chord <= 0.0 ) discard;
 	vec3 mid = O + D * ( t0 + chord * 0.5 );
 	float zz = clamp( mid.z, 0.0, uLen );
 	float rad = length( mid.xy ) / max( uK * zz, 1e-3 );
-	float core = clamp( 1.0 - rad * rad, 0.0, 1.0 );
+	float core = clamp( 1.0 - rad * rad, 0.0, 1.0 ); core *= core;
 	float along = smoothstep( 0.0, 1.2, zz ) * exp( - zz * 0.09 ) * ( 1.0 - smoothstep( uLen * 0.6, uLen, zz ) );
 	vec3 wm = ( uM * vec4( mid.x, mid.y, - mid.z, 1.0 ) ).xyz;
 	float n = vn3( wm * 0.8 + vec3( uTime * 0.12, - uTime * 0.04, uTime * 0.09 ) ) * 0.6 + vn3( wm * 2.1 - uTime * 0.07 ) * 0.4;
 	float dens = core * along * ( 0.45 + 0.9 * n );
-	float haze = 1.0 - exp( - chord * dens * 0.12 );
+	float haze = 1.0 - exp( - chord * dens * 0.1 );
 	float m = 0.0;
 	for ( int i = 0; i < 3; i ++ ) {
 		float tt = t0 + chord * ( 0.2 + 0.3 * float( i ) );
@@ -74,8 +78,8 @@ void main() {
 		vec3 w = ( uM * vec4( pp.x, pp.y, - pp.z, 1.0 ) ).xyz;
 		m += mote( w ) * ( 1.0 - rq * rq ) * exp( - zq * 0.06 ) * step( rq, 1.0 );
 	}
-	float al = ( haze * 0.55 + m * 1.2 ) * uIntensity * uVis;
-	gl_FragColor = vec4( uColor * al, al );
+	float al = ( haze * 0.8 + m * 2.2 ) * uIntensity * uVis * wgt;
+	gl_FragColor = vec4( uColor, al );
 }`;
 
 /**
@@ -113,7 +117,7 @@ export function attachHeadlight(obj, opts = {}) {
       uLen: { value: beamLength }, uK: { value: R / beamLength }, uCamL: { value: new THREE.Vector3() }, uM: { value: new THREE.Matrix4() },
       uColor: { value: new THREE.Color(1.0, 0.82, 0.55) }, uIntensity: { value: 0 }, uTime: G.gfxTime, uVis: { value: 0.2 },
     },
-    vertexShader: BEAM_VS, fragmentShader: BEAM_FS, transparent: true, depthWrite: false, side: THREE.BackSide,
+    vertexShader: BEAM_VS, fragmentShader: BEAM_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending, fog: false,
   });
   const beam = new THREE.Mesh(geo, beamMat);
