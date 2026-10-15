@@ -49,7 +49,7 @@ Must be deterministic from `seed` (host and clients build identical worlds).
 ```js
 export const TRUCKS = [ /* 10 */ { id, name, description, mass /*kg incl. driver*/, dragCoef, frontalArea, rollingResist, gripMul, steerLock /*rad*/, steerRate, paddleEfficiency, brakeForce, suspension: {stiffness, damping, travel}, wheelRadius, wheelBase, trackWidth } ];
 export function buildTruck(spec, { materials } = {}) → {
-  group: THREE.Group,               // origin = chassis centre at axle height, +Z is FORWARD? NO → forward is -Z (Three.js convention)
+  group: THREE.Group,               // origin = chassis centre at axle height; FORWARD is -Z (Three.js convention)
   parts: {
     steeringWheel: Object3D,        // rotate about its local Z axis
     paddleL: Object3D, paddleR: Object3D,  // rotate about local X (pushed forward)
