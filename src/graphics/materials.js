@@ -67,8 +67,9 @@ export function createMaterials(renderer, opts = {}) {
   T.rubber = RECIPES.rubber(small, aniso);
   M.rubber = pbr(T.rubber, { name: 'rubber' });
 
-  applyStochastic(M.gravel, { mode: 'full', scale: 3.0 });
-  applyStochastic(M.dirtRoad, { mode: 'detail', detailScale: 2.3, detailStrength: 0.55, detailMean: 0.12 });
+  // stochastic (hex) sampling: low = off, medium = gravel only, default/high = gravel + road detail layer
+  if (tier.stochastic >= 1) applyStochastic(M.gravel, { mode: 'full', scale: 3.0 });
+  if (tier.stochastic >= 2) applyStochastic(M.dirtRoad, { mode: 'detail', detailScale: 2.3, detailStrength: 0.55, detailMean: 0.12 });
   // anti-tiling macro variation on ground-type materials (UV-space, no world coords needed)
   applyMacro(M.dirtRoad, { scale: 0.07, strength: 0.5, tint: 0.55 });
   applyMacro(M.grass, { scale: 0.08, strength: 0.5, tint: 0.5 });

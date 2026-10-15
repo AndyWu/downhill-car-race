@@ -19,7 +19,7 @@ Caching rules in `public/sw.js`:
 | Activate | Deletes every `sbd-*` cache that does not belong to the current manifest version, then `clients.claim()`. |
 | Updates | A first install activates at once. Later versions wait until the page calls `applyUpdate(reg)` after the `sbd:sw-update` event, so the game never swaps mid-race. |
 
-`offlineReady` / `onOfflineReady(cb)` / `getOfflineStatus()` / the window event `sbd:offline-ready` report ready only when the controlling SW is `activated` **and** the SW itself counts every manifest file in its versioned cache (`GET_STATUS` message). `tests/net-offline.mjs` checks this.
+`offlineReady` / `onOfflineReady(cb)` / `getOfflineStatus()` / the window event `sbd:offline-ready` resolve only after the worker's `statechange` reaches `activated` **and** the SW itself confirms that every manifest file is in its versioned cache (`GET_STATUS` message). `tests/net-offline.mjs` records each state transition (installing → installed → activating → activated) and asserts that nothing resolved before `activated`.
 
 Verified with Playwright against a production build: the SW takes control, the context goes offline, and both
 the reload and a `?autostart=1&truck=3` navigation still boot from cache.
@@ -81,12 +81,18 @@ Two pre-negotiated DataChannels per peer: `fast` (id 0, `ordered:false, maxRetra
 - **Input** (client → host, 60 Hz): `Float32Array [seq, steer, paddleL, paddleR, handbrake, flags]` with
   `flags` = `1` headlight | `2` reverse. Each packet carries the last 3 frames (76 B), so a dropped packet
   never loses a paddle stroke. The host delivers each seq once, in order.
-- **Snapshot** (host → clients), **wire v2 at 30 Hz**. The host still calls `broadcastSnapshot` every 60 Hz tick; sync sends every second tick and ORs the event bits.
-  - **Header** (25 B): version byte, keyframe flag, tick, delta base age, and a per-snapshot origin plus scale.
-  - **Per car** (22 B): u24×3 position (0.2 mm precision at a 3 km spread), smallest-three 10-bit quaternion (≤ 0.21° error), i16 velocity (2 cm/s), u16 `s` in decimetres, plus an optional events byte and an optional ack byte (the last input seq the host applied, & 255).
-  - **Keyframes** every 10 snapshots. In between, a car that has not moved since the keyframe costs 1 B.
-  - **Measured:** 6 cars ≈ 157–162 B, which is ~4.7 KiB/s per client and ~23 KiB/s for 5 clients (v1 was 202 B at 60 Hz = 12 KiB/s per client).
-- **Prediction**: `createPredictor({ body, slot })` runs the local car on the client with its own inputs. On each snapshot it rewinds to the acked authoritative state, replays the inputs that haven't been acked yet, and fades out the visual correction (half-life 120 ms).
+- **Snapshot** (host → clients), **wire v3 at 30 Hz** (`src/net/snapshot.js`).
+  - **Compact delta records** are track-relative, 11 B: u16 s (≈ 5 cm), i8 lateral (10 cm), u8 height above ground (2 cm), i8 yaw-vs-track / pitch / roll (0.5°), u8 horizontal speed (0.25 m/s), i8 slip angle, i8 vertical speed.
+  - **Self-check:** the host decodes each compact record against its own world, and falls back to a 22 B FULL record if the result is off by more than 15 cm / 1.5° / 0.8 m/s, or the car is off-road, airborne or flipped.
+  - **Keyframes:** every 10th snapshot is all-FULL. A car that hasn't moved since the keyframe costs 1 B.
+  - **Measured:** 11.8 B/car on deltas; 6 cars ≈ 84 B average, which is 2.5 KiB/s per client and 12.3 KiB/s for 5 clients.
+- **Host input jitter buffer**: `sync.takeInput(slot)` applies each client frame on exactly one host tick, so acks match the client's replay history.
+- **Lossy-link test** (`tests/net-loopback.mjs` stage 2b), at 5% and 15% loss with 20–80 ms jitter:
+  - Interpolated cars stay within about 6 cm of ground truth.
+  - The adaptive interpolation delay settles around 115–130 ms.
+  - Prediction's visual pop stays ≤ about 5 cm per frame.
+  - Ack latency is p50 about 150–170 ms. The link alone accounts for about 145 ms of that at p95.
+- **Prediction**: `createPredictor({ body, slot })` runs the local car on the client with its own inputs. On each snapshot it rewinds to the acked authoritative state, replays the inputs that haven't been acked yet, and fades out the visual correction (half-life 120 ms, never faster than 2.5 m/s). Corrections within the quantisation deadband of compact records are ignored.
 - **Clock**: a ping/pong on `fast`. The sample with the lowest RTT out of the last 8 is kept.
   `sync.clock.toLocal(hostMs)` is used for the synchronized countdown (`sync.startCountdown()`).
 - **Interpolation**: `createInterpolator({ delayMs: 100 })`. It renders about 100 ms behind using cubic

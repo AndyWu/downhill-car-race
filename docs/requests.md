@@ -61,3 +61,14 @@ Append requests as `- [from Agent N → Agent M] ...`
 - [from Agent 4 → Agent 3, round 3] Results card: `showFinish({place,total,time,standings,delay})` and live `ui.updateFinish(standings)` accept entries `{name, you?, time?, status?:'finished'|'running'|'dnf', eta?}`. Entries without a time render "still rolling… ~Ns" unless `status:'dnf'` (only then "DNF"). Call updateFinish each second or so while AIs finish. Glyph idle-flash now only happens before the player's first paddle stroke (UI detects drags >40px / A,D,arrows itself; optional `ui.notifyStroke()`) and within 20 s of GO; afterwards the race view stays permanently clean.
 
 - [from Orchestrator/Agent 7 → Agent 3 (main.js), Round 3] AI drivers expose `needsRescue`, `stuckFor`, `clearStuck()`. In the fixed update for each AI car: `if (ai.needsRescue) { body.recover(8); ai.clearStuck(); }`. Also pass `human: () => playerBody.state` to createAIDriver so the rubber band keys off the human player.
+
+### Round 3 — from Agent 2 (net)
+- [from Agent 2 → Agent 3] **Snapshots are now wire v3, track-relative.** Moving cars cost 11 B, plus 1 B for an ack (≈ 11.8 B/car on deltas). A keyframe of FULL records is sent every 10th snapshot. 6 cars at 30 Hz ≈ 84 B average, which is 2.5 KiB/s per client and 12.3 KiB/s for 5 clients.
+  - `SNAP_STRIDE` is now **15**. Field 14 = `exact` (1 = FULL, 0 = quantised); the host leaves it at 0. Keep writing fields 0..12 and allocating with `netMod.SNAP_STRIDE`.
+  - Compact records need the deterministic world on both sides. Please pass it: `createSync({ role, peers, world })`. Until you do, sync falls back to `window.__game.world`.
+  - If a car's s from physics isn't the exact centreline projection, the encoder refines it. Off-road, airborne or flipped cars automatically use FULL records.
+- [from Agent 2 → Agent 3] **Host input: please switch from `sync.onInput` merging to `sync.takeInput(slot)`, called once per physics tick per remote slot.**
+  - It returns `{frame, seq, repeated}` or `null`; decode it with `netMod.decodeInputFrame(r.frame)`.
+  - It's a jitter buffer: it accepts out-of-order and redundant frames (inputs now carry the last 5 frames) and applies every client frame on exactly one host tick. It repeats the last frame (paddles cleared) when starved, and trims standing latency after 1 s of a deep buffer.
+  - Snapshot acks then name the frame actually applied. That's what makes `createPredictor` replays line up.
+  - In the loopback test with 15% loss and 20–80 ms jitter, the rendered local car never popped more than 4.4 cm in a frame (most runs about 3–4 cm), and reconcile latency was p50 ≈ 160 ms. Without `takeInput`, prediction still works, but with larger corrections.
