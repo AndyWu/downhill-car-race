@@ -1,10 +1,10 @@
 // Binary wire formats for the star topology (all little-endian).
 // Every fast-channel packet starts with a 1-byte message type.
 //
-// INPUT (client → host, 60 Hz), type 1:
-//   u8 type, u8 nFrames, u16 pad, then nFrames × INPUT_STRIDE float32 (newest first).
-//   Each frame = [seq, steer, paddleL, paddleR, handbrake, flags]. We resend the last 5 frames
-//   in every packet so a single dropped unreliable packet never loses a paddle stroke.
+// INPUT (client → host), type 1: 60 Hz frames sent in packets at 30 Hz.
+//   u8 type, u8 nFrames, u16 newest seq, then nFrames × u32 packed frames (newest first).
+//   Each packet carries its 2 new frames + the previous packet's 2 (2-frame redundancy):
+//   20 B × 30 Hz = 600 B/s. Decoded frame = [seq, steer, paddleL, paddleR, handbrake, flags].
 //
 // SNAPSHOT (host → clients, 30 Hz), type 2: see snapshot.js (wire version 3, track-relative).
 //
@@ -12,7 +12,8 @@
 
 export const MSG = { INPUT: 1, SNAPSHOT: 2, PING: 3, PONG: 4 };
 export const INPUT_STRIDE = 6;
-export const INPUT_REDUNDANCY = 5;
+export const INPUT_REDUNDANCY = 4; // frames per packet (2 new + 2 repeated)
+export const INPUT_HZ = 30;
 export const FLAG_HEADLIGHT = 1;
 export const FLAG_REVERSE = 2;
 export {
@@ -20,13 +21,32 @@ export {
   createSnapshotEncoder, createSnapshotDecoder, packSnapshot, unpackSnapshot,
 } from './snapshot.js';
 
-/** Input struct → Float32Array frame [seq, steer, paddleL, paddleR, handbrake, flags]. */
+// Quantisation shared by client prediction and the host (both must simulate the SAME input):
+//   steer int8 (/127), paddleL/paddleR/handbrake 4 bit (/15), flags: headlight, reverse,
+//   + 3-bit stroke counters per paddle (bits 2-4 / 5-7 of `flags`) so a stroke lost in a gap
+//   can be re-applied by the host.
+const q4 = (v) => Math.max(0, Math.min(15, Math.round((v || 0) * 15)));
+const q8 = (v) => Math.max(-127, Math.min(127, Math.round((v || 0) * 127)));
+
+/** Input struct → the exact values the host will see (call before running local prediction). */
+export function quantizeInput(input, out = {}) {
+  out.steer = q8(input.steer) / 127;
+  out.paddleL = q4(input.paddleL) / 15;
+  out.paddleR = q4(input.paddleR) / 15;
+  out.handbrake = q4(input.handbrake) / 15;
+  out.headlight = !!input.headlight;
+  out.reverse = !!input.reverse;
+  if (input.draft !== undefined) out.draft = input.draft;
+  return out;
+}
+
+/** Input struct → Float32Array frame [seq, steer, paddleL, paddleR, handbrake, flags] (quantised). */
 export function encodeInputFrame(input, seq, out = new Float32Array(INPUT_STRIDE)) {
   out[0] = seq;
-  out[1] = input.steer || 0;
-  out[2] = input.paddleL || 0;
-  out[3] = input.paddleR || 0;
-  out[4] = input.handbrake || 0;
+  out[1] = q8(input.steer) / 127;
+  out[2] = q4(input.paddleL) / 15;
+  out[3] = q4(input.paddleR) / 15;
+  out[4] = q4(input.handbrake) / 15;
   out[5] = (input.headlight ? FLAG_HEADLIGHT : 0) | (input.reverse ? FLAG_REVERSE : 0);
   return out;
 }
@@ -34,24 +54,39 @@ export function decodeInputFrame(f) {
   const flags = f[5] | 0;
   return { seq: f[0], steer: f[1], paddleL: f[2], paddleR: f[3], handbrake: f[4], headlight: !!(flags & FLAG_HEADLIGHT), reverse: !!(flags & FLAG_REVERSE) };
 }
+export const strokeCount = (f, side) => ((f[5] | 0) >> (side ? 5 : 2)) & 7;
 
-export function packInputPacket(frames /* newest first, Float32Array[] */) {
+/** One frame → u32: steer int8 | pL<<8 | pR<<12 | hb<<16 | flags(8 bit: light, reverse, cntL×3, cntR×3)<<20 */
+function frameToU32(f) {
+  return ((q8(f[1]) & 255) | (q4(f[2]) << 8) | (q4(f[3]) << 12) | (q4(f[4]) << 16) | (((f[5] | 0) & 255) << 20)) >>> 0;
+}
+function u32ToFrame(u, seq) {
+  let st = u & 255; if (st > 127) st -= 256;
+  return Float32Array.of(seq, st / 127, ((u >>> 8) & 15) / 15, ((u >>> 12) & 15) / 15, ((u >>> 16) & 15) / 15, (u >>> 20) & 255);
+}
+
+/**
+ * INPUT packet v2: u8 type, u8 n, u16 newest seq (low 16 bits), then n × u32 frames for
+ * consecutive seqs, newest first → 4 + 4n bytes.
+ */
+export function packInputPacket(frames /* newest first, consecutive seqs */) {
   const n = Math.min(frames.length, 255);
-  const buf = new ArrayBuffer(4 + n * INPUT_STRIDE * 4);
-  const u8 = new Uint8Array(buf);
-  u8[0] = MSG.INPUT; u8[1] = n;
-  const f = new Float32Array(buf, 4);
-  for (let i = 0; i < n; i++) f.set(frames[i].subarray(0, INPUT_STRIDE), i * INPUT_STRIDE);
+  const buf = new ArrayBuffer(4 + n * 4);
+  const dv = new DataView(buf);
+  dv.setUint8(0, MSG.INPUT); dv.setUint8(1, n); dv.setUint16(2, (frames[0]?.[0] ?? 0) & 0xffff, true);
+  for (let i = 0; i < n; i++) dv.setUint32(4 + i * 4, frameToU32(frames[i]), true);
   return buf;
 }
-export function unpackInputPacket(buf) {
-  const n = new Uint8Array(buf, 0, 2)[1];
-  const f = new Float32Array(buf, 4, n * INPUT_STRIDE);
+/** @param refSeq a recent full seq used to unwrap the 16-bit seq (−1 if none) */
+export function unpackInputPacket(buf, refSeq = -1) {
+  const dv = new DataView(buf);
+  const n = dv.getUint8(1), s16 = dv.getUint16(2, true);
+  let seq = s16;
+  if (refSeq >= 0) { let d = (s16 - (refSeq & 0xffff)) & 0xffff; if (d >= 32768) d -= 65536; seq = refSeq + d; }
   const out = [];
-  for (let i = 0; i < n; i++) out.push(f.slice(i * INPUT_STRIDE, (i + 1) * INPUT_STRIDE));
+  for (let i = 0; i < n; i++) out.push(u32ToFrame(dv.getUint32(4 + i * 4, true), seq - i));
   return out;
 }
-
 
 export function packPing(t) { const b = new ArrayBuffer(16); const dv = new DataView(b); dv.setUint8(0, MSG.PING); dv.setFloat64(8, t, true); return b; }
 export function packPong(clientT, hostT) { const b = new ArrayBuffer(24); const dv = new DataView(b); dv.setUint8(0, MSG.PONG); dv.setFloat64(8, clientT, true); dv.setFloat64(16, hostT, true); return b; }

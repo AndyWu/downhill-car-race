@@ -207,7 +207,13 @@ async function boot() {
     placeOnGround(v.body, world, p.x, p.z, smp.tangent, smp.tangent.clone().multiplyScalar(speed));
     v.prevPos.copy(v.body.state.position); v.prevQuat.copy(v.body.state.quaternion);
   }
-  function teleport(s, speed = 0) { if (playerV) teleportVehicle(playerV, s, 0, speed); }
+  function teleport(s, speed = 0) {
+    if (!playerV) return;
+    teleportVehicle(playerV, s, 0, speed);
+    input.setReverse(false);                         // a stale reverse latch would make paddling drive the car backwards
+    safe(() => post && post.clearSplatter && post.clearSplatter(), 'clearSplatter');
+    const st = playerV.body.state; st.mudHit = st.wetHit = 0;
+  }
 
   // ---- start a race ----
   // o: { truck, ai, s, countdown, headlight, role:'solo'|'host'|'client', players, trucks, localSlot, goAtLocal }
@@ -245,6 +251,8 @@ async function boot() {
     Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });
     mp.goAtLocal = o.goAtLocal || 0; mp.results = []; playerFinishT = null; lastFinishedCount = 0; finishRefresh = 0;
     mp.predictor = role === 'client' && netMod && netMod.createPredictor ? safe(() => netMod.createPredictor({ body: playerV.body, slot: o.localSlot }), 'createPredictor') : null;
+    safe(() => post && post.clearSplatter && post.clearSplatter(), 'clearSplatter');
+    input.setReverse(false);
     input.setEnabled(true); input.calibrate();
     if (o.headlight ?? P.headlight) input.setHeadlight(true);
     const sOverride = o.s ?? null;
@@ -661,7 +669,7 @@ async function boot() {
       // consume the wet/mud hits latched by the fixed update
       const mh = ps.mudHit || 0, wh = ps.wetHit || 0;
       if (mh + wh > 0.4 && post && post.addSplatter) safe(() => post.addSplatter(mh >= wh ? 'mud' : 'water', Math.min(1, (mh + wh) / 12 + 0.15)), 'splatter');
-      if (mh + wh > 0.4) { ps.mudHit = 0; ps.wetHit = 0; }
+      ps.mudHit = 0; ps.wetHit = 0; // consume every render: small grazing hits must not pile up and fire later on dry road
     }
     for (const v of game.vehicles) { v.mudCoat = v.body.state.mudCoat || 0; v.group.userData.mudCoat = v.mudCoat; if (v.setMudCoat) v.setMudCoat(v.mudCoat); }
     if (post && post.render) {
@@ -698,7 +706,7 @@ async function boot() {
   function advance(sec) {
     const n = Math.round(sec / STEP);
     for (let i = 0; i < n; i++) fixedUpdate();
-    render(1, STEP);
+    render(1, Math.min(Math.max(STEP, sec), 1)); // one render for the whole step: give camera springs / flags the elapsed time
   }
 
   // ---- ?scene= shortcuts for screenshots ----

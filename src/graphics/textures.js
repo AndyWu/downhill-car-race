@@ -132,94 +132,38 @@ export const RECIPES = {
   // ---------------------------------------------------------------- gravel: grey/brown stones with dark soil in the gaps
   gravel(size, aniso) {
     return bake('gravel', size, (u, v, c) => {
-      const soil = fbm(u, v, 6, 6, 3, 161);
-      worley(u, v, 30, 162, W);
-      const id = W.id, rad = 0.22 + 0.4 * hash2(Math.floor(id * 1e4), 5, 6);
-      const q = W.f1 / rad;
-      let h = 0.15 + soil * 0.1, ao = 0.5 + 0.2 * soil;
-      lerp3(c, 0.27, 0.215, 0.16, 0.36, 0.29, 0.21, soil);
-      let rough = 0.95;
-      const present = hash2(Math.floor(id * 1e4), 21, 22) < 0.5; // half the cells are bare soil
-      if (q < 1 && present) {
-        const dome = Math.sqrt(1 - q * q), pick = hash2(Math.floor(id * 1e4), 9, 10);
+      // dirt-dominant ground (matches dirtRoad) with sparse loose stones scattered as a masked overlay
+      const n1 = fbm(u, v, 4, 4, 5, 171), grain = vnoise(u * size / 3, v * size / 3, size / 3, size / 3, 172);
+      lerp3(c, 0.4, 0.31, 0.205, 0.29, 0.215, 0.14, n1);
+      mul(c, 0.85 + grain * 0.3);
+      let h = 0.4 + n1 * 0.2 + grain * 0.04, ao = 0.8 + 0.2 * n1, rough = 0.94;
+      const layer = (f, seed, cover, rmin, rmax, hgt) => {
+        worley(u, v, f, seed, W);
+        const id = W.id, k = Math.floor(id * 1e4);
+        if (hash2(k, 21, seed) > cover) return;
+        const rad = rmin + (rmax - rmin) * hash2(k, 5, seed);
+        const q = W.f1 / rad;
+        if (q >= 1.12) return;
+        const pick = hash2(k, 9, seed);
         let r, g, b;
-        if (pick < 0.4) { r = 0.4; g = 0.385; b = 0.36; }       // grey
-        else if (pick < 0.7) { r = 0.47; g = 0.4; b = 0.31; }   // tan
-        else if (pick < 0.9) { r = 0.3; g = 0.29; b = 0.28; }   // dark
-        else { r = 0.52; g = 0.5; b = 0.46; }                   // pale quartz (never white)
-        const t = 0.8 + 0.4 * fbm(u, v, 40, 40, 2, 163);
-        const edge = smoothstep(0.0, 0.25, dome);
-        c.r = mix(c.r, r * t, edge); c.g = mix(c.g, g * t, edge); c.b = mix(c.b, b * t, edge);
-        h += dome * 0.45 * (0.5 + 0.5 * pick); ao = mix(ao, 0.72 + 0.28 * dome, edge); rough = mix(0.95, 0.72 + 0.2 * pick, edge);
-      }
-      worley(u, v, 9, 166, W);
-      if (W.id < 0.22) { const bq = W.f1 / 0.34; if (bq < 1) { const dome = Math.sqrt(1 - bq * bq), t = 0.8 + 0.4 * W.id * 4; const e = smoothstep(0, 0.2, dome); c.r = mix(c.r, 0.38 * t, e); c.g = mix(c.g, 0.36 * t, e); c.b = mix(c.b, 0.33 * t, e); h += dome * 0.6; ao = mix(ao, 0.8, e); rough = 0.8; } }
-      worley(u, v, 62, 164, W);
-      if (W.f1 < 0.3 && W.id < 0.6) { const d = 1 - W.f1 / 0.28; c.r = mix(c.r, 0.36, d * 0.5); c.g = mix(c.g, 0.34, d * 0.5); c.b = mix(c.b, 0.31, d * 0.5); h += d * 0.12; }
-      mul(c, 0.9 + 0.2 * vnoise(u * 128, v * 128, 128, 128, 165));
+        if (pick < 0.35) { r = 0.33; g = 0.32; b = 0.3; }
+        else if (pick < 0.65) { r = 0.4; g = 0.33; b = 0.25; }
+        else if (pick < 0.88) { r = 0.22; g = 0.21; b = 0.2; }
+        else { r = 0.44; g = 0.41; b = 0.36; }
+        const t = 0.75 + 0.5 * hash2(k, 11, seed);
+        const dome = q < 1 ? Math.sqrt(1 - q * q) : 0;
+        const e = smoothstep(0.0, 0.2, dome);
+        c.r = mix(c.r, r * t, e); c.g = mix(c.g, g * t, e); c.b = mix(c.b, b * t, e);
+        h += dome * hgt * (0.5 + 0.5 * pick);
+        ao = q < 1 ? mix(ao, 0.75 + 0.25 * dome, e) : ao * (0.82 + 0.18 * (q - 1) / 0.12); // contact shadow ring
+        rough = mix(rough, 0.7 + 0.2 * pick, e);
+      };
+      layer(9, 166, 0.16, 0.18, 0.5, 0.55);   // few big stones
+      layer(21, 162, 0.17, 0.2, 0.55, 0.4);  // medium
+      layer(46, 164, 0.2, 0.25, 0.6, 0.25); // small chips
+      mul(c, 0.92 + 0.16 * vnoise(u * 128, v * 128, 128, 128, 165));
       c.h = clamp(h); c.rough = rough; c.ao = ao;
-    }, { normalStrength: 3, aniso });
-  },
-
-  // ---------------------------------------------------------------- tileable ripple normal for water
-  waterNormal(size, aniso) {
-    return bake('waterNormal', size, (u, v, c) => {
-      const a = fbm(u, v, 5, 5, 5, 41, 0.55);
-      const r = Math.sin((u * 6 + fbm(u, v, 3, 3, 3, 42) * 1.5) * Math.PI * 2) * 0.5 + 0.5;
-      c.h = a * 0.8 + r * 0.04; set(c, 0.1, 0.1, 0.1);
-    }, { normalStrength: 2.2, aniso, needsOrm: false });
-  },
-
-  // ---------------------------------------------------------------- fractured rock
-  rock(size, aniso) {
-    return bake('rock', size, (u, v, c) => {
-      const wu = u + (fbm(u, v, 4, 4, 3, 55) - 0.5) * 0.1, wv = v + (fbm(u, v, 4, 4, 3, 56) - 0.5) * 0.1;
-      worley(wu, wv, 6, 51, W);
-      const crack = 0.4 + 0.6 * smoothstep(0.0, 0.2, W.f2 - W.f1);
-      const strata = Math.sin((v + fbm(u, v, 3, 3, 3, 52) * 0.25) * Math.PI * 2 * 9) * 0.5 + 0.5;
-      const fine = fbm(u, v, 12, 12, 5, 53), grit = vnoise(u * 96, v * 96, 96, 96, 57);
-      const h = crack * 0.35 + fine * 0.45 + W.id * 0.15 + grit * 0.05;
-      const tone = 0.8 + (W.id - 0.5) * 0.25 + (fine - 0.5) * 0.7 + (grit - 0.5) * 0.15;
-      set(c, 0.42 * tone, 0.39 * tone, 0.35 * tone);
-      c.r += strata * 0.04; c.g += strata * 0.025;
-      const lich = smoothstep(0.6, 0.74, fbm(u, v, 7, 7, 3, 54)) * 0.5;
-      c.r = mix(c.r, 0.40, lich); c.g = mix(c.g, 0.45, lich); c.b = mix(c.b, 0.23, lich);
-      mul(c, 0.6 + 0.4 * crack);
-      c.h = h; c.rough = 0.9 - fine * 0.15; c.ao = 0.55 + 0.45 * crack;
-    }, { normalStrength: 4.2, aniso });
-  },
-
-  // ---------------------------------------------------------------- sand with wind ripples
-  sand(size, aniso) {
-    return bake('sand', size, (u, v, c) => {
-      const warp = fbm(u, v, 3, 3, 3, 61);
-      const ph = (v + warp * 0.14 + (fbm(u, v, 8, 2, 2, 63) - 0.5) * 0.02) * Math.PI * 2 * 10;
-      const rip = 1 - Math.abs(Math.sin(ph));
-      const grain = vnoise(u * size / 2, v * size / 2, size / 2, size / 2, 62);
-      const lowf = fbm(u, v, 5, 5, 4, 64);
-      lerp3(c, 0.65, 0.54, 0.38, 0.83, 0.72, 0.52, rip);
-      mul(c, 0.86 + lowf * 0.28);
-      if (grain > 0.93) mul(c, 1.14);
-      c.h = rip * 0.4 + lowf * 0.25 + grain * 0.06; c.rough = 0.95; c.ao = 0.7 + rip * 0.3;
-    }, { normalStrength: 2.4, aniso });
-  },
-
-  // ---------------------------------------------------------------- muted grass ground
-  grass(size, aniso) {
-    return bake('grass', size, (u, v, c) => {
-      const clump = fbm(u, v, 8, 8, 4, 71), dry = fbm(u, v, 3, 3, 3, 73);
-      const A = vnoise(u * 128, v * 32, 128, 32, 72), B = vnoise(u * 32, v * 128, 32, 128, 75), C = vnoise(u * 90, v * 90, 90, 90, 76);
-      const blade = (A + B + C) / 3;
-      lerp3(c, 0.16, 0.25, 0.07, 0.3, 0.34, 0.12, clump);
-      const dr = smoothstep(0.45, 0.7, dry) * 0.6;
-      c.r = mix(c.r, 0.42, dr); c.g = mix(c.g, 0.36, dr); c.b = mix(c.b, 0.17, dr);
-      const soil = smoothstep(0.66, 0.78, fbm(u, v, 5, 5, 3, 74));
-      c.r = mix(c.r, 0.27, soil); c.g = mix(c.g, 0.2, soil); c.b = mix(c.b, 0.13, soil);
-      mul(c, 0.65 + blade * 0.7);
-      const l = c.r * 0.3 + c.g * 0.59 + c.b * 0.11; // desaturate a touch (TLoU palette)
-      c.r = mix(c.r, l, 0.18); c.g = mix(c.g, l, 0.18); c.b = mix(c.b, l, 0.18);
-      c.h = blade * 0.55 + clump * 0.3 + (1 - soil) * 0.1; c.rough = 0.92; c.ao = 0.5 + 0.5 * blade;
-    }, { normalStrength: 2.2, aniso });
+    }, { normalStrength: 3.2, aniso });
   },
 
   // ---------------------------------------------------------------- dusty weathered boards (tile = 1x1 m, 4 boards, grain along U)

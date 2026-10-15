@@ -13,7 +13,7 @@
 // The body must follow the core physics contract:
 //   { state:{position,quaternion,velocity,s}, step(dt,input), serialize(arr,o), deserialize(arr,o) }
 
-import { SNAP_HEADER, SNAP_STRIDE } from './protocol.js';
+import { SNAP_HEADER, SNAP_STRIDE, quantizeInput } from './protocol.js';
 
 const STATE_FLOATS = 20; // src/core/physics.js layout: p(0-2) q(3-6) v(7-9) w(10-12) s(13) …
 
@@ -68,15 +68,20 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
     return -1;
   }
 
-  return {
+  const debugLog = globalThis.__NET_DEBUG ? [] : null; // [seq, x, y, z] predicted at step time
+  const api = {
     stats,
+    debugLog,
     get pending() { return history.length; },
     /** Run one local fixed step with the player's input. `seq` = the seq sent with this input frame. */
     step(dt, input, seq = autoSeq++) {
-      history.push({ seq, dt, input: { ...input } });
+      // simulate exactly what the host will see (inputs are quantised on the wire)
+      const qi = quantizeInput(input, { ...input });
+      history.push({ seq, dt, input: qi });
       if (history.length > maxHistory) history.shift();
-      body.step(dt, input);
+      body.step(dt, { ...qi });
       decay(dt);
+      if (debugLog) { const p = body.state.position; debugLog.push([seq, p.x, p.y, p.z]); if (debugLog.length > 4000) debugLog.shift(); }
     },
     /** Feed every authoritative snapshot (decoded Float32Array from sync.onSnapshot). */
     onSnapshot(data) {
@@ -98,7 +103,7 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
         arr[7] = data[b + 8]; arr[8] = data[b + 9]; arr[9] = data[b + 10];
         arr[13] = data[b + 11];
         body.deserialize(arr, 0);
-        for (const h of history) body.step(h.dt, h.input);
+        for (const h of history) body.step(h.dt, { ...h.input });
         stats.replayed += history.length;
       } else {
         // soft correction (no ack available): pull the simulated body part-way toward the host.
@@ -134,4 +139,6 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
     applyTo(obj) { const r = renderPose(); obj.position.set(r.position[0], r.position[1], r.position[2]); obj.quaternion.set(r.quaternion[0], r.quaternion[1], r.quaternion[2], r.quaternion[3]); return obj; },
     reset() { history.length = 0; errPos.fill(0); errQ[0] = errQ[1] = errQ[2] = 0; errQ[3] = 1; },
   };
+  if (globalThis.__NET_DEBUG) (globalThis.__netDebug ??= {}).pred = api; // test instrumentation
+  return api;
 }

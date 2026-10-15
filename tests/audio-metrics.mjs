@@ -1,8 +1,9 @@
-import { chromium } from '/home/user/downhill-car-race/node_modules/playwright/index.mjs';
+// Usage: npx vite --port 5199 & ; PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node tests/audio-metrics.mjs  (writes WAVs + metrics JSON to /tmp/claude-0/)
+import { chromium } from 'playwright';
 import fs from 'fs';
 const b = await chromium.launch(); const p = await b.newPage();
 const errs=[]; p.on('pageerror',e=>errs.push(String(e))); p.on('console',m=>{ if(['error','warning'].includes(m.type())) errs.push(m.text()); });
-await p.goto('http://localhost:5199/tests/ui-preview.html');
+await p.goto((process.env.PREVIEW_URL || 'http://localhost:5199/tests/ui-preview.html'));
 const res = await p.evaluate(async (cfg)=>{
   const { createAudio } = await import('/src/audio/index.js');
   const out = {};

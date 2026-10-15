@@ -4,7 +4,7 @@ import { Noise, clamp, smoothstep } from './util.js';
 
 export const RAMP = { s0: -12, s1: 24, height: 1.6, halfWidth: 3.3 };
 export const SHOULDER_IN = 1.5;   // road mesh extends this far beyond the nominal half width
-export const SHOULDER_OUT = 6.5;  // fully blended into terrain at hw + this
+export const SHOULDER_OUT = 12;  // fully blended into terrain at hw + this
 
 const CROWN = 0.12;
 
@@ -50,15 +50,18 @@ export function buildTerrain(track, field, pads, seed = 1, gaps = []) {
     for (const g of gaps) if (g.side === sd) { const r = g.r === undefined ? 5 : g.r; a *= smoothstep(r, r + (r > 5 ? 5 : 2.2), Math.abs(s - g.s)); }
     return a;
   }
-  const BERM_H = 0.95;
+  // verge: ~17 deg foot ramp (gravity rolls a car back to the road) ending in a short steep lip (stops fast cars), gentle back slope
   function verge(s, d, hw) {
     const ad = Math.abs(d), a = bermAmp(s, d);
-    const t1 = (ad - (hw + 1.9)) / 0.45;
-    const wall = clamp((ad - (hw + 2.1)) / 1.15, 0, 1);          // ~43 deg inner face
-    const back = 1 - smoothstep(hw + 4.0, hw + 6.4, ad);       // gentle outer fall-off
     const ki = clamp(Math.round(s + 40), 0, track.tables.TN - 1);
-    const H = BERM_H + 0.8 * Math.min(1, Math.abs(track.tables.kap[ki]) / 0.014); // taller on tight bends
-    return a * (-0.22 * Math.exp(-t1 * t1) + H * wall * back);
+    const lip = 0.55 + 0.55 * Math.min(1, Math.abs(track.tables.kap[ki]) / 0.014);
+    const r = ad - (hw + 0.1);
+    const foot = 0.4 * (Math.sqrt(r * r + 0.02) + r) * 0.5;                // rises 0.4 m/m (22 deg) from just outside the road edge
+    const rFoot = 1.4, hFoot = 0.56;
+    let y = Math.min(foot, hFoot);
+    y += lip * smoothstep(rFoot, rFoot + 0.4, r);                        // steep step
+    const fall = 1 - smoothstep(rFoot + 1.4, rFoot + 5.5, r);
+    return a * y * fall;
   }
 
   // ---- terrain grid ----
@@ -120,12 +123,12 @@ export function buildTerrain(track, field, pads, seed = 1, gaps = []) {
   // ---- queries ----
   function heightAt(x, z) {
     const g = gridBil(H, x, z);
-    if (gridBil(D, x, z) > 18) return g;
+    if (gridBil(D, x, z) > 26) return g;
     track.project2(x, z, q);
     track.params(q.idx, pp);
     const hw = pp.hw, ad = Math.abs(q.d);
     if (ad > hw + SHOULDER_OUT) return g;
-    if (ad <= hw + SHOULDER_IN) return roadY(q.s, q.d, pp);
+    if (ad <= hw + SHOULDER_IN) return roadY(q.s, q.d, pp) + verge(q.s, q.d, hw);
     let y0 = roadY(q.s, q.d < 0 ? -(hw + SHOULDER_IN) : hw + SHOULDER_IN, pp);
     y0 += zq.cut; // roadY subtracted the edge cut; re-applied below at the true position
     field.query(q.s, q.d, zq);

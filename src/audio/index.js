@@ -13,7 +13,7 @@ const SURF = {
   dirt:   { f: 900,  q: 0.8, g: 0.10, rate: 3.0, gf: 1400, gq: 1.2, hiss: 0.0 },
   gravel: { f: 2200, q: 0.7, g: 0.14, rate: 6.0, gf: 3200, gq: 0.9, hiss: 0.0 },
   rock:   { f: 500,  q: 1.5, g: 0.09, rate: 1.4, gf: 700,  gq: 2.5, hiss: 0.0 },
-  sand:   { f: 2800, q: 0.5, g: 0.12, rate: 0.6, gf: 3200, gq: 0.5, hiss: 0.7 },
+  sand:   { f: 1100, q: 0.7, g: 0.2, rate: 0.5, gf: 800, gq: 0.6, hiss: 0.6 },
   mud:    { f: 260,  q: 1.8, g: 0.14, rate: 1.2, gf: 320,  gq: 3.0, hiss: 0.0 },
   water:  { f: 1800, q: 0.6, g: 0.16, rate: 4.0, gf: 2600, gq: 0.7, hiss: 0.5 },
   grass:  { f: 1200, q: 0.5, g: 0.06, rate: 1.0, gf: 2000, gq: 0.6, hiss: 0.4 },
@@ -87,7 +87,7 @@ export function createAudio(options = {}) {
     n.rollGain = gain(0);
     n.rollSrc.connect(n.rollBP); n.rollBP.connect(n.rollGain); n.rollGain.connect(bus);
     n.hissSrc = loopSrc(noiseBuf);
-    n.hissHP = filt('highpass', 4000, 0.4);
+    n.hissHP = filt('bandpass', 3000, 0.45);
     n.hissGain = gain(0);
     n.hissSrc.connect(n.hissHP); n.hissHP.connect(n.hissGain); n.hissGain.connect(bus);
 
@@ -100,10 +100,13 @@ export function createAudio(options = {}) {
 
     // ambient: breeze in leaves
     n.breezeSrc = loopSrc(noiseBuf);
-    n.breezeLP = filt('bandpass', 1800, 0.6);
-    n.breezeGain = gain(0.02);
+    n.breezeLP = filt('lowpass', 800, 0.7);
+    n.breezeGain = gain(0.12);
     n.breezeSrc.connect(n.breezeLP); n.breezeLP.connect(n.breezeGain); n.breezeGain.connect(bus);
-    lfo(0.11, 0.015, n.breezeGain.gain); lfo(0.07, 500, n.breezeLP.frequency);
+    lfo(0.11, 0.05, n.breezeGain.gain); lfo(0.07, 200, n.breezeLP.frequency);
+    // distant tractor: low sawtooth drone with a slow chug
+    { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 47; const lp = filt('lowpass', 210, 0.8); n.tractor = gain(0.01); const am = gain(0.5); const ch = gain(0.5);
+      o.connect(lp); lp.connect(am); am.connect(n.tractor); n.tractor.connect(bus); lfo(6.5, 0.4, am.gain, 'triangle'); o.start(); }
 
     // insects at dusk: AM'd high tones (stereo-ish spatial)
     n.insect = [0, 1].map((i) => {
@@ -194,7 +197,7 @@ export function createAudio(options = {}) {
     const base = rnd(2400, 5200), notes = 2 + (Math.random() * 5 | 0), kind = Math.random();
     for (let i = 0; i < notes; i++) {
       const f = base * rnd(0.85, 1.25);
-      tone({ f, f2: f * (kind < 0.5 ? rnd(1.2, 1.7) : rnd(0.55, 0.85)), a: 0.004, d: rnd(0.04, 0.1), vol: 0.05, dest: p, when: i * rnd(0.09, 0.16), fmRatio: rnd(1.5, 3), fmDepth: f * rnd(0.2, 0.6) });
+      tone({ f, f2: f * (kind < 0.5 ? rnd(1.2, 1.7) : rnd(0.55, 0.85)), a: 0.004, d: rnd(0.04, 0.1), vol: 0.14, dest: p, when: i * rnd(0.09, 0.16), fmRatio: rnd(1.5, 3), fmDepth: f * rnd(0.2, 0.6) });
     }
     setTimeout(() => { try { p.disconnect(); } catch (e) {} }, 2500);
   }
@@ -295,11 +298,11 @@ export function createAudio(options = {}) {
       n.rollGain.gain.setTargetAtTime(rollG, t, tc);
       n.rollBP.frequency.setTargetAtTime(S.f * (0.7 + sp * 0.7), t, 0.1);
       n.rollBP.Q.setTargetAtTime(S.q, t, 0.1);
-      n.hissHP.frequency.setTargetAtTime(S.f > 2800 ? 2000 : 2500, t, 0.1);
+      n.hissHP.frequency.setTargetAtTime(surfName === 'sand' ? 1700 : 3000, t, 0.1);
       n.hissGain.gain.setTargetAtTime(S.hiss * 0.1 * sp * ground, t, tc);
       if (ground > 0.1 && speed > 0.8) {
         const rate = S.rate * speed * ground * 0.8, v = 0.55 * Math.min(1, 0.3 + sp);
-        const GR = { dirt: ['dirt', 1, 0], gravel: ['gravel', 1, 0], rock: ['knock', 1.35, 0], sand: ['dirt', 0.8, 1400], grass: ['dirt', 0.8, 1800], mud: ['mud', 0.9, 0], water: ['drip', 1, 0] }[surfName] || ['dirt', 1, 0];
+        const GR = { dirt: ['dirt', 1, 0], gravel: ['gravel', 1, 0], rock: ['knock', 1.35, 0], sand: ['dirt', 0.6, 800], grass: ['dirt', 0.8, 1800], mud: ['mud', 0.9, 0], water: ['drip', 1, 0] }[surfName] || ['dirt', 1, 0];
         poisson('grain', dt, rate, () => play(GR[0], { rate: GR[1] * rnd(0.8, 1.25) * (0.85 + sp * 0.3), vol: v * rnd(0.4, 1) * (GR[0] === 'mud' ? 0.42 : GR[0] === 'knock' ? 0.3 : GR[0] === 'drip' ? 0.7 : 0.7), lp: GR[2] }));
         if (surfName === 'rock' || surfName === 'gravel') poisson('ping', dt, 0.2 * speed * bumps, () => metalClick(0.05));
       }
@@ -331,12 +334,13 @@ export function createAudio(options = {}) {
       n.scrubBP.frequency.setTargetAtTime(220 + speed * 14, t, 0.1);
 
       // ambient bed: ducks as the wind rises
-      const duck = 1 - clamp(sp, 0, 0.8) * 0.8;
+      const duck = 1 - clamp(sp, 0, 1) * 0.5;
       poisson('bird', dt, (0.7 - dusk * 0.55) * duck, () => chirp([rnd(-60, 60), rnd(5, 25), rnd(-80, 20)]));
       poisson('cow', dt, 0.012 * duck, cow);
       const ins = dusk * duck * 0.012;
       n.insect.forEach((g) => g.gain.setTargetAtTime(ins, t, 1));
-      n.breezeGain.gain.setTargetAtTime(0.02 * duck + 0.005, t, 0.5);
+      n.breezeGain.gain.setTargetAtTime(0.12 * duck, t, 0.5);
+      if (n.tractor) n.tractor.gain.setTargetAtTime(0.05 * duck, t, 0.5);
 
       // crowd swell near the finish arch (finishDist in metres) + cowbell when passing an opponent
       if (n.crowd) {

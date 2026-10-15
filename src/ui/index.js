@@ -202,11 +202,28 @@ export function createUI(root, opts = {}) {
   window.addEventListener('keydown', noteInput, { passive: true });
 
   let standingsEl = null;
+  // Running rows are ranked by a smoothed projected finish: remaining distance / smoothed recent speed when the
+  // data has {s, speed} (optional trackLength), else an EMA of the supplied eta. Finished by time, DNF last.
+  let etaMem = new Map();
+  function projEta(e) {
+    const m = etaMem.get(e.name) || {};
+    if (e.s != null && e.speed != null) {
+      m.v = m.v == null ? e.speed : 0.85 * m.v + 0.15 * e.speed;
+      m.eta = Math.max(0, (e.trackLength || 3218) - 3 - e.s) / Math.max(2.5, m.v);
+    } else if (e.eta != null) m.eta = m.eta == null ? e.eta : 0.8 * m.eta + 0.2 * e.eta;
+    etaMem.set(e.name, m); return m.eta;
+  }
   function renderStandings(ul, list) {
-    ul.replaceChildren(...list.map((e, i) => {
-      const running = e.status === 'running' || (e.time == null && e.status !== 'dnf');
-      const txt = e.time != null ? fmtTime(e.time) : running ? (e.eta != null ? `still rolling\u2026 ~${Math.max(1, Math.round(e.eta))}s` : 'still rolling\u2026') : 'DNF';
-      return h('li', { class: (e.you ? 'me ' : '') + (running && e.time == null ? 'rolling' : '') }, h('b', {}, `${i + 1}.`), e.name, h('span', {}, txt));
+    const rows = list.map((e, i) => {
+      const dnf = e.status === 'dnf', fin = e.time != null, run = !fin && !dnf;
+      return { e, i, fin, dnf, run, eta: run ? projEta(e) : null };
+    });
+    const key = (r) => (r.fin ? r.e.time : r.run ? 1e6 + (r.eta ?? 1e5) : 1e9);
+    rows.sort((a, b) => key(a) - key(b) || (b.e.s ?? 0) - (a.e.s ?? 0) || a.i - b.i);
+    ul.replaceChildren(...rows.map((r, i) => {
+      const e = r.e;
+      const txt = r.fin ? fmtTime(e.time) : r.run ? (r.eta != null ? `still rolling\u2026 ~${Math.max(1, Math.round(r.eta))}s` : 'still rolling\u2026') : 'DNF';
+      return h('li', { class: (e.you ? 'me ' : '') + (r.run ? 'rolling' : '') }, h('b', {}, `${i + 1}.`), e.name, h('span', {}, txt));
     }));
   }
   // ---------- api ----------
@@ -297,7 +314,7 @@ export function createUI(root, opts = {}) {
     updateFinish(standings) { if (standingsEl && standings) renderStandings(standingsEl, standings); },
     showFinish(info = {}) {
       const { place = 1, total = 6, time, standings } = info;
-      standingsEl = standings ? h('ul', { class: 'sbd-standings' }) : null; if (standings) renderStandings(standingsEl, standings);
+      etaMem = new Map(); standingsEl = standings ? h('ul', { class: 'sbd-standings' }) : null; if (standings) renderStandings(standingsEl, standings);
       const card = h('div', { class: `sbd-ply sbd-placard p${place}` },
         h('div', { class: 'sbd-ribbon', html: `<svg viewBox="0 0 100 100"><path d="M30 50 L18 98 L38 86 L50 98 L50 60Z" fill="#c63a24"/><path d="M70 50 L82 98 L62 86 L50 98 L50 60Z" fill="#a42c19"/><circle cx="50" cy="38" r="30" fill="#f2c230" stroke="#2a170a" stroke-width="4"/><circle cx="50" cy="38" r="20" fill="none" stroke="#a87e10" stroke-width="3"/></svg>` }),
         h('div', { class: 'sbd-place' }, String(place), h('sup', {}, ordinal(place))),

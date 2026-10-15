@@ -3,7 +3,7 @@
 //   ctrl (reliable, ordered): JSON lobby/control messages (countdown, truck choices, seed)
 
 import {
-  MSG, INPUT_REDUNDANCY, INPUT_STRIDE, packInputPacket, unpackInputPacket,
+  MSG, INPUT_REDUNDANCY, INPUT_STRIDE, INPUT_HZ, packInputPacket, unpackInputPacket, strokeCount,
   createSnapshotEncoder, createSnapshotDecoder, packPing, packPong, msgType, SNAP_HEADER, SNAP_STRIDE,
 } from './protocol.js';
 
@@ -20,12 +20,15 @@ function listPeers(peers) {
 /**
  * @param {{role:'host'|'client', peers: Peer[]|Map|()=>Peer[], worldSnapshotSize?: number}} o
  */
-export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30, tickRate = 60, keyframeEvery = 10, world, inputBacklog = 8 } = {}) {
+export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30, tickRate = 60, keyframeEvery = 10, world, inputBacklog = 8, inputHz = INPUT_HZ } = {}) {
   const isHost = role === 'host';
   const inputCbs = new Set(), snapCbs = new Set(), ctrlCbs = new Set();
   const lastSeq = new Map();      // host: peerId → last delivered input seq
   let lastTick = -1;              // client: newest snapshot tick delivered
   const history = [];             // client: last input frames, newest first
+  const strokes = [0, 0];         // client: paddle stroke counters (mod 8)
+  const inputEvery = Math.max(1, Math.round(tickRate / inputHz));
+  let unsent = 0;
   const attached = new WeakSet();
   const unsubs = [];
   // world (deterministic scene) enables 11-byte track-relative car records; defaults to window.__game.world
@@ -65,8 +68,8 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
     switch (msgType(data)) {
       case MSG.INPUT: {
         if (!isHost) return;
-        const frames = unpackInputPacket(data); // newest first
         const last = lastSeq.has(peer.id) ? lastSeq.get(peer.id) : -1;
+        const frames = unpackInputPacket(data, last); // newest first
         let q = queues.get(peer.id); if (!q) queues.set(peer.id, (q = []));
         const done = consumed.has(peer.id) ? consumed.get(peer.id) : -1;
         for (let i = frames.length - 1; i >= 0; i--) {
@@ -131,7 +134,7 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
     pingTimer = setTimeout(ping, 50);
   }
 
-  return {
+  const api = {
     role,
     worldSnapshotSize,
     clock,
@@ -139,8 +142,17 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
     encoderStats: encoder.stats,
     /** CLIENT: send one input frame Float32Array [seq, steer, paddleL, paddleR, handbrake, flags]. */
     sendInput(frame) {
-      history.unshift(frame.slice(0, INPUT_STRIDE));
+      const f = frame.slice(0, INPUT_STRIDE);
+      const prev = history[0];
+      if (prev && f[0] !== prev[0] + 1) { history.length = 0; unsent = 0; } // seq restarted
+      // 3-bit stroke counters (rising edges) so the host can recover a stroke lost in a gap
+      if (f[2] > 0 && !(prev && prev[2] > 0)) strokes[0] = (strokes[0] + 1) & 7;
+      if (f[3] > 0 && !(prev && prev[3] > 0)) strokes[1] = (strokes[1] + 1) & 7;
+      f[5] = ((f[5] | 0) & 3) | (strokes[0] << 2) | (strokes[1] << 5);
+      history.unshift(f);
       if (history.length > INPUT_REDUNDANCY) history.length = INPUT_REDUNDANCY;
+      if (++unsent < inputEvery) return;
+      unsent = 0;
       const pkt = packInputPacket(history);
       all().forEach((p) => { if (send(p, pkt)) stats.inputsTx++; });
     },
@@ -173,6 +185,14 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
       }
       if (q && q.length) {
         const f = q.shift();
+        const prevF = lastTaken.get(id);
+        if (prevF && f[0] > prevF[0] + 1) { // frames lost for good: re-apply strokes we can prove were missed
+          for (const side of [0, 1]) {
+            const missed = (strokeCount(f, side) - strokeCount(prevF, side) - (f[2 + side] > 0 ? 1 : 0)) & 7;
+            if (missed > 0 && missed < 4) { f[2 + side] = Math.max(f[2 + side], 1); stats.strokesRecovered = (stats.strokesRecovered || 0) + 1; }
+          }
+          stats.inputsLost = (stats.inputsLost || 0) + (f[0] - prevF[0] - 1);
+        }
         consumed.set(id, f[0]); lastTaken.set(id, f);
         return { frame: f, seq: f[0], repeated: false };
       }
@@ -222,6 +242,10 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
       this.sendControl({ t: 'countdown', goAtHostMs: at, seconds, ...extra });
       return at;
     },
+    /** HOST: last input seq applied for a slot via takeInput (−1 if none). */
+    consumedSeq(id) { return consumed.has(id) ? consumed.get(id) : -1; },
     close() { clearTimeout(pingTimer); unsubs.forEach((u) => u()); inputCbs.clear(); snapCbs.clear(); ctrlCbs.clear(); },
   };
+  if (globalThis.__NET_DEBUG) (globalThis.__netDebug ??= {}).sync = api; // test instrumentation
+  return api;
 }

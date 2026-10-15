@@ -57,13 +57,18 @@ await t('answer/active + lz fallback when mid ≠ 0', () => {
 });
 
 console.log('Protocol');
-await t('input frame + redundancy packet', () => {
-  const f = encodeInputFrame({ steer: -0.5, paddleL: 1, paddleR: 0, handbrake: 0.25, headlight: true, reverse: true }, 42);
+await t('4-byte input frames, 30 Hz packets, 16-bit seq unwrap', () => {
+  const f = encodeInputFrame({ steer: -0.5, paddleL: 1, paddleR: 0, handbrake: 0.25, headlight: true, reverse: true }, 70000);
   const d = decodeInputFrame(f);
-  assert.deepEqual(d, { seq: 42, steer: -0.5, paddleL: 1, paddleR: 0, handbrake: 0.25, headlight: true, reverse: true });
-  const pkt = packInputPacket([f, encodeInputFrame({}, 41), encodeInputFrame({}, 40)]);
-  assert.equal(pkt.byteLength, 4 + 3 * 24);
-  assert.deepEqual(unpackInputPacket(pkt).map((x) => x[0]), [42, 41, 40]);
+  assert.ok(Math.abs(d.steer + 0.5) < 1 / 127 && d.paddleL === 1 && d.paddleR === 0 && Math.abs(d.handbrake - 0.25) < 1 / 15 && d.headlight && d.reverse);
+  const frames = [f, encodeInputFrame({ steer: 0.3 }, 69999), encodeInputFrame({}, 69998), encodeInputFrame({ paddleR: 0.6 }, 69997)];
+  frames[0][5] |= (5 << 2) | (3 << 5); // stroke counters ride in the flag byte
+  const pkt = packInputPacket(frames);
+  assert.equal(pkt.byteLength, 4 + 4 * 4);
+  const u = unpackInputPacket(pkt, 69990);
+  assert.deepEqual(u.map((x) => x[0]), [70000, 69999, 69998, 69997]);
+  for (let i = 0; i < 4; i++) for (let k = 1; k < 6; k++) assert.equal(u[i][k], frames[i][k], `frame ${i} field ${k}`);
+  console.log(`        packet = ${pkt.byteLength} B for 4 frames (2 new + 2 redundant) → ${(pkt.byteLength * 30)} B/s at 30 Hz (was 124 B × 60 Hz = 7.4 KB/s)`);
 });
 const mkSnap = (tick, cars) => { const s = new Float32Array(SNAP_HEADER + cars.length * SNAP_STRIDE); s[0] = tick; s[1] = cars.length; cars.forEach((c, i) => s.set(c, SNAP_HEADER + i * SNAP_STRIDE)); return s; };
 const randQuat = () => { const q = [Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]; const l = Math.hypot(...q); return q.map((v) => v / l); };

@@ -85,13 +85,13 @@ void main() {
 			float wob = 1.0 + 0.1 * sin( ang * 3.0 + B.y * 6.28 ) + 0.06 * sin( ang * 5.0 + B.y * 17.0 ) + 0.03 * sin( ang * 9.0 + B.y * 5.0 );
 			float dist = length( dq ) / wob;
 			float m = ( 1.0 - smoothstep( r * 0.86, r, dist ) ) * A.w;
-			float thick = pow( smoothstep( 1.0, 0.25, dist / r ), 1.3 );
+			float thick = pow( smoothstep( 1.0, 0.12, dist / r ), 1.0 );
 			#ifdef REFRACT
 			duv -= duvRaw * 0.3 * m * ( 1.0 - thick );
 			#endif
-			vec3 col = mix( vec3( 0.3, 0.22, 0.14 ), vec3( 0.09, 0.06, 0.04 ), thick );
+			vec3 col = mix( vec3( 0.28, 0.2, 0.12 ), vec3( 0.07, 0.048, 0.03 ), thick );
 			col += vec3( 1.0, 0.95, 0.85 ) * smoothstep( 0.3, 0.0, length( dq / r - vec2( -0.3, 0.35 ) ) ) * 0.12 * thick;
-			float ma = max( m * mix( 0.18, 0.92, thick ), trailM * 0.55 );
+			float ma = max( m * mix( 0.35, 0.97, thick ), trailM * 0.8 );
 			mudRGB = mix( mudRGB, col, ma ); mudA = mudA + ma * ( 1.0 - mudA );
 		}
 	}
@@ -186,11 +186,11 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
   let lastSpeed = 0;
   function addSplatter(type = 'mud', amount = 0.5) {
     const mud = type === 'mud';
-    const n = Math.max(1, Math.min(8, Math.round(1 + amount * (mud ? 6 : 7))));
+    const n = Math.max(mud ? 3 : 1, Math.min(8, Math.round(1 + amount * (mud ? 7 : 7))));
     const sp = Math.min(1, lastSpeed / 14);
     for (let i = 0; i < n; i++) {
-      const big = R() < 0.1 + amount * 0.15;
-      const r = mud ? (big ? 0.045 + R() * 0.035 : 0.016 + R() * 0.025) : (big ? 0.022 + R() * 0.018 : 0.007 + R() * 0.013);
+      const big = R() < 0.18 + amount * 0.2;
+      const r = mud ? (big ? 0.06 + R() * 0.04 : 0.026 + R() * 0.03) : (big ? 0.022 + R() * 0.018 : 0.007 + R() * 0.013);
       const life = mud ? 9 + R() * 7 : 6 + R() * 5;
       // lower ~55% of the frame only, weighted to the bottom (wheel/road spray cannot reach the eye line)
       drops.push({ x: 0.06 + R() * 0.88, y: 0.02 + 0.53 * Math.pow(R(), 1.6), r, age: 0, life, kind: mud ? 1 : 0, seed: R(), trail: 0, elong: 1 + sp * (mud ? 1.2 : 2.0) * (0.4 + R()), delay: 0.3 + R() * (mud ? 3.5 : 1.8), vy: (mud ? 0.005 : 0.025) + R() * (mud ? 0.012 : 0.03) });
@@ -279,7 +279,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     lastSpeed = speed;
     if (splatter) {
       const spl = typeof splatter === 'number' ? { type: 'mud', amount: splatter } : splatter;
-      if (spl.amount > 0 && time - lastAuto > 0.14) { lastAuto = time; addSplatter(spl.type, spl.amount * 0.35); }
+      if (spl.amount > 0 && time - lastAuto > 0.14) { lastAuto = time; addSplatter(spl.type, spl.amount * (spl.type === 'mud' ? 0.7 : 0.35)); }
     }
     stepDrops(dt);
 

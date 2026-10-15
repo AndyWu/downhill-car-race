@@ -32,6 +32,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   let side = rng() < 0.5, nextStroke = 0.2, stamina = 1;
   let attentive = false, nextToggle = 0;
   // stuck recovery
+  let passSide = 0, passUntil = 0, passStart = 0, passCool = 0;
   let stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0, consec = 0, stuckTotal = 0;
 
   function think(dt, self, others = []) {
@@ -54,9 +55,18 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const Ld = Math.max(P.look.min, P.look.time * speed) + 2.5 * outBy; // look further to rejoin the road at a shallow angle
     const sT = clamp(s + Ld, 0, L);
     const eT = plan.offsetAt(sT);
+    const hw = plan.widthAt(s) / 2;
     if (ahead) {
       const dl = ahead.lateral - self.lateral;
-      if (P.draft.range > 0 && aheadDs <= P.draft.range) {
+      const slower = (ahead.speed || 0) < speed - 0.1;
+      if (P.pass && aheadDs < 16 && Math.abs(dl) < 2.4 && slower && t > passCool) {
+        // overtake: pick a side with road to spare and go around instead of sitting behind
+        if (!passSide || t > passUntil) { passSide = ahead.lateral > 0 ? -1 : 1; passStart = t; }
+        let latPass = ahead.lateral + passSide * 1.9;
+        if (Math.abs(latPass) > hw - 1.2) { passSide = -passSide; latPass = ahead.lateral + passSide * 1.9; }
+        if (Math.abs(latPass) > hw - 1.2 || t - passStart > 6) { passSide = 0; passCool = t + 4; } // no room / not working: stay put
+        else { passUntil = t + 1.5; goal = clamp(latPass - eT, -3.5, 3.5); }
+      } else if (P.draft.range > 0 && aheadDs <= P.draft.range) {
         if (P.draft.overtake && aheadDs < 3.5 && speed > (ahead.speed || 0) + 0.2) {
           goal = (ahead.lateral > eT ? -1 : 1) * 1.8; // slingshot past
         } else {
@@ -68,6 +78,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
         goal = (dl >= 0 ? -1 : 1) * 2.0 * P.carAvoid;
       }
     }
+    if (P.pass && passSide && t <= passUntil && alongside && !goal) goal = clamp(alongside.lateral + passSide * 1.9 - eT, -3.5, 3.5); // hold the line until clear
+    if (P.pass && t > passUntil) passSide = 0;
     if (P.aggression > 0.5 && alongside) goal = clamp(alongside.lateral - eT, -2.5, 2.5) * 0.35; // shove
     else if (P.carAvoid > 0 && alongside && !goal) goal = (alongside.lateral > self.lateral ? -1 : 1) * 0.9 * P.carAvoid; // give room
     if (goal !== 0 && plan.costAt(sT, eT + goal) > plan.costAt(sT, eT) + 1) goal = 0; // don't drive into a hazard for it

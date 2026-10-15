@@ -14,7 +14,7 @@ const check = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fail
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const errors = [];
 const open = async (qs, touch = false) => {
-  const ctx = await browser.newContext({ viewport: touch ? { width: 1180, height: 820 } : { width: 640, height: 360 }, hasTouch: touch });
+  const ctx = await browser.newContext({ viewport: touch ? { width: 900, height: 506 } : { width: 640, height: 360 }, hasTouch: touch });
   const p = await ctx.newPage();
   p.on('console', (m) => { if (process.env.VERBOSE && /input/.test(m.text())) console.log(m.text()); if (m.type() === 'error') errors.push(m.text()); });
   p.on('pageerror', (e) => errors.push('pageerror ' + e.message));
@@ -23,18 +23,48 @@ const open = async (qs, touch = false) => {
   return { p, ctx };
 };
 
-// 1. headlight tap with synthetic touch (start+end back-to-back, page possibly stalled by slow frames)
-{
+// 1. headlight tap with synthetic touch (start+end back-to-back, page possibly stalled by slow frames): on -> off -> on, in 3 fresh pages
+for (let run = 1; run <= 3; run++) {
   const { p, ctx } = await open('?autostart=1&ai=0&q=low&debug=input', true);
   const cdp = await ctx.newCDPSession(p);
-  const before = await p.evaluate(() => window.__game.input.read().headlight);
-  for (let n = 0; n < 2; n++) {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 861, y: 680, id: 4 + n }] });
+  const { W, H } = await p.evaluate(() => ({ W: innerWidth, H: innerHeight }));
+  const seq = [];
+  for (let n = 0; n < 3; n++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: Math.round(0.73 * W), y: Math.round(0.83 * H), id: 10 + n }] });
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await p.waitForTimeout(300);
-    const now = await p.evaluate(() => window.__game.input.read().headlight);
-    check(now === (n === 0 ? !before : before), `tap ${n + 1} toggles headlight (${before} -> ${now})`);
+    seq.push(await p.evaluate(() => window.__game.input.read().headlight));
   }
+  check(JSON.stringify(seq) === '[true,false,true]', `run ${run}: three taps give on, off, on (${JSON.stringify(seq)})`);
+  await ctx.close();
+}
+
+// 1a. resets never move the player backwards along the track; a stale reverse latch can't make paddling run backwards
+{
+  const { p, ctx } = await open('?autostart=1&ai=0&q=low&norender=1');
+  const r = await p.evaluate(() => {
+    const g = window.__game, out = {}, pv = g.vehicles[0], st = pv.body.state;
+    g.input.setReverse(true); g.teleport(430, 2);               // teleport clears the reverse latch
+    g.setDebugInput({ steer: 0, paddleL: 1, paddleR: 1 }); g.advance(0.05); const s0 = g.state.s; g.advance(10);
+    out.paddleDs = g.state.s - s0; g.setDebugInput(null);
+    g.teleport(1000, 8); g.advance(0.2); let before = st.s; st.stuck = 4.99; st.handbrake = 0; g.advance(0.1); out.stuckDs = st.s - before;
+    g.teleport(1500, 8); g.advance(0.2); before = st.s; st.upsideDown = 2.5; pv.body.recover(0); out.flipDs = st.s - before;
+    g.teleport(2000, 8); g.advance(0.2); before = st.s; st.wrongWay = 4.5; st.quaternion.multiply(new st.quaternion.constructor().setFromAxisAngle({ x: 0, y: 1, z: 0 }, Math.PI)); st.velocity.set(0, 0, 0); g.advance(1); out.wrongDs = st.s - before;
+    return out;
+  });
+  console.log(JSON.stringify(r));
+  check(r.paddleDs > 50, 'paddle run after a reverse latch + teleport moves forward (' + r.paddleDs.toFixed(1) + ' m)');
+  check(r.stuckDs > -0.5, 'stuck recovery never moves backwards (' + r.stuckDs.toFixed(1) + ' m)');
+  check(r.flipDs > -0.5, 'flip recovery never moves backwards (' + r.flipDs.toFixed(1) + ' m)');
+  check(r.wrongDs > -5, 'wrong-way handling does not throw the car back (' + r.wrongDs.toFixed(1) + ' m)');
+  await ctx.close();
+}
+
+// 1c. chase camera follows the car even through long advance() steps
+{
+  const { p, ctx } = await open('?autostart=1&ai=0&q=low&cam=chase&norender=1');
+  const r = await p.evaluate(() => { const g = window.__game; g.setDebugInput({ steer: 0, paddleL: 1, paddleR: 1 }); g.advance(20); return g.camera.position.distanceTo(g.vehicles[0].group.position); });
+  check(r < 12, 'chase camera is near the car after a 20 s advance (' + r.toFixed(1) + ' m)');
   await ctx.close();
 }
 

@@ -76,7 +76,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
     position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), velocity: new THREE.Vector3(),
     angularVelocity: new THREE.Vector3(), speed: 0, forwardSpeed: 0, s: 0, lateral: 0,
     steerAngle: 0, steerNorm: 0, paddleL: 0, paddleR: 0, handbrake: 0, reverse: false,
-    bump: 0, slip: 0, draft: 0, jt: 0, judder: 0, mudCoat: 0, wetHit: 0, mudHit: 0, airborne: false, upsideDown: 0, surface: 'dirt',
+    bump: 0, slip: 0, draft: 0, jt: 0, judder: 0, maxS: 0, mudCoat: 0, wetHit: 0, mudHit: 0, airborne: false, upsideDown: 0, surface: 'dirt',
     wheelContacts: [0, 1, 2, 3].map(() => ({ contact: false, compression: 0, load: 0, surface: 'dirt', slip: 0, steer: 0 })),
   };
   state.quaternion.identity();
@@ -244,6 +244,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       state.velocity.copy(velocity || _tmp.set(0, 0, 0));
       state.angularVelocity.set(0, 0, 0);
       state.steerAngle = 0; state.paddleL = state.paddleR = 0;
+      state.stuck = state.wrongWay = state._wc = state.upsideDown = 0; state.maxS = 0;
       lastHad.fill(false);
       good.p.copy(state.position); good.q.copy(state.quaternion);
       this.updateTrack();
@@ -251,7 +252,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
     updateTrack() {
       if (world && world.track && world.track.project) {
         const pr = world.track.project(state.position);
-        if (pr) { state.s = fin(pr.s, state.s); state.lateral = fin(pr.lateral, state.lateral); }
+        if (pr) { state.s = fin(pr.s, state.s); state.lateral = fin(pr.lateral, state.lateral); if (state.s > state.maxS && state.s - state.maxS < 30) state.maxS = state.s; }
       }
     },
     step(dt, input = {}) {
@@ -312,7 +313,8 @@ export function createVehicleBody(specIn, world, opts = {}) {
       state.upsideDown = 0;
       if (!tr) { state.quaternion.identity(); state.position.y += 1; return; }
       this.updateTrack();
-      const smp = tr.sampleAt(Math.min(tr.length - 2, Math.max(0, state.s + ahead)));
+      // never move backwards along the track: resets go to the furthest point reached (or the current s if that is further) + ahead
+      const smp = tr.sampleAt(Math.min(tr.length - 2, Math.max(0, Math.max(state.s, state.maxS) + ahead)));
       const x = smp.position.x, z = smp.position.z;
       placeOnGround(this, world, x, z, smp.tangent, new THREE.Vector3(0, 0, 0));
     },

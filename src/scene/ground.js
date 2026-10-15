@@ -263,7 +263,7 @@ function figure(b, rnd, x, y, z, yaw, sc, cheer) {
   const shirt = SHIRT[Math.floor(rnd() * SHIRT.length)], skin = SKIN[Math.floor(rnd() * SKIN.length)], pants = PANTS[Math.floor(rnd() * PANTS.length)];
   b.add('dark', cylG(0.15, 0.15, 0.55, 5, 1), xf(x, y + 0.27 * sc, z, 0, yaw, 0, sc), pants);
   b.add('dark', cylG(0.2, 0.24, 0.62, 6, 1), xf(x, y + 0.85 * sc, z, 0, yaw, 0, sc), shirt);
-  b.add('dark', sphG(0.13, 6, 4, 1), xf(x, y + 1.37 * sc, z, 0, yaw, 0, sc), skin);
+  b.add('dark', sphG(0.13, 5, 3, 1), xf(x, y + 1.37 * sc, z, 0, yaw, 0, sc), skin);
   const hat = rnd();
   if (hat < 0.4) { b.add('dark', cylG(0.2, 0.2, 0.03, 8, 1), xf(x, y + 1.5 * sc, z, 0, yaw, 0, sc), [0.55, 0.45, 0.28]); b.add('dark', cylG(0.11, 0.12, 0.1, 6, 1), xf(x, y + 1.56 * sc, z, 0, yaw, 0, sc), [0.5, 0.4, 0.25]); }
   const ca = Math.cos(yaw), sa = Math.sin(yaw);
@@ -365,26 +365,26 @@ function buildLandmarks({ track, terrain, field, lib, parent, L }) {
         const inner = ((i + (sg > 0 ? 1 : 0)) % 2) ? 1.6 : 2.7;
         const q = P3(s, sg * (track.atS(s, pp).hw + inner));
         const yaw = q.ry + Math.PI / 2 + rnd() * 0.3;
-        b.add('straw', cylG(0.62, 0.62, 1.2, 10), xf(q.x, q.y + 0.6, q.z, Math.PI / 2, yaw, 0), [1, 0.95, 0.85]);
-        b.add('straw', cylG(0.62, 0.62, 1.2, 10), xf(q.x, q.y + 1.5, q.z, Math.PI / 2, yaw + 0.2, 0), [0.95, 0.9, 0.8]);
+        b.add('straw', cylG(0.62, 0.62, 1.2, 8), xf(q.x, q.y + 0.6, q.z, Math.PI / 2, yaw, 0), [1, 0.95, 0.85]);
+        b.add('straw', cylG(0.62, 0.62, 1.2, 8), xf(q.x, q.y + 1.5, q.z, Math.PI / 2, yaw + 0.2, 0), [0.95, 0.9, 0.8]);
         if (rnd() < 0.85) { const w = P3(s + rnd() * 3 - 1.5, sg * (track.atS(s, pp).hw + inner + 1.4 + rnd() * 1.8)); figure(b, rnd, w.x, w.y, w.z, w.ry + sg * Math.PI / 2 + (rnd() - 0.5) * 0.8, 0.75 + rnd() * 0.3, true); }
       }
     }
-    grp.add(b.build(lib, { shadow: false }));
+
     // bunting: poles + pennant strings
-    const bPoles = new Batch(), lines = [];
+    const lines = [];
     for (const sg of [-1, 1]) {
       let prev = null;
       for (let s = -6; s <= 62; s += 17) {
         const hw = track.atS(s, pp).hw, q = P3(s, sg * (hw + 3.3));
-        bPoles.add('woodWeathered', cylG(0.07, 0.1, 6.4, 6, 2), xf(q.x, q.y + 3.1, q.z), [0.7, 0.62, 0.55]);
+        b.add('woodWeathered', cylG(0.07, 0.1, 6.4, 5, 2), xf(q.x, q.y + 3.1, q.z), [0.7, 0.62, 0.55]);
         const top = [q.x, q.y + 6.2, q.z];
         if (prev) lines.push({ a: prev, b: top, sag: 0.7 });
         prev = top;
       }
     }
     for (const s of [-6, 28, 62]) { const hw = track.atS(s, pp).hw, l = P3(s, -(hw + 3.3)), r = P3(s, hw + 3.3); lines.push({ a: [l.x, l.y + 6.2, l.z], b: [r.x, r.y + 6.2, r.z], sag: 1.0 }); }
-    grp.add(bPoles.build(lib, { shadow: false })); grp.add(buntingMesh(lines, lib));
+    grp.add(b.build(lib, { shadow: false })); grp.add(buntingMesh(lines, lib));
     addItem(grp, 40);
   }
 
@@ -465,8 +465,8 @@ function buildLandmarks({ track, terrain, field, lib, parent, L }) {
         const inner = 2.0 + (rnd() < 0.3 ? 0.4 : 0);
         const q = P3(s, sg * (track.atS(s, pp).hw + inner));
         const yaw = q.ry + Math.PI / 2 + (rnd() - 0.5) * 0.2;
-        b.add('straw', cylG(0.62, 0.62, 1.2, 10), xf(q.x, q.y + 0.6, q.z, Math.PI / 2, yaw, 0), [1, 0.95, 0.85]);
-        if (rnd() < 0.6) b.add('straw', cylG(0.62, 0.62, 1.2, 10), xf(q.x, q.y + 1.75, q.z, Math.PI / 2, yaw, 0), [0.95, 0.9, 0.8]);
+        b.add('straw', cylG(0.62, 0.62, 1.2, 8), xf(q.x, q.y + 0.6, q.z, Math.PI / 2, yaw, 0), [1, 0.95, 0.85]);
+        if (rnd() < 0.6) b.add('straw', cylG(0.62, 0.62, 1.2, 8), xf(q.x, q.y + 1.75, q.z, Math.PI / 2, yaw, 0), [0.95, 0.9, 0.8]);
         for (let r = 0; r < 2; r++) {
           const w = P3(s + rnd() * 2.6 - 1.3, sg * (track.atS(s, pp).hw + inner + 1.1 + r * 1.0 + rnd() * 0.6));
           if (rnd() < 0.9) figure(b, rnd, w.x, w.y + (r ? 0.45 : 0.0), w.z, w.ry + sg * Math.PI / 2 + (rnd() - 0.5) * 0.9, 0.7 + rnd() * 0.35, true);

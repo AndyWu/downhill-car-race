@@ -44,10 +44,10 @@ export const Barnaby = make({
   perception: { detect: { rock: 0.5, mud: 1, water: 1, default: 0.5 } },
   hazardWeight: { rock: 20, mud: 10, water: 8, default: 5 }, hazardMargin: 0.8, hazardStretch: 0.9,
   line: { mode: 'center', edge: 0.1, pull: 0.3, maxStep: 3, smooth: 1 },
-  speed: { mu: 0.8, cornerFactor: 1.2, brakeDecel: 9, cap: 15 },
+  speed: { mu: 0.8, cornerFactor: 1.2, brakeDecel: 9, cap: 10.8 },
   paddle: { mode: 'forgetful', cadence: 2.7, strength: 0.9, jitter: 0.3,
     attentive: 0.85, startDist: 120 },
-  brake: { gain: 0.2, dead: 1.0, max: 0.9 },
+  brake: { gain: 0.3, dead: 0.5, max: 0.9 },
 });
 
 export const Clementine = make({
@@ -58,7 +58,7 @@ export const Clementine = make({
   hazardWeight: { rock: 60, mud: 30, water: 25, default: 25 }, hazardMargin: 3.0, hazardStretch: 2.5,
   surfaceWeight: { sand: 4, gravel: 2, grass: 8, mud: 6, water: 5 },
   line: { mode: 'avoid', edge: 0.5, pull: 0.1, maxStep: 1 },
-  speed: { mu: 0.8, cornerFactor: 0.52, brakeDecel: 2.6, cap: 15, useSurface: true },
+  speed: { mu: 0.8, cornerFactor: 0.52, brakeDecel: 2.6, cap: 11.4, useSurface: true },
   paddle: { mode: 'slow', cadence: 2.3, strength: 0.85, jitter: 0.1 },
   brake: { gain: 0.5, dead: 0.2 },
   carAvoid: 1,
@@ -72,10 +72,10 @@ export const Buster = make({
   perception: { detect: { default: 1 }, minRockRadius: 2.3 }, // only avoids huge rocks (by half-width)
   hazardWeight: { rock: 15, mud: 0, water: 0, default: 0 }, hazardMargin: 0.3, hazardStretch: 0.8,
   line: { mode: 'racing', edge: 0.3, pull: 0.02, maxStep: 3, relaxIters: 70 },
-  speed: { mu: 0.85, cornerFactor: 1.05, brakeDecel: 6.5, cap: 24, scale: 1.0 },
+  speed: { mu: 0.85, cornerFactor: 1.05, brakeDecel: 6.5, cap: 11.9, scale: 1.0 },
   paddle: { mode: 'furious', cadence: 3.7, strength: 1.0, jitter: 0.04,
     stamina: { drain: 0.02, regen: 0.1, minFactor: 0.85 } },
-  brake: { gain: 0.5, dead: 1.5 },
+  brake: { gain: 0.5, dead: 0.7 },
   aggression: 0.8,
 });
 
@@ -87,10 +87,10 @@ export const Maeve = make({
   hazardWeight: { rock: 50, mud: 18, water: 15, default: 15 }, hazardMargin: 1.5, hazardStretch: 1.5,
   surfaceWeight: { sand: 2.5, gravel: 1.2, grass: 5, mud: 4, water: 3 },
   line: { mode: 'racing', edge: 1.6, pull: 0.02, maxStep: 1, slot: 0.25, relaxIters: 600, corridorTol: 0.8 },
-  speed: { mu: 0.8, cornerFactor: 1.0, brakeDecel: 3.8, cap: 16, useSurface: true },
-  paddle: { mode: 'rhythm', cadence: 3.0, strength: 1.0, jitter: 0, slopeMax: 0.12, stamina: { drain: 0.01, regen: 0.08, minFactor: 0.8 } },
+  speed: { mu: 0.8, cornerFactor: 1.0, brakeDecel: 3.8, cap: 12.0, useSurface: true },
+  paddle: { mode: 'rhythm', cadence: 2.8, strength: 1.0, jitter: 0, slopeMax: 0.12, stamina: { drain: 0.01, regen: 0.08, minFactor: 0.8 } },
   brake: { gain: 0.45, dead: 0.3 },
-  carAvoid: 0.8,
+  carAvoid: 0.8, pass: true,
 });
 
 export const Ace = make({
@@ -101,11 +101,11 @@ export const Ace = make({
   hazardWeight: { rock: 60, mud: 25, water: 22, default: 20 }, hazardMargin: 1.5, hazardStretch: 1.8,
   surfaceWeight: { sand: 4, gravel: 2.5, grass: 6, mud: 5, water: 4 },
   line: { mode: 'racing', edge: 1.6, pull: 0.02, maxStep: 1, slot: 0.25, relaxIters: 700, corridorTol: 1.0 },
-  speed: { mu: 0.8, cornerFactor: 0.95, brakeDecel: 3.8, cap: 24, useSurface: true, forward: true },
-  paddle: { mode: 'optimal', cadence: 2.5, strength: 1.0, jitter: 0, slopeMax: 0.08, stamina: { drain: 0.005, regen: 0.1, minFactor: 0.9 } },
+  speed: { mu: 0.8, cornerFactor: 0.95, brakeDecel: 3.8, cap: 13.6, useSurface: true, forward: true },
+  paddle: { mode: 'optimal', cadence: 2.8, strength: 1.0, jitter: 0, slopeMax: 0.08, stamina: { drain: 0.005, regen: 0.1, minFactor: 0.9 } },
   brake: { gain: 0.5, dead: 0.2, tap: true },
   draft: { range: 8, strength: 0.9, overtake: true },
-  carAvoid: 0.8,
+  carAvoid: 0.8, pass: true,
 });
 
 export const AI_PROFILES = [Barnaby, Clementine, Buster, Maeve, Ace];

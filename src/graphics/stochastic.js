@@ -10,7 +10,7 @@ void gxHex( vec2 uv, out vec2 o1, out vec2 o2, out vec2 o3, out vec3 w ) {
 	if ( t.z > 0.0 ) { w = vec3( t.z, t.y, t.x ); v1 = base; v2 = base + vec2( 0.0, 1.0 ); v3 = base + vec2( 1.0, 0.0 ); }
 	else { w = vec3( - t.z, 1.0 - t.y, 1.0 - t.x ); v1 = base + vec2( 1.0, 1.0 ); v2 = base + vec2( 1.0, 0.0 ); v3 = base + vec2( 0.0, 1.0 ); }
 	o1 = gxHash( v1 ); o2 = gxHash( v2 ); o3 = gxHash( v3 );
-	w = pow( w, vec3( 3.0 ) ); w /= ( w.x + w.y + w.z );
+	w = pow( w, vec3( 6.0 ) ); w /= ( w.x + w.y + w.z );
 }
 vec2 gxO1, gxO2, gxO3; vec3 gxW; vec2 gxUv, gxDx, gxDy;
 vec4 gxTex( sampler2D t ) {

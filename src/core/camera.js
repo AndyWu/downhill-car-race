@@ -66,7 +66,8 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(group.quaternion); fwd.y = 0; fwd.normalize();
     const want = group.position.clone().addScaledVector(fwd, -5.2); want.y += 2.3;
     if (!chaseInit.v) { chasePos.copy(want); chaseInit.v = true; }
-    chasePos.lerp(want, Math.min(1, dt * 5));
+    // exponential follow; a big jump (teleport / long advance() step / dropped frames) snaps instead of crawling
+    if (chasePos.distanceToSquared(want) > 400) chasePos.copy(want); else chasePos.lerp(want, 1 - Math.exp(-dt * 6));
     camera.position.copy(chasePos);
     camera.lookAt(group.position.x, group.position.y + 0.7, group.position.z);
   }

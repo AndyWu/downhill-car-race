@@ -43,7 +43,7 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
 
   const camPos = new THREE.Vector3();
   // view ranges (metres from camera to chunk edge)
-  const R = { lod0: 130, groundFar: 760, near: 70, mid: 200, treesFar: 360, grass: 38, farm: 330, deco: 600 };
+  const R = { lod0: 130, groundFar: 760, near: 60, mid: 200, treesFar: 360, grass: 32, farm: 330, deco: 600 };
   let time = 0;
   const waterMats = [];
   if (!lib.provided) { const m = lib.get('waterPuddle', { vertexColors: true, transparent: true, polygonOffset: -2, direct: true }); if (m.map) waterMats.push(m.map); }
@@ -52,10 +52,11 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
     const i = terrain.roadInfo(x, z);
     const ad = Math.abs(i.d), hw = i.hw;
     if (i.ramp) return { type: 'dirt', friction: 0.92, drag: 0, bump: 0.04 };
-    if (ad > hw + 1.2) {
-      // verge / bank: soft, sticky ground so a drifting car is slowed hard
-      const k = 1 - Math.min(1, Math.max(0, (ad - (hw + 1.2)) / 8));
-      return { type: 'grass', friction: lerp(SURFACES.grass.friction, 0.32, k), drag: lerp(SURFACES.grass.drag, 1.5, k), bump: lerp(SURFACES.grass.bump, 0.55, k) };
+    if (ad > hw + 0.5) {
+      // verge ramp: moderately soft ground, slope (heightAt) does the pushing back
+      const k = 1 - Math.min(1, Math.max(0, (ad - (hw + 0.5)) / 9));
+      const slick = 1 - Math.min(1, Math.max(0, (ad - (hw + 4.2)) / 2)); // slippery foot ramp: tyres can't hold against the slope, so it slides back to the road
+      return { type: 'grass', friction: lerp(lerp(SURFACES.grass.friction, 0.5, k), 0.06, slick), drag: lerp(SURFACES.grass.drag, 0.45, k), bump: lerp(SURFACES.grass.bump, 0.4, k) };
     }
     const base = SURFACES.dirt;
     let f = base.friction, d = base.drag, b = base.bump, type = 'dirt';

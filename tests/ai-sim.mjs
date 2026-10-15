@@ -188,52 +188,59 @@ async function getRealPhysicsWorld(seed) {
   }
   return worldCache.get(seed);
 }
-async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = 0, trucks = null, rubberBand = 1, trace = false } = {}) {
+// Game-faithful: mirrors src/main.js solo race. World seed 1, player (coasting, zero input) in slot 0 with truck T,
+// AI i in slot i+1 with truck (T+1+i)%10 and rng(1000+i), 3 s countdown with handbrake 1, collideBodies, draftFactor, rescue.
+// "seed k" = player truck T = k-1 (that changes every AI's truck pairing exactly like the game does).
+async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = null, rubberBand = 1, trace = false, snapAt = 90, player = true } = {}) {
   const { createVehicleBody, collideBodies, draftFactor } = await import('../src/core/physics.js');
   const { TRUCKS } = await import('../src/vehicles/index.js');
-  const world = await getRealPhysicsWorld(seed);
-  const order = profiles.map((_, i) => (i + seed) % 6); // rotate grid slots per seed
+  const world = await getRealPhysicsWorld(1);
+  const T = truck ?? ((seed - 1) % TRUCKS.length);
+  const mk = (spec, slot) => { const body = createVehicleBody(spec, world); const st = world.startTransform(slot); body.reset(st.position, st.quaternion); return body; };
+  const pBody = player ? mk(TRUCKS[T % TRUCKS.length], 0) : null;
   const cars = profiles.map((p, i) => {
-    const spec = TRUCKS[(trucks ? trucks[i] : truck) % TRUCKS.length];
-    const body = createVehicleBody(spec, world);
-    const st = world.startTransform(order[i]);
-    body.reset(st.position, st.quaternion);
-    const driver = createAIDriver(p, { world, rng: createRng(1000 + seed * 31 + i), spec, rubberBand });
-    return { body, driver, finished: null, offroad: 0, hits: { mud: 0, water: 0, rock: 0 }, inHaz: new Set(), stall: 0, maxStall: 0, stallS: 0, resets: 0, name: p.name, log: [] };
+    const spec = TRUCKS[(AITRUCK ?? (T + 1 + i)) % TRUCKS.length];
+    const body = mk(spec, i + 1);
+    const driver = createAIDriver(p, { world, rng: createRng(1000 + i + (AITRUCK != null ? 97 * seed : 0)), spec, rubberBand, human: pBody ? () => pBody.state : undefined });
+    return { body, driver, finished: null, offroad: 0, hits: { mud: 0, water: 0, rock: 0 }, inHaz: new Set(), stall: 0, maxStall: 0, stallS: 0, resets: 0, name: p.name, truck: spec.id, snap: null };
   });
-  const bodies = cars.map((c) => c.body);
+  const bodies = (pBody ? [pBody] : []).concat(cars.map((c) => c.body));
   const dt = 1 / 60, CD = 3;
-  let t = 0;
-  const idle = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 1, headlight: false, reverse: false };
+  let t = 0, snapped = false;
+  const idle = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false };
   while (t < maxT + CD && cars.some((c) => c.finished == null)) {
     const racing = t >= CD;
-    const states = cars.map((c) => c.body.state);
     for (const c of cars) {
       let inp;
-      if (!racing) inp = idle;
+      if (!racing) inp = { ...idle, handbrake: 1 };
       else if (c.finished != null) inp = { ...idle, handbrake: 0.7 };
-      else inp = c.driver.think(dt, c.body.state, states.filter((o) => o !== c.body.state));
+      else {
+        const others = bodies.filter((b) => b !== c.body).map((b) => b.state);
+        inp = c.driver.think(dt, c.body.state, others);
+        if (c.driver.needsRescue) { c.body.recover(8); c.driver.clearStuck(); c.resets++; }
+      }
       inp.draft = draftFactor(c.body, bodies);
       c.body.step(dt, inp);
-      if (racing && c.finished == null && c.driver.needsRescue) { c.body.recover(8); c.driver.clearStuck(); c.resets++; }
       if (racing && c.finished == null) {
         const st = c.body.state, w = world.track.sampleAt(Math.max(0, st.s)).width;
-        if (Math.abs(st.lateral) > w / 2) { c.offroad += dt; if (process.env.OFF && c.name === process.env.OFF && !c.wasOff) console.log('OFFROAD', c.name, 's', st.s.toFixed(0), 'lat', st.lateral.toFixed(2), 'hw', (w / 2).toFixed(2), 'v', st.speed.toFixed(1), 'plan e', c.driver.plan.offsetAt(st.s).toFixed(2), 'yaw', st.angularVelocity.y.toFixed(2), 'surf', st.surface); c.wasOff = true; if (process.env.OFF && c.name === process.env.OFF && c.offroad < 0.02) console.log('  near hazards', world.hazards.filter((h) => Math.abs(h.s - st.s) < 25).map((h) => `${h.kind}@${h.s.toFixed(0)}/${h.lateral.toFixed(1)}`).join(' '), '| cars', cars.map((o) => o.name[0] + o.body.state.s.toFixed(0)).join(' ')); } else c.wasOff = false;
+        if (Math.abs(st.lateral) > w / 2) c.offroad += dt;
         for (const h of world.hazards) {
           if (Math.abs(h.s - st.s) > 20 || !(h.type === 'mud' || h.type === 'water' || h.type === 'rock')) continue;
           const ra = (h.halfLength ?? h.radius) + 0.4, rb = (h.halfWidth ?? h.radius) + 0.4;
           const hit = ((h.s - st.s) / ra) ** 2 + ((h.lateral - st.lateral) / rb) ** 2 < 1;
           if (hit && !c.inHaz.has(h)) { c.inHaz.add(h); c.hits[h.type]++; } else if (!hit) c.inHaz.delete(h);
         }
-        if (st.s > 20 && st.speed < 1.5) { c.stall += dt; if (process.env.DBG && c.stall > 3 && Math.abs(c.stall % 4) < dt) console.log('STALL', c.name, 's', st.s.toFixed(0), 'lat', st.lateral.toFixed(2), 'v', st.speed.toFixed(2), 'surf', st.surface, 'up', st.upsideDown, 'air', st.airborne, 'contacts', st.wheelContacts.map((w) => w.contact ? 1 : 0).join(''), 'hb', st.handbrake.toFixed(2), 'steer', st.steerNorm.toFixed(2), 'inp', JSON.stringify({ ...inp, headlight: 0 }), 'pos y', st.position.y.toFixed(2), 'ground', world.heightAt(st.position.x, st.position.z).toFixed(2)); if (c.stall > c.maxStall) { c.maxStall = c.stall; c.stallS = st.s; } } else c.stall = 0;
+        if (st.s > 20 && st.speed < 1.5) { c.stall += dt; if (c.stall > c.maxStall) { c.maxStall = c.stall; c.stallS = st.s; } } else c.stall = 0;
         if (st.s >= world.track.length - 3) c.finished = t - CD;
       }
     }
-    for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) collideBodies(cars[i].body, cars[j].body);
-    if (trace && Math.abs((t % 10) - 0) < dt / 2) console.log(t.toFixed(0), cars.map((c) => `${c.name[0]}:${c.body.state.s.toFixed(0)}@${c.body.state.speed.toFixed(1)}`).join(' '));
+    if (pBody) { pBody.step(dt, racing ? { ...idle } : { ...idle, handbrake: 1 }); }
+    for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) collideBodies(bodies[i], bodies[j]);
+    if (!snapped && racing && t - CD >= snapAt) { snapped = true; for (const c of cars) c.snap = c.body.state.s; }
+    if (trace && Math.abs(((t - CD) % 10)) < dt / 2) console.log((t - CD).toFixed(0), cars.map((c) => `${c.name[0]}:${c.body.state.s.toFixed(0)}@${c.body.state.speed.toFixed(1)}`).join(' '), pBody ? 'P:' + pBody.state.s.toFixed(0) : '');
     t += dt;
   }
-  return cars.map((c) => ({ name: c.name, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets }));
+  return cars.map((c) => ({ name: c.name, truck: c.truck, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, snap: c.snap, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets }));
 }
 
 // ---------------- run ----------------
@@ -246,14 +253,19 @@ const REAL = process.argv.includes('--real');
 const MOCK = process.argv.includes('--mock') || REAL;
 const PHYS = !MOCK; // default: real physics + real world
 const TRACE = process.argv.includes('--trace');
-const TRUCK = Number((process.argv.find((a) => a.startsWith('--truck=')) || '--truck=0').split('=')[1]);
+const TRUCKARG = process.argv.find((a) => a.startsWith('--truck='));
+const AIT = process.argv.find((a) => a.startsWith('--aitruck='));
+const AITRUCK = AIT ? Number(AIT.split('=')[1]) : null; // all AIs on one truck (balanced) instead of main.js's T+1+i pairing
+const TRUCK = TRUCKARG ? Number(TRUCKARG.split('=')[1]) : null;
 const runRace = (sd, o = {}) => (PHYS ? racePhysics(sd, { truck: TRUCK, trace: TRACE, ...o }) : race(sd, { real: REAL, ...o }));
 const seeds = Array.from({ length: Number(process.argv.find((a) => /^\d+$/.test(a)) || 3) }, (_, i) => i + 1);
+const snapRanks = [];
 const agg = AI_PROFILES.map((p) => ({ name: p.name, time: 0, mud: 0, water: 0, rock: 0, off: 0, dnf: 0 }));
 const t0 = Date.now();
 for (const sd of seeds) {
   const res = await runRace(sd);
   console.log(`seed ${sd}: ` + res.map((r) => `${r.name} ${r.time === Infinity ? 'DNF@' + r.s.toFixed(0) : r.time.toFixed(1) + 's'} (m${r.hits.mud} w${r.hits.water} r${r.hits.rock} off${r.offroad.toFixed(1)}s${r.resets ? ' RESCUE' + r.resets : ''}${r.maxStall > 2.5 ? ' STALL' + r.maxStall.toFixed(0) + 's@' + r.stallS.toFixed(0) : ''})`).join(' | '));
+  if (PHYS) { const order = res.map((r, i) => i).sort((a, b) => res[b].snap - res[a].snap); snapRanks.push(order); console.log('   s@90: ' + order.map((i) => res[i].name + ' ' + res[i].snap?.toFixed(0)).join(' > ') + '   trucks: ' + res.map((r) => r.truck).join(',')); }
   res.forEach((r, i) => { const a = agg[i]; if (r.time === Infinity) a.dnf++; a.time += Math.min(r.time, 900); a.mud += r.hits.mud; a.water += r.hits.water; a.rock += r.hits.rock; a.off += r.offroad; });
 }
 const n = seeds.length;
@@ -270,6 +282,12 @@ ok(T[0] === Math.max(...T), 'Barnaby should be slowest');
 ok(T[4] === Math.min(...T), 'Ace should be fastest');
 let inv = 0; for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) if (T[i] < T[j]) inv++;
 ok(inv <= (PHYS ? 0 : 2), `tier ordering has ${inv} inversions`);
+if (PHYS) {
+  for (let i = 0; i < 4; i++) ok(T[i] - T[i + 1] >= 8, `gap ${AI_PROFILES[i].name}-${AI_PROFILES[i + 1].name} ${(T[i] - T[i + 1]).toFixed(1)} s < 8`);
+  const aceTop2 = snapRanks.filter((o) => o.indexOf(4) < 2).length, barBot2 = snapRanks.filter((o) => o.indexOf(0) >= 3).length;
+  ok(aceTop2 >= Math.ceil(snapRanks.length * 5 / 6), `Ace top-2 at 90 s in only ${aceTop2}/${snapRanks.length} seeds`);
+  ok(barBot2 >= Math.ceil(snapRanks.length * 5 / 6), `Barnaby bottom-2 at 90 s in only ${barBot2}/${snapRanks.length} seeds`);
+}
 if (PHYS) ok(T[0] / T[4] <= 1.35, `Barnaby/Ace ratio ${(T[0] / T[4]).toFixed(2)} > 1.35`);
 ok(tot[1] === Math.min(...tot), 'Clementine should have fewest hazard hits');
 const mw = agg.map((a) => (a.mud + a.water) / n);

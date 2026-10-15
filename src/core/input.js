@@ -150,21 +150,28 @@ export function createInput(dom) {
     if (!p) return;
     ptrs.delete(e.pointerId);
     if (p.role === 'handbrake') S.touchHB = 0;
-    else if (p.role === 'headlight') {
-      // a tap is brief and still; frames that stalled the page (slow GPUs, software rendering) don't count against the time limit
-      const held = e.timeStamp - p.t0, allowed = 450 + (S.stallMs - p.stall0);
-      if (DEBUG) console.log('[input] up headlight', 'held', Math.round(held), 'allowed', Math.round(allowed), 'moved', Math.round(p.moved));
-      const sameFrame = S.frames - p.frames0 <= 2; // press and release landed within two frames: a stalled page, not a long press
-      if ((held < allowed || sameFrame || (held < 2000 && S.stallMs > 0)) && p.moved < 24) { S.headlight = !S.headlight; if (DEBUG) console.log('[input] headlight ->', S.headlight); }
+    if (p.role === 'headlight' || p.role === 'swipe') {
+      // Headlight = a tap that is released inside the headlight zone (whatever role the press was given), still, and brief.
+      // The time window is 600 ms plus any frame-stall credit; presses/releases within two frames always count (stalled page).
+      const nx = e.clientX / W(), ny = e.clientY / H();
+      const held = e.timeStamp - p.t0, allowed = 600 + (S.stallMs - p.stall0);
+      const sameFrame = S.frames - p.frames0 <= 2;
+      const inZ = inZone(ZONES.headlight, nx, ny);
+      if (DEBUG) console.log('[input] up', p.role, 'inZone', inZ, 'held', Math.round(held), 'allowed', Math.round(allowed), 'moved', Math.round(p.moved));
+      if (inZ && p.moved < 24 && (held < allowed || sameFrame || (held < 2000 && S.stallMs > 0))) {
+        S.headlight = !S.headlight; if (DEBUG) console.log('[input] headlight ->', S.headlight);
+        p.accum = 0; return;
+      }
     }
-    else if (p.role === 'swipe') { if (Math.abs(p.accum) > H() * 0.035) emitStroke(p, p.accum, 0.6); }
+    if (p.role === 'swipe' && Math.abs(p.accum) > H() * 0.035) emitStroke(p, p.accum, 0.6);
   }
   if (dom) {
     dom.style.touchAction = 'none';
-    win.addEventListener('pointerdown', down, { passive: false });
-    win.addEventListener('pointermove', move, { passive: false });
-    win.addEventListener('pointerup', up);
-    win.addEventListener('pointercancel', up);
+    // capture phase: nothing in the UI layer can swallow a release (a tap needs its pointerup)
+    win.addEventListener('pointerdown', down, { passive: false, capture: true });
+    win.addEventListener('pointermove', move, { passive: false, capture: true });
+    win.addEventListener('pointerup', up, { capture: true });
+    win.addEventListener('pointercancel', up, { capture: true });
   }
 
   // ---------- orientation / fullscreen / permissions ----------

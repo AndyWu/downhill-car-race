@@ -465,7 +465,7 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
   for (let c = 0; c < nG; c++) {
     const s0 = c * GP, s1 = Math.min(L + 40, s0 + GP);
     const rng = mulberry32(seed * 777 + c * 13 + 3), o = {};
-    const ms = [], cols = [], count = 1200;
+    const ms = [], cols = [], count = 800;
     for (let i = 0; i < count; i++) {
       const s = s0 + rng() * (s1 - s0), side = rng() < 0.5 ? -1 : 1;
       track.atS(s, pp);

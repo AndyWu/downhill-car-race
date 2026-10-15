@@ -202,13 +202,15 @@ async function main() {
     await Promise.all([run2(host, 'host'), run2(client, 'client')]);
     await host.waitForTimeout(200);
     const H2 = await host.evaluate(() => ({ st: hs.stats, enc: hs.encoderStats }));
-    const C2 = await client.evaluate(() => ({ ...m2, sentAt: 0, ack: m2.ackLat.slice().sort((a, b) => a - b), pred: pred.stats, delay: ip.delayMs, jit: ip.jitterMs, ext: ip.stats.extrapolated, samples: ip.stats.samples }));
+    const C2 = await client.evaluate(() => ({ ...m2, tx: cs.stats.sentBytes, sentAt: 0, ack: m2.ackLat.slice().sort((a, b) => a - b), pred: pred.stats, delay: ip.delayMs, jit: ip.jitterMs, ext: ip.stats.extrapolated, samples: ip.stats.samples }));
     const p95 = C2.ack[Math.floor(C2.ack.length * 0.95)] ?? Infinity;
     const avgSnap = H2.st.snapshotBytesTotal / H2.st.snapshotsTx;
     console.log(`     host: ${H2.st.snapshotsTx} snapshots avg ${avgSnap.toFixed(1)} B (${(avgSnap * 30 / 1024).toFixed(2)} KiB/s per client, ${(avgSnap * 30 * 5 / 1024).toFixed(2)} KiB/s ×5); records full/compact ${H2.enc.full}/${H2.enc.compact}; inputs repeated ${H2.st.inputsRepeated || 0}, merged ${H2.st.inputsMerged || 0} (latency trims ${H2.st.inputsTrimmed || 0})`);
     console.log(`     client: ${C2.snaps} snapshots received; interp delay adapted to ${C2.delay.toFixed(0)} ms (jitter ${C2.jit.toFixed(0)} ms), extrapolated ${C2.ext}/${C2.samples * 5} samples`);
     console.log(`     interpolation error vs ground truth: max ${(C2.interpMax * 100).toFixed(1)} cm, mean ${(C2.interpSum / C2.interpN * 100).toFixed(1)} cm`);
     console.log(`     prediction: ${C2.pred.reconciles} reconciles, ${C2.pred.corrections} corrections >1 cm, ${C2.pred.skipped} inside deadband, max correction ${(C2.pred.maxError * 100).toFixed(1)} cm, max visual pop ${(C2.pop * 100).toFixed(2)} cm/frame; ack latency p50 ${C2.ack[C2.ack.length >> 1]?.toFixed(0)} ms, p95 ${p95.toFixed(0)} ms`);
+    console.log(`     client upload: ${(C2.tx / 8 / 1024).toFixed(2)} KiB/s (inputs 30 Hz × 20 B + pings)`);
+    check(C2.tx / 8 <= 1536, `client tx ≤ 1.5 KiB/s (${(C2.tx / 8).toFixed(0)} B/s)`);
     check(C2.interpMax < 0.5, `interpolated remote cars stay within 0.5 m of truth (max ${(C2.interpMax * 100).toFixed(1)} cm)`);
     // Floor: 20-80 ms each way (sum p95 ≈ 145 ms) + up to 33 ms snapshot phase + lost acks.
     const p50 = C2.ack[C2.ack.length >> 1];
