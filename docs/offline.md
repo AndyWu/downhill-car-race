@@ -78,9 +78,8 @@ Anything non-standard (a fingerprint that is not sha-256, `mid ≠ 0`, …) fall
 
 Two pre-negotiated DataChannels per peer: `fast` (id 0, `ordered:false, maxRetransmits:0`) and `ctrl` (id 1, reliable).
 
-- **Input** (client → host, 60 Hz): `Float32Array [seq, steer, paddleL, paddleR, handbrake, flags]` with
-  `flags` = `1` headlight | `2` reverse. Each packet carries the last 3 frames (76 B), so a dropped packet
-  never loses a paddle stroke. The host delivers each seq once, in order.
+- **Input** (client → host): 60 Hz frames packed as u32 and sent in packets at 30 Hz. Each packet carries the 2 new frames plus the 2 previous ones, 20 B in all, about 0.6 KiB/s. A frame holds steer int8, paddles and handbrake 4 bit each, the light and reverse flags, and 3-bit stroke counters. The decoded frame is still `Float32Array [seq, steer, paddleL, paddleR, handbrake, flags]` with
+  `flags` = `1` headlight | `2` reverse. If both copies of a frame are lost, the host still re-applies any paddle stroke the counters show was missed.
 - **Snapshot** (host → clients), **wire v3 at 30 Hz** (`src/net/snapshot.js`).
   - **Compact delta records** are track-relative, 11 B: u16 s (≈ 5 cm), i8 lateral (10 cm), u8 height above ground (2 cm), i8 yaw-vs-track / pitch / roll (0.5°), u8 horizontal speed (0.25 m/s), i8 slip angle, i8 vertical speed.
   - **Self-check:** the host decodes each compact record against its own world, and falls back to a 22 B FULL record if the result is off by more than 15 cm / 1.5° / 0.8 m/s, or the car is off-road, airborne or flipped.

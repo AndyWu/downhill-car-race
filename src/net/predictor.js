@@ -55,8 +55,16 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
     qNorm(errQ);
   }
 
-  function renderPose() {
-    const p = curPos(), q = curQuat();
+  let prevP = null, prevQ = null; // pose before the latest fixed step (for render interpolation)
+  /** @param alpha fixed-step interpolation factor (0 = previous step, 1 = latest step) */
+  function renderPose(alpha = 1) {
+    let p = curPos(), q = curQuat();
+    if (alpha < 1 && prevP) {
+      const a = Math.max(0, alpha);
+      p = [prevP[0] + (p[0] - prevP[0]) * a, prevP[1] + (p[1] - prevP[1]) * a, prevP[2] + (p[2] - prevP[2]) * a];
+      const d = prevQ[0] * q[0] + prevQ[1] * q[1] + prevQ[2] * q[2] + prevQ[3] * q[3], sg = d < 0 ? -1 : 1;
+      q = qNorm([0, 1, 2, 3].map((k) => prevQ[k] + (sg * q[k] - prevQ[k]) * a));
+    }
     pose.position[0] = p[0] + errPos[0]; pose.position[1] = p[1] + errPos[1]; pose.position[2] = p[2] + errPos[2];
     qNorm(qMul(errQ, q, pose.quaternion));
     return pose;
@@ -79,6 +87,7 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
       const qi = quantizeInput(input, { ...input });
       history.push({ seq, dt, input: qi });
       if (history.length > maxHistory) history.shift();
+      prevP = curPos(); prevQ = curQuat();
       body.step(dt, { ...qi });
       decay(dt);
       if (debugLog) { const p = body.state.position; debugLog.push([seq, p.x, p.y, p.z]); if (debugLog.length > 4000) debugLog.shift(); }
@@ -90,6 +99,7 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
       const ack = data[b + 13];
       const before = renderPose();
       const bp = before.position.slice(), bq = before.quaternion.slice();
+      const rawBefore = curPos();
       if (ack >= 0) {
         // newest history entry with matching low byte
         let idx = -1;
@@ -114,6 +124,7 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
       stats.reconciles++;
       // convert the jump into a decaying visual offset
       let p = curPos(), q = curQuat();
+      if (prevP) for (let k = 0; k < 3; k++) prevP[k] += p[k] - rawBefore[k]; // keep the step-interp segment on the new timeline
       let e = [bp[0] - p[0], bp[1] - p[1], bp[2] - p[2]];
       const err = Math.hypot(e[0], e[1], e[2]);
       // Compact (quantised, ~5 cm) records: ignore differences inside the quantisation deadband.
@@ -136,7 +147,7 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
     /** Smoothed pose to render the local car with ({position:[x,y,z], quaternion:[x,y,z,w]}). */
     renderPose,
     /** Convenience: write the smoothed pose into a THREE.Object3D. */
-    applyTo(obj) { const r = renderPose(); obj.position.set(r.position[0], r.position[1], r.position[2]); obj.quaternion.set(r.quaternion[0], r.quaternion[1], r.quaternion[2], r.quaternion[3]); return obj; },
+    applyTo(obj, alpha = 1) { const r = renderPose(alpha); obj.position.set(r.position[0], r.position[1], r.position[2]); obj.quaternion.set(r.quaternion[0], r.quaternion[1], r.quaternion[2], r.quaternion[3]); return obj; },
     reset() { history.length = 0; errPos.fill(0); errQ[0] = errQ[1] = errQ[2] = 0; errQ[3] = 1; },
   };
   if (globalThis.__NET_DEBUG) (globalThis.__netDebug ??= {}).pred = api; // test instrumentation

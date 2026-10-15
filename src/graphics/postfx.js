@@ -84,14 +84,14 @@ void main() {
 			float ang = atan( dq.y, dq.x );
 			float wob = 1.0 + 0.1 * sin( ang * 3.0 + B.y * 6.28 ) + 0.06 * sin( ang * 5.0 + B.y * 17.0 ) + 0.03 * sin( ang * 9.0 + B.y * 5.0 );
 			float dist = length( dq ) / wob;
-			float m = ( 1.0 - smoothstep( r * 0.86, r, dist ) ) * A.w;
-			float thick = pow( smoothstep( 1.0, 0.12, dist / r ), 1.0 );
+			float m = ( 1.0 - smoothstep( r * 0.94, r, dist ) ) * A.w;
+			float thick = smoothstep( 1.0, 0.4, dist / r );
 			#ifdef REFRACT
-			duv -= duvRaw * 0.3 * m * ( 1.0 - thick );
+			duv -= duvRaw * 0.15 * m * ( 1.0 - thick );
 			#endif
 			vec3 col = mix( vec3( 0.28, 0.2, 0.12 ), vec3( 0.07, 0.048, 0.03 ), thick );
-			col += vec3( 1.0, 0.95, 0.85 ) * smoothstep( 0.3, 0.0, length( dq / r - vec2( -0.3, 0.35 ) ) ) * 0.12 * thick;
-			float ma = max( m * mix( 0.35, 0.97, thick ), trailM * 0.8 );
+			col += vec3( 1.0, 0.95, 0.85 ) * smoothstep( 0.3, 0.0, length( dq / r - vec2( -0.3, 0.35 ) ) ) * 0.3 * thick;
+			float ma = max( m * mix( 0.5, 0.98, thick ), trailM * 0.85 );
 			mudRGB = mix( mudRGB, col, ma ); mudA = mudA + ma * ( 1.0 - mudA );
 		}
 	}

@@ -73,8 +73,6 @@ try {
     return miss;
   }, manifest);
   check(missing.length === 0, `every manifest entry is in sbd-precache-${manifest.version} (${manifest.files.length - missing.length}/${manifest.files.length})${missing.length ? ' missing: ' + missing.slice(0, 5).join(', ') : ''}`);
-  const totalKiB = manifest.files.reduce((a, f) => a, 0);
-  void totalKiB;
 
   await ctx.setOffline(true);
   failed.length = 0;
