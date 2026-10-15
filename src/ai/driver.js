@@ -140,7 +140,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
         const need = clamp((vt - speed) / 3, 0, 1);
         const flat = 1 - clamp(-slope / PD.slopeMax, 0, 1); // 1 = flat (best leverage), 0 = steep
         const turning = Math.abs(steerOut) > 0.7 ? 0.5 : 1;
-        want = need < 0.08 ? 0 : (0.6 + 0.4 * flat) * turning;
+        want = need < 0.08 ? 0 : (0.85 + 0.15 * flat) * turning;
         break;
       }
     }
