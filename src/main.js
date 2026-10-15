@@ -226,7 +226,7 @@ async function boot() {
     const vs = game.vehicles;
     if (role === 'solo') {
       playerV = makeVehicle(truckIdx, 0, 'local', 0, 'You'); vs.push(playerV);
-      for (let i = 0; i < cfg.ai; i++) vs.push(makeVehicle(truckIdx + 1 + i, i + 1, 'ai', i, aiNames[i % aiNames.length]));
+      for (let i = 0; i < cfg.ai; i++) vs.push(makeVehicle(aiTruckIndex(i, truckIdx + 1 + i), i + 1, 'ai', i, aiNames[i % aiNames.length]));
     } else {
       // multiplayer: one car per slot 0..5; humans from players[], rest AI (host simulates them)
       const humans = new Map(o.players.map((p) => [p.slot, p]));
@@ -702,6 +702,7 @@ async function boot() {
     if (!P.norender) render(acc / STEP, dt);
     if (ui && ui.screen === 'garage') previewTick(dt);
     if (++readyFrames === 3) resolveReady();
+    input.noteFrameEnd(performance.now() - now);
   }
   function advance(sec) {
     const n = Math.round(sec / STEP);

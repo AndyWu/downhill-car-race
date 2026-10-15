@@ -283,11 +283,11 @@ export function createVehicleBody(specIn, world, opts = {}) {
       // upside-down detection / auto-recover
       _up.set(0, 1, 0).applyQuaternion(state.quaternion);
       state.upsideDown = _up.y < 0.25 && state.speed < 3 ? state.upsideDown + dt : 0;
-      if (state.upsideDown > 2.0) this.recover();
+      if (state.upsideDown > 2.0 && !this.noRecover) this.recover();
       // stuck (wedged on a rock / facing uphill with no momentum) for 5 s: lift back onto the road, a few metres on
       state.stuck = state.speed < 0.4 && state.handbrake < 0.2 && state.s > 3 ? (state.stuck || 0) + dt : 0;
       // spun round and rolling backwards down the hill: put the car back on the road after 4 s
-      if (world && world.track && world.track.sampleAt && state.s > 3 && state.speed > 0.5 && !state.reverse) {
+      if (!this.noRecover && world && world.track && world.track.sampleAt && state.s > 3 && state.speed > 0.5 && !state.reverse) {
         state._wc = (state._wc || 0) + 1;
         if (state._wc >= 10) {
           state._wc = 0;
@@ -297,16 +297,16 @@ export function createVehicleBody(specIn, world, opts = {}) {
           if (state.wrongWay > 4) { state.wrongWay = 0; this.recover(2); }
         }
       }
-      if (state.stuck > 5) { state.stuck = 0; this.recover(3); }
+      if (state.stuck > 5 && !this.noRecover) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);
       if (wc0) state.surface = wc0.surface;
       // wet/mud latches (consumed by the renderer, so dropped frames / advance() never lose a splash) + truck mud coat
       if (state.speed > 3) {
-        if (state.surface === 'mud') { state.mudHit += dt * state.speed; state.mudCoat = Math.min(1, state.mudCoat + dt * 0.06 * state.speed / 10); }
+        if (state.surface === 'mud') { state.mudHit += dt * state.speed; state.mudCoat = Math.min(1, state.mudCoat + dt * 0.6); }
         else if (state.surface === 'water') { state.wetHit += dt * state.speed; state.mudCoat = Math.max(0, state.mudCoat - dt * 0.25); }
       }
-      state.mudCoat = Math.max(0, state.mudCoat - dt * 0.004);
+      state.mudCoat = Math.max(0, state.mudCoat - dt * 0.02);
     },
     recover(ahead = 0) {
       const tr = world && world.track;

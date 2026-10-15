@@ -228,7 +228,9 @@ export function createInput(dom) {
   }
 
   return {
-    noteFrame(dt) { S.frames++; if (dt > 0.1) S.stallMs += dt * 1000 - 50; }, read, requestPermissions, calibrate, isLandscape, isTouch,
+    noteFrame() { S.frames++; },
+    // called at the END of every frame with its duration: a frame that hogged the thread delayed any pointer events queued behind it
+    noteFrameEnd(ms) { if (ms > 100) S.stallMs += ms - 50; }, read, requestPermissions, calibrate, isLandscape, isTouch,
     setEnabled(v) { S.enabled = !!v; if (!v) { ptrs.clear(); S.touchHB = 0; } },
     setDebugInput(i) { S.debug = i ? { ...i } : null; S.dbgL = S.dbgR = 0; },
     setHeadlight(v) { S.headlight = !!v; }, setReverse(v) { S.reverse = !!v; },
