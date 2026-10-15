@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>UI preview</title>
+<style>html,body{margin:0;height:100%;background:#1a3a1a;overflow:hidden}
+#bg{position:fixed;inset:0;background:linear-gradient(#8ec5e8,#c9e3b0 55%,#7a8f4b)}</style></head>
+<body><div id="bg"></div><div id="app"></div>
+<script type="module">
+import { createUI } from '../src/ui/index.js';
+const names=['Rusty Gull','Barn Door Bessie','Pickle','The Widowmaker','Little Dipper','Tin Lizzie','Mudskipper','Old Thunder','Biscuit','Gravel Gertie'];
+const trucks = names.map((name,i)=>({ id:'t'+i, name, description:'Built from a barn door and a lawnmower axle. Wobbles at speed but never gives up. '+(i%2?'Loves a muddy corner.':'Hates the sand.'),
+  mass:80+i*6, dragCoef:0.6+0.05*((i*7)%5), frontalArea:0.5+0.04*i, rollingResist:0.02, gripMul:0.8+0.04*((i*3)%7), steerLock:0.4+0.02*i, steerRate:2+0.2*((i*5)%4),
+  paddleEfficiency:0.7+0.03*((i*4)%6), brakeForce:200+30*((i*3)%5), suspension:{stiffness:5000,damping:400,travel:0.1+0.02*((i*7)%6)} }));
+const log=(n)=>(...a)=>console.log('cb',n,a.length);
+window.ui = createUI(document.getElementById('app'), { trucks,
+  onStartSolo:log('solo'), onHost:log('host'), onJoin:log('join'), onSelectTruck:log('sel'), onGyro:async()=>true });
+// demo QR-like canvas
+window.fakeQR = () => { const c=document.createElement('canvas'); c.width=c.height=33; const g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,33,33); g.fillStyle='#000';
+  let s=7; for(let y=0;y<33;y++)for(let x=0;x<33;x++){ s=(s*1103515245+12345)&0x7fffffff; if(s&0x10000) g.fillRect(x,y,1,1);} 
+  for(const [x,y] of [[1,1],[24,1],[1,24]]){ g.fillStyle='#000'; g.fillRect(x,y,7,7); g.fillStyle='#fff'; g.fillRect(x+1,y+1,5,5); g.fillStyle='#000'; g.fillRect(x+2,y+2,3,3);} return c; };
+</script></body></html>

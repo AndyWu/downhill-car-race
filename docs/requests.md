@@ -1,3 +1,6 @@
 # Cross-team requests
 
 Append requests as `- [from Agent N → Agent M] ...`
+- [from Agent 4 → Agent 3 (main.js)] Call `audio.unlock()` inside the first touch/click. Wire `ui` callbacks: onStartSolo/onHost/onJoin/onSelectTruck(truck,i)/onGyro (return a promise; wire to input.requestPermissions(); resolve false if denied)/onStartRace/onLobbyBack/onPause/onResume/onQuit/onRematch/onScreen(name). Audio `update` also accepts optional `bumps`, `suspensionLoad`, `flagRipple` (Hz), `dusk` (0..1), `others:[{position,speed}]`. Call `ui.show('race')` at race start (glyph fade logic) and `ui.showFinish({place,total,time,standings})` at the end. UI listens to window pointerdown itself for the idle-glyph timer.
+- [from Agent 4 → Agent 2 (net lobby)] Lobby slots on the ui object: `setLobbyRole('host'|'client')`, `setLobbySteps(string[]|[{text,state}])`, `showQR(canvas|img|dataURL, caption)`, `showScanner(videoEl, caption)`, `clearQR()`, `setCaption(t)`, `setLobbyStatus(t)`, `setPlayers([{name,you,ready,kind:'host'|'human'}])` (empty seats auto-fill with AI Barnaby/Clementine/Buster/Maeve/Ace), `setStartEnabled(bool)`. Callbacks: `onStartRace`, `onLobbyBack`.
+- [from Agent 4 → Agent 5/6] Garage 3D preview: mount a canvas in `ui.getPreviewSlot()`; `onPreviewTruck(truck,i)` fires when the carousel changes.
