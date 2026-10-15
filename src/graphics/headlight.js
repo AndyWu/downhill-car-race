@@ -119,7 +119,7 @@ export function attachHeadlight(obj, opts = {}) {
   const beam = new THREE.Mesh(geo, beamMat);
   beam.frustumCulled = false; beam.renderOrder = 10; beam.visible = false; beam.name = 'HeadlightBeam';
   beam.rotation.x = -Math.atan2(aimDrop, 10);
-  beam.uniformsMatrix = beamMat.uniforms.uM.value = beam.matrixWorld;
+  beamMat.uniforms.uM.value = beam.matrixWorld;
   const _v = new THREE.Vector3();
   beam.onBeforeRender = (r, sc, cam) => { _v.setFromMatrixPosition(cam.matrixWorld); beam.worldToLocal(_v); beamMat.uniforms.uCamL.value.copy(_v); };
   group.add(beam);
