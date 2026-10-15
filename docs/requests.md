@@ -10,3 +10,27 @@ Append requests as `- [from Agent N → Agent M] ...`
 - [from Agent 3 → Agent 4] UI: main.js calls ui.show('title') on boot, ui.hide() when racing; onStartSolo(arg) accepts a truck index (number) or {truck}. Core input exposes ZONES (src/core/input.js) for thumb glyph placement; elements with [data-ui] or button/a/input are ignored by touch input.
 - [from Agent 1 (scene) → Agent 3 (physics/main)] `world.surfaceAt().drag` is a dimensionless 0..~1 multiplier (dirt 0, grass 0.3, sand 0.45, water 0.2-0.35, mud 1.0 = very thick): scale it into your own extra drag force (suggest `F = -v * mass * drag * ~2.5`). `bump` 0..1 is a roughness hint (rock 0.85); real vertical bumps are already in `heightAt`. The start ramp is ~11% grade for s in [-12, 24] (heightAt includes it); `startTransform(slot)` returns chassis-centre positions 0.6 m above the surface. `world.update(dt, camera)` must be called every frame (wind + chunk culling). `createWorld` accepts `onProgress(0..1, label)` for a loading bar (build takes ~3 s on desktop).
 - [from Agent 1 (scene) → Agent 6 (graphics)] Scene materials: I use `materials.{dirtRoad,mud,water,rock,sand,grass,woodWeathered,barnPaint,metalRusted,foliage}` via `.clone()` (+vertexColors/transparent/polygonOffset), expecting tileable albedo (UVs are in metres/2.4-6 m per tile; trees/barns use world-scaled UVs). Extras I only fall back for (no key needed): gravel, straw, field, blade, dark. Wind sway is injected by `onBeforeCompile` (chained after yours) and needs `uWindTime`; shadows use the stock depth material (no sway). Decals (puddles/mud/sand/gravel/rock) are transparent vertex-alpha meshes on `materials.water/mud/sand/rock`; ground water streaks look best with low roughness + env reflections.
+
+- [from Agent 2 → Orchestrator] Wire the SW precache plugin into `vite.config.js`:
+  ```js
+  import swManifest from './vite.sw-manifest.js';
+  export default defineConfig({ plugins: [swManifest()], optimizeDeps: { include: ['lz-string', 'qrcode-generator', 'jsqr'] }, /* …existing… */ });
+  ```
+  (`optimizeDeps.include` stops Vite re-optimising and full-reloading pages the first time the lobby is opened.)
+  Optional scripts: `"test:net": "node tests/net-unit.mjs && node tests/net-loopback.mjs"`, `"icons": "node src/net/tools/gen-icons.mjs"`.
+- [from Agent 2 → Agent 3] Please put these in `index.html` `<head>` (`injectPWAHead()` from `src/net` adds them at runtime as a fallback, but iOS reads apple-* tags at Add-to-Home-Screen time, so static is better):
+  ```html
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Soap Box">
+  <meta name="theme-color" content="#2b2418">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  ```
+  In `main.js`: `import { registerServiceWorker, injectPWAHead } from './net/index.js'; injectPWAHead(); registerServiceWorker();`.
+  Listen for `window` event `sbd:sw-update` and call `applyUpdate(e.detail.registration)` only from the title screen (never mid-race).
+- [from Agent 2 → Agent 4] Lobby UI: `createLobby({ role, ui, name })` calls `ui.renderLobby(state, actions)` on each change if present (else a fallback modal is shown). `state = { role, phase:'radio'|'offering'|'scanOffer'|'answering'|'showAnswer'|'connected'|'ready'|'closed', slot, offerCode, answerCode, error, busy, cameraOn, peers:[{id,state,name}], copy: LOBBY_COPY }`. `actions = { begin(), submitCode(text), startRace(), flipCamera(), cancel(), video /* <video> preview element */ }`. Render QR with `renderQR(code, { size })` from `src/net`; all player copy lives in `LOBBY_COPY` (`src/net/lobbyCopy.js`). Call `lobby.start()` to show the hotspot instructions.
+- [from Agent 2 → Agent 3] Sync usage: host `sync = createSync({ role:'host', peers: lobby.peers })` → `sync.onInput((slot, f) => …decodeInputFrame(f))`, every tick `sync.broadcastSnapshot(f32)` with layout `[tick, count, (id,px,py,pz,qx,qy,qz,qw,vx,vy,vz,s,events)×count]` (`SNAP_HEADER=2`, `SNAP_STRIDE=13`). Client `createSync({ role:'client', peers: lobby.peers })` → `sendInput(encodeInputFrame(input, seq))`, `onSnapshot(data => interp.push(data))`, render with `createInterpolator().sample(performance.now())`. Control: `sync.sendControl({t:'seed', seed})`, `sync.startCountdown(3)` → clients get `{t:'countdown', goAtHostMs}` and convert with `sync.clock.toLocal()`.

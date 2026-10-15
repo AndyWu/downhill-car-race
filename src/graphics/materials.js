@@ -106,7 +106,7 @@ export function createMaterials(renderer, opts = {}) {
   const wind = { value: 0.6 };
   M.foliage = timed(new THREE.MeshStandardMaterial({
     name: 'foliage', map: T.foliage, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.72, metalness: 0,
-    color: new THREE.Color(0xdde8c8), shadowSide: THREE.DoubleSide,
+    color: new THREE.Color(0xc2cdb0), shadowSide: THREE.DoubleSide,
   }));
   M.foliage.userData.wind = wind;
   M.foliage.onBeforeCompile = (shader) => {

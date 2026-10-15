@@ -69,10 +69,10 @@ export function createLobbyView(root = document.body) {
   function render(state, actions) {
     const C = state.copy;
     const card = h('div', { class: 'card' });
-    const err = state.error ? h('p', { class: 'err', role: 'alert' }, state.error) : null;
+    const err = state.error ? h('p', { class: 'err', role: 'alert' }, state.error) : '';
     const vid = () => {
       const v = actions.video;
-      if (!v || !state.cameraOn) return null;
+      if (!v || !state.cameraOn) return '';
       queueMicrotask(() => v.play?.().catch(() => {})); // re-attaching can pause on iOS
       return h('div', {}, v, h('br'), h('button', { class: 'sec', onclick: () => actions.flipCamera() }, 'Flip camera'));
     };

@@ -94,10 +94,10 @@ export const RECIPES = {
         if (q < 1) {
           const dome = Math.sqrt(1 - q * q);
           const tone = 0.55 + 0.7 * hash2(Math.floor(W.id * 1e4), 3, 4);
-          const g = 0.27 * tone;
+          const g = 0.36 * tone;
           c.r = mix(c.r, g * 1.04, dome > 0.15 ? 1 : dome / 0.15); c.g = mix(c.g, g, dome > 0.15 ? 1 : dome / 0.15); c.b = mix(c.b, g * 0.92, dome > 0.15 ? 1 : dome / 0.15);
           h += dome * 0.25; rough = 0.86;
-        } else if (q < 1.5) ao *= 0.65 + (q - 1) * 0.7;
+        } else if (q < 1.5) ao *= 0.8 + (q - 1) * 0.4;
       }
       c.h = h; c.rough = rough; c.ao = ao;
     }, { normalStrength: 4, aniso });

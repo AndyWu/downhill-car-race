@@ -18,14 +18,19 @@ import { signToken, verifyToken, readToken, exportPublicRaw, importPublicRaw, im
 export const MAX_SEATS = 6;
 const DB_NAME = 'sbd-licensing', STORE = 'kv', LS_KEY = 'sbd.license.v1';
 
-const ENV = typeof import.meta.env !== 'undefined' ? import.meta.env : { DEV: true };
-const DEV_PASSES_ALLOWED = !!(ENV.DEV || ENV.VITE_DEV_PASSES === '1');
+// Vite replaces import.meta.env (and .DEV) statically; in plain Node it is undefined.
+const VITE_ENV = import.meta.env || {};
+const IS_DEV_BUILD = !!VITE_ENV.DEV;
 
-// Issuer public keys the app trusts. The DEV key is only trusted in dev builds.
-const ISSUER_PUBLIC_KEYS = [
+const DEV_ISSUER_PUBLIC = { kid: 'dev', jwk: { kty: 'EC', crv: 'P-256', x: '7zdEhLcyyOhHoSERkjhB5eK7AeRuFq51tHgmBa1NDvI', y: 'g0H-k3wD6zAHdc7FW3WRWpzKY-a1_hG0kcZq1AYUlTM' } };
+// Issuer public keys the app trusts in production builds.
+const PROD_ISSUER_PUBLIC_KEYS = [
   // { kid: 'prod-2026', jwk: { kty:'EC', crv:'P-256', x:'…', y:'…' } },   ← publisher adds real key here
-  ...(DEV_PASSES_ALLOWED ? [{ kid: 'dev', jwk: { kty: 'EC', crv: 'P-256', x: '7zdEhLcyyOhHoSERkjhB5eK7AeRuFq51tHgmBa1NDvI', y: 'g0H-k3wD6zAHdc7FW3WRWpzKY-a1_hG0kcZq1AYUlTM' } }] : []),
 ];
+
+// The literal `import.meta.env.DEV` guard lets the bundler drop devIssuer.js (and its private
+// key) from production builds entirely.
+const defaultDevIssuerLoader = () => (import.meta.env.DEV ? import('./devIssuer.js') : Promise.reject(new Error('Dev passes are disabled in production builds')));
 
 // ---------------- storage ----------------
 function openIDB() {
@@ -65,7 +70,12 @@ async function createStorage() {
 }
 
 // ---------------- licensing ----------------
-function createLicensing() {
+/**
+ * @param {{trustDevIssuer?:boolean, loadDevIssuer?:()=>Promise<{DEV_ONLY_issuerKey:Function}>}} [o]
+ *   Tests in Node pass both explicitly; in the browser they default to "dev build only".
+ */
+function createLicensing({ trustDevIssuer = IS_DEV_BUILD, loadDevIssuer = defaultDevIssuerLoader } = {}) {
+  const ISSUER_PUBLIC_KEYS = [...PROD_ISSUER_PUBLIC_KEYS, ...(trustDevIssuer ? [DEV_ISSUER_PUBLIC] : [])];
   let store = null;
   let device = null;          // { privateKey, publicKey, pub (b64 raw) }
   let passToken = null;       // string
@@ -245,8 +255,8 @@ function createLicensing() {
     /** DEV-ONLY: mint a family pass for THIS iPad with the throw-away dev issuer key. */
     async devIssuePass({ seats = MAX_SEATS } = {}) {
       await init();
-      if (!DEV_PASSES_ALLOWED) throw new Error('Dev passes are disabled in production builds');
-      const { DEV_ONLY_issuerKey } = await import('./devIssuer.js');
+      if (!trustDevIssuer) throw new Error('Dev passes are disabled in production builds');
+      const { DEV_ONLY_issuerKey } = await loadDevIssuer();
       const payload = { k: 'pass', v: 1, id: randomId(), sku: 'family', seats: Math.min(seats, MAX_SEATS), owner: device.pub, iat: Math.floor(Date.now() / 1000), dev: true };
       const token = await signToken(payload, await DEV_ONLY_issuerKey());
       return api.importPass(token);

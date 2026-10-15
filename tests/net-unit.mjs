@@ -90,19 +90,20 @@ await t('hermite between snapshots, ~100 ms behind', () => {
 
 console.log('Licensing (memory store in Node)');
 await t('dev pass → 6 seats max, grant/accept bound seat, tamper rejected', async () => {
-  const owner = createLicensing(); await owner.init();
+  const opts = { trustDevIssuer: true, loadDevIssuer: () => import('../src/net/devIssuer.js') };
+  const owner = createLicensing(opts); await owner.init();
   assert.equal((await owner.verify()).ok, false);
   const st = await owner.devIssuePass();
   assert.equal(st.ok, true); assert.equal(st.isOwner, true);
   for (let i = 0; i < MAX_SEATS - 1; i++) await owner.provisionSeat('Kid ' + i);
-  const other = createLicensing(); await other.init();
+  const other = createLicensing(opts); await other.init();
   const req = await other.createSeatRequest('Grandma');
   const grant = await owner.grantSeat({ request: req });
   assert.equal(owner.seats().length, MAX_SEATS - 1, 'bound seat not stored as owner token');
   await assert.rejects(owner.provisionSeat('one too many'), /All 6/);
   const r = await other.acceptSeatGrant(grant);
   assert.equal(r.ok, true); assert.equal(r.seats[0].name, 'Grandma'); assert.equal(r.seats[0].index, 5);
-  const third = createLicensing(); await third.init();
+  const third = createLicensing(opts); await third.init();
   await assert.rejects(third.acceptSeatGrant(grant), /different iPad/);
   const [p, s] = grant.slice(6).split('~');
   const tampered = `SBDG1.${p}~${s.slice(0, 10)}${s[10] === 'A' ? 'B' : 'A'}${s.slice(11)}`;
@@ -114,5 +115,7 @@ await t('dev pass → 6 seats max, grant/accept bound seat, tamper rejected', as
   const cmp = await owner.compareSeats([grant.split('~')[1], g2.split('~')[1]]);
   assert.deepEqual(cmp.map((c) => c.valid), [false, true]);
   console.log(`        grant QR text = ${grant.length} chars`);
+  const prod = createLicensing({ trustDevIssuer: false }); await prod.init();
+  await assert.rejects(prod.acceptSeatGrant(grant), /pass signature invalid/, 'prod build rejects dev-issued passes');
 });
 console.log(`\n${pass} passed${process.exitCode ? ', SOME FAILED' : ''}`);

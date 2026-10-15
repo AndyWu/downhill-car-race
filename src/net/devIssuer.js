@@ -3,10 +3,10 @@
 //
 //  There is no server, so in development we mint "purchase receipts" (family-pass
 //  entitlements) locally with this throw-away ECDSA P-256 key. licensing.js only imports this
-//  module behind `import.meta.env.DEV || VITE_DEV_PASSES === '1'`, so production bundles
+//  module behind a literal `import.meta.env.DEV` check, so production bundles
 //  dead-code-eliminate it. Real passes are minted offline by the publisher with
 //  src/net/tools/issue-pass.mjs using a private key that never enters the repo, and the
-//  matching public key goes into ISSUER_PUBLIC_KEYS in licensing.js.
+//  matching public key goes into PROD_ISSUER_PUBLIC_KEYS in licensing.js.
 // ============================================================================================
 
 export const DEV_ONLY_ISSUER_PRIVATE_JWK = {

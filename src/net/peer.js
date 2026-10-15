@@ -9,7 +9,7 @@ export const CHANNELS = {
   ctrl: { id: 1, label: 'ctrl', ordered: true },                      // lobby, countdown, seed
 };
 
-const GATHER_TIMEOUT_MS = 4000;
+const GATHER_TIMEOUT_MS = 3000;
 
 function emitter() {
   const m = new Map();
@@ -62,15 +62,27 @@ export function createPeer(id) {
   return peer;
 }
 
-export function waitIceComplete(pc, timeout = GATHER_TIMEOUT_MS) {
+/**
+ * Resolve when ICE gathering completes. With iceServers:[] only host candidates exist and they
+ * appear within milliseconds, but some stacks (and sandboxed/no-network hosts) never fire
+ * 'complete' — so we also settle once candidates have been idle for `idleMs`, capped at `timeout`.
+ */
+export function waitIceComplete(pc, { timeout = GATHER_TIMEOUT_MS, idleMs = 400 } = {}) {
   if (pc.iceGatheringState === 'complete') return Promise.resolve();
   return new Promise((res) => {
+    let idle = null;
     const t = setTimeout(done, timeout);
-    function done() { clearTimeout(t); pc.removeEventListener('icegatheringstatechange', chk); pc.removeEventListener('icecandidate', cand); res(); }
+    function done() { clearTimeout(t); clearTimeout(idle); pc.removeEventListener('icegatheringstatechange', chk); pc.removeEventListener('icecandidate', cand); res(); }
     function chk() { if (pc.iceGatheringState === 'complete') done(); }
-    function cand(e) { if (!e.candidate) done(); }
+    function cand(e) {
+      if (!e.candidate) return done();
+      clearTimeout(idle);
+      idle = setTimeout(done, idleMs);
+    }
     pc.addEventListener('icegatheringstatechange', chk);
     pc.addEventListener('icecandidate', cand);
+    // Candidates may already have been gathered before we attached.
+    if (/a=candidate:/.test(pc.localDescription?.sdp || '')) idle = setTimeout(done, idleMs);
   });
 }
 

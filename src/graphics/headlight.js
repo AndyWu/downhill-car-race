@@ -15,40 +15,67 @@ function radialTexture(size, stops) {
 let glowTex = null, goboTex = null;
 
 const BEAM_VS = /* glsl */`
-varying float vT; varying vec3 vW; varying vec3 vN; varying vec3 vV;
-uniform float uLen;
-void main() {
-	vT = clamp( - position.z / uLen, 0.0, 1.0 );
-	vec4 wp = modelMatrix * vec4( position, 1.0 );
-	vW = wp.xyz;
-	vN = normalize( normalMatrix * normal );
-	vec4 mv = viewMatrix * wp;
-	vV = - mv.xyz;
-	gl_Position = projectionMatrix * mv;
-}`;
+varying vec3 vL;
+void main() { vL = position; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }`;
+// Back faces of the cone shell only: analytic chord length of the view ray through the (clipped) cone gives
+// a cheap single-scatter volume. Dust = animated 3D value noise + sparse drifting motes sampled along the chord.
 const BEAM_FS = /* glsl */`
 precision highp float;
-varying float vT; varying vec3 vW; varying vec3 vN; varying vec3 vV;
-uniform vec3 uColor; uniform float uIntensity, uTime, uVis;
+varying vec3 vL;
+uniform vec3 uCamL; uniform mat4 uM; uniform vec3 uColor;
+uniform float uLen, uK, uIntensity, uTime, uVis;
 float h31( vec3 p ) { p = fract( p * 0.3183099 + 0.1 ); p *= 17.0; return fract( p.x * p.y * p.z * ( p.x + p.y + p.z ) ); }
 float vn3( vec3 x ) { vec3 i = floor( x ), f = fract( x ); f = f * f * ( 3.0 - 2.0 * f );
 	return mix( mix( mix( h31( i ), h31( i + vec3( 1, 0, 0 ) ), f.x ), mix( h31( i + vec3( 0, 1, 0 ) ), h31( i + vec3( 1, 1, 0 ) ), f.x ), f.y ),
 		mix( mix( h31( i + vec3( 0, 0, 1 ) ), h31( i + vec3( 1, 0, 1 ) ), f.x ), mix( h31( i + vec3( 0, 1, 1 ) ), h31( i + vec3( 1, 1, 1 ) ), f.x ), f.y ), f.z ); }
-void main() {
-	float e = abs( dot( normalize( vN ), normalize( vV ) ) );
-	float edge = pow( e, 1.7 );
-	float along = smoothstep( 0.0, 0.07, vT ) * pow( 1.0 - vT, 1.5 );
-	vec3 q = vW * 0.9 + vec3( uTime * 0.15, - uTime * 0.05, uTime * 0.1 );
-	float n = vn3( q ) * 0.6 + vn3( q * 2.3 ) * 0.4;
-	float haze = edge * ( 0.45 + 0.9 * n );
-	// drifting dust motes
-	vec3 mp = vW * 3.0 + vec3( 0.0, uTime * 0.18, 0.0 );
+float mote( vec3 wp ) {
+	vec3 mp = wp * 2.5 + vec3( 0.0, uTime * 0.15, 0.0 );
 	vec3 id = floor( mp ); vec3 f = fract( mp ) - 0.5;
-	float r = h31( id );
 	vec3 jit = vec3( h31( id + 3.1 ), h31( id + 7.7 ), h31( id + 9.3 ) ) - 0.5;
-	float mote = step( 0.86, r ) * smoothstep( 0.16, 0.0, length( f - jit * 0.6 ) ) * ( 0.5 + 0.5 * sin( uTime * 2.0 + r * 40.0 ) );
-	float a = ( haze * 0.30 + mote * edge * 1.6 ) * along * uIntensity * uVis;
-	gl_FragColor = vec4( uColor * a, a );
+	return step( 0.82, h31( id ) ) * smoothstep( 0.13, 0.0, length( f - jit * 0.6 ) ) * ( 0.5 + 0.5 * sin( uTime * 2.0 + h31( id ) * 40.0 ) );
+}
+void main() {
+	vec3 O = vec3( uCamL.xy, - uCamL.z );
+	vec3 P = vec3( vL.xy, - vL.z );
+	vec3 Dv = P - O; float tFar = length( Dv ); vec3 D = Dv / tFar;
+	float k2 = uK * uK;
+	float a = D.x * D.x + D.y * D.y - k2 * D.z * D.z;
+	float b = 2.0 * ( O.x * D.x + O.y * D.y - k2 * O.z * D.z );
+	float c = O.x * O.x + O.y * O.y - k2 * O.z * O.z;
+	float t0 = 0.0;
+	float disc = b * b - 4.0 * a * c;
+	if ( disc > 0.0 && abs( a ) > 1e-7 ) {
+		float sq = sqrt( disc );
+		float r1 = ( - b - sq ) / ( 2.0 * a ), r2 = ( - b + sq ) / ( 2.0 * a );
+		if ( r1 < tFar - 1e-3 && r1 > t0 ) t0 = r1;
+		if ( r2 < tFar - 1e-3 && r2 > t0 ) t0 = r2;
+	}
+	float t1 = tFar;
+	if ( abs( D.z ) > 1e-5 ) {
+		float za = - O.z / D.z, zb = ( uLen - O.z ) / D.z;
+		t0 = max( t0, min( za, zb ) ); t1 = min( t1, max( za, zb ) );
+	}
+	float chord = max( 0.0, t1 - t0 );
+	if ( chord <= 0.0 ) discard;
+	vec3 mid = O + D * ( t0 + chord * 0.5 );
+	float zz = clamp( mid.z, 0.0, uLen );
+	float rad = length( mid.xy ) / max( uK * zz, 1e-3 );
+	float core = clamp( 1.0 - rad * rad, 0.0, 1.0 );
+	float along = smoothstep( 0.0, 1.2, zz ) * exp( - zz * 0.09 ) * ( 1.0 - smoothstep( uLen * 0.6, uLen, zz ) );
+	vec3 wm = ( uM * vec4( mid.x, mid.y, - mid.z, 1.0 ) ).xyz;
+	float n = vn3( wm * 0.8 + vec3( uTime * 0.12, - uTime * 0.04, uTime * 0.09 ) ) * 0.6 + vn3( wm * 2.1 - uTime * 0.07 ) * 0.4;
+	float dens = core * along * ( 0.45 + 0.9 * n );
+	float haze = 1.0 - exp( - chord * dens * 0.12 );
+	float m = 0.0;
+	for ( int i = 0; i < 3; i ++ ) {
+		float tt = t0 + chord * ( 0.2 + 0.3 * float( i ) );
+		vec3 pp = O + D * tt; float zq = clamp( pp.z, 0.0, uLen );
+		float rq = length( pp.xy ) / max( uK * zq, 1e-3 );
+		vec3 w = ( uM * vec4( pp.x, pp.y, - pp.z, 1.0 ) ).xyz;
+		m += mote( w ) * ( 1.0 - rq * rq ) * exp( - zq * 0.06 ) * step( rq, 1.0 );
+	}
+	float al = ( haze * 0.55 + m * 1.2 ) * uIntensity * uVis;
+	gl_FragColor = vec4( uColor * al, al );
 }`;
 
 /**
@@ -58,7 +85,7 @@ void main() {
  * and call update(dt) yourself for fixed-step control).
  */
 export function attachHeadlight(obj, opts = {}) {
-  const { range = 70, angle = 0.36, intensity = 900, beamLength = 26, autoTick = true, castShadow = true } = opts;
+  const { range = 70, angle = 0.36, intensity = 2600, aimDrop = 0.9, beamLength = 26, autoTick = true, castShadow = true } = opts;
   glowTex ??= radialTexture(64, (r) => Math.pow(Math.max(0, 1 - r), 2.2));
   goboTex ??= radialTexture(128, (r, a) => {
     const hot = Math.pow(Math.max(0, 1 - r * 0.8), 0.7);
@@ -75,24 +102,26 @@ export function attachHeadlight(obj, opts = {}) {
   light.shadow.bias = -0.0008; light.shadow.normalBias = 0.03;
   light.map = goboTex;
   light.shadow.autoUpdate = false; light.shadow.needsUpdate = true; // allocate the map once; re-render only while lit
-  light.target.position.set(0, -0.35, -10);
+  light.target.position.set(0, -aimDrop, -10);
   group.add(light, light.target);
 
-  const R = beamLength * Math.tan(angle * 0.85);
-  const geo = new THREE.CylinderGeometry(R, 0.03, beamLength, 28, 1, true);
-  geo.translate(0, beamLength / 2, 0); geo.rotateX(-Math.PI / 2);
-  // tilt cone to match target direction (slightly downward)
-  geo.rotateX(-Math.atan2(0.35, 10));
+  const R = beamLength * Math.tan(angle * 0.9);
+  const geo = new THREE.CylinderGeometry(R, 0.02, beamLength, 28, 1, false);
+  geo.translate(0, beamLength / 2, 0); geo.rotateX(-Math.PI / 2); // apex at origin, opens toward -Z
   const beamMat = new THREE.ShaderMaterial({
     uniforms: {
-      uLen: { value: beamLength }, uColor: { value: new THREE.Color(1.0, 0.82, 0.55) }, uIntensity: { value: 0 },
-      uTime: G.gfxTime, uVis: { value: 0.2 },
+      uLen: { value: beamLength }, uK: { value: R / beamLength }, uCamL: { value: new THREE.Vector3() }, uM: { value: new THREE.Matrix4() },
+      uColor: { value: new THREE.Color(1.0, 0.82, 0.55) }, uIntensity: { value: 0 }, uTime: G.gfxTime, uVis: { value: 0.2 },
     },
-    vertexShader: BEAM_VS, fragmentShader: BEAM_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    vertexShader: BEAM_VS, fragmentShader: BEAM_FS, transparent: true, depthWrite: false, side: THREE.BackSide,
     blending: THREE.AdditiveBlending, fog: false,
   });
   const beam = new THREE.Mesh(geo, beamMat);
   beam.frustumCulled = false; beam.renderOrder = 10; beam.visible = false; beam.name = 'HeadlightBeam';
+  beam.rotation.x = -Math.atan2(aimDrop, 10);
+  beam.uniformsMatrix = beamMat.uniforms.uM.value = beam.matrixWorld;
+  const _v = new THREE.Vector3();
+  beam.onBeforeRender = (r, sc, cam) => { _v.setFromMatrixPosition(cam.matrixWorld); beam.worldToLocal(_v); beamMat.uniforms.uCamL.value.copy(_v); };
   group.add(beam);
 
   const lensMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.05, 0.04, 0.03), side: THREE.DoubleSide });

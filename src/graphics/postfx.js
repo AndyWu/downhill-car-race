@@ -227,7 +227,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     const U = finalM.uniforms;
     U.tScene.value = rtScene.texture; U.tB1.value = rtB1.texture; U.tB2.value = rtB2.texture;
     U.uTime.value = time; U.uBloom.value = bloomOn ? P.bloom : 0;
-    U.uMotion.value = P.motion * 0.07 * Math.min(1, Math.max(0, (speed - 8) / 30));
+    U.uMotion.value = P.motion * 0.04 * Math.min(1, Math.max(0, (speed - 10) / 30));
     U.uVig.value = P.vignette + Math.min(0.2, speed * 0.004); U.uGrain.value = P.grain; U.uGrade.value = P.grade;
     U.uExposure.value = renderer.toneMappingExposure;
     pass(finalM, null);

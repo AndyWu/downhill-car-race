@@ -44,8 +44,8 @@ export function assemble(def, materials) {
 
   // ---- cockpit rig (static bits)
   const eyeY = L.eyeY, eyeZ = L.eyeZ;
-  const st = { type: 'car', r: 0.17, col: 0x1c1c1c, col2: 0x9a9a92, tilt: 0.9, dz: -0.46, dy: -0.25, ...L.steer };
-  st.r *= 0.78;
+  const st = { type: 'car', r: 0.17, col: 0x1c1c1c, col2: 0x9a9a92, tilt: 0.9, dz: -0.48, dy: -0.27, ...L.steer };
+  st.r *= 0.7;
   const wc = [0, eyeY + st.dy, eyeZ + st.dz];
   const Lc = 0.34;
   const base = [0, wc[1] - Math.sin(st.tilt) * Lc, wc[2] - Math.cos(st.tilt) * Lc];

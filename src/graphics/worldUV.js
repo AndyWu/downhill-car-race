@@ -73,7 +73,12 @@ vec3 gP; vec3 gW; vec3 gWN; vec4 gORM = vec4( 1.0 );
 	gP = vGW * gInvScale; gWN = normalize( vGN );
 	gW = pow( abs( gWN ), vec3( gSharp ) ); gW /= ( gW.x + gW.y + gW.z );
 	vec4 sampledDiffuseColor = gTri( map, gP, gW );
-	${macro ? `float gM = texture2D( gMacro, vGW.xz * gMacroScale ).r * 0.65 + texture2D( gMacro, vGW.zx * gMacroScale * 0.23 + 0.37 ).r * 0.35;
+	${macro ? `#ifdef GW_PLANAR
+	float gM = texture2D( gMacro, vGW.xz * gMacroScale ).r * 0.65 + texture2D( gMacro, vGW.zx * gMacroScale * 0.23 + 0.37 ).r * 0.35;
+	#else
+	float gM = ( texture2D( gMacro, vGW.zy * gMacroScale ).r * gW.x + texture2D( gMacro, vGW.xz * gMacroScale ).r * gW.y + texture2D( gMacro, vGW.xy * gMacroScale ).r * gW.z ) * 0.65
+		+ ( texture2D( gMacro, vGW.yz * gMacroScale * 0.23 + 0.37 ).r * gW.x + texture2D( gMacro, vGW.zx * gMacroScale * 0.23 + 0.37 ).r * gW.y + texture2D( gMacro, vGW.yx * gMacroScale * 0.23 + 0.37 ).r * gW.z ) * 0.35;
+	#endif
 	sampledDiffuseColor.rgb *= 0.62 + 0.76 * gM;` : ''}
 	diffuseColor *= sampledDiffuseColor;`)
       .replace('#include <roughnessmap_fragment>', /* glsl */`
