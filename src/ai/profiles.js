@@ -44,9 +44,9 @@ export const Barnaby = make({
   perception: { detect: { rock: 0.5, mud: 1, water: 1, default: 0.5 } },
   hazardWeight: { rock: 20, mud: 10, water: 8, default: 5 }, hazardMargin: 0.8, hazardStretch: 0.9,
   line: { mode: 'center', edge: 0.1, pull: 0.3, maxStep: 3, smooth: 1 },
-  speed: { mu: 0.8, cornerFactor: 1.2, brakeDecel: 9, cap: 10.3 },
+  speed: { mu: 0.8, cornerFactor: 1.2, brakeDecel: 9, cap: 10.0 },
   paddle: { mode: 'forgetful', cadence: 2.7, strength: 0.9, jitter: 0.3,
-    attentive: 0.6, startDist: 120 },
+    attentive: 0.5, startDist: 120 },
   brake: { gain: 0.3, dead: 0.5, max: 0.9 },
 });
 
@@ -58,7 +58,7 @@ export const Clementine = make({
   hazardWeight: { rock: 60, mud: 30, water: 25, default: 25 }, hazardMargin: 3.0, hazardStretch: 2.5,
   surfaceWeight: { sand: 4, gravel: 2, grass: 8, mud: 6, water: 5 },
   line: { mode: 'avoid', edge: 0.5, pull: 0.1, maxStep: 1 },
-  speed: { mu: 0.8, cornerFactor: 0.52, brakeDecel: 2.6, cap: 11.4, useSurface: true },
+  speed: { mu: 0.8, cornerFactor: 0.56, brakeDecel: 2.6, cap: 11.4, useSurface: true },
   paddle: { mode: 'slow', cadence: 2.3, strength: 0.85, jitter: 0.1 },
   brake: { gain: 0.5, dead: 0.2 },
   carAvoid: 1,
@@ -70,9 +70,9 @@ export const Buster = make({
   reactionTime: 0.1, steerGain: 1.4, yawDamp: 0.3, steerNoise: 0.03, steerTau: 0.07,
   look: { min: 6, time: 0.5 },
   perception: { detect: { default: 1 }, minRockRadius: 2.3 }, // only avoids huge rocks (by half-width)
-  hazardWeight: { rock: 15, mud: 0, water: 0, default: 0 }, hazardMargin: 0.3, hazardStretch: 0.8,
+  hazardWeight: { rock: 15, mud: 2.5, water: 2, default: 0 }, hazardMargin: 0.3, hazardStretch: 0.8,
   line: { mode: 'racing', edge: 0.3, pull: 0.02, maxStep: 3, relaxIters: 70 },
-  speed: { mu: 0.85, cornerFactor: 1.05, brakeDecel: 6.5, cap: 11.9, scale: 1.0 },
+  speed: { mu: 0.85, cornerFactor: 1.05, brakeDecel: 6.5, cap: 12.8, scale: 1.0 },
   paddle: { mode: 'furious', cadence: 3.7, strength: 1.0, jitter: 0.04,
     stamina: { drain: 0.02, regen: 0.1, minFactor: 0.85 } },
   brake: { gain: 0.5, dead: 0.7 },

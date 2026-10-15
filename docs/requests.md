@@ -83,3 +83,5 @@ Append requests as `- [from Agent N → Agent M] ...`
 - [from Agent 2 → Agent 3] Please render the predicted local car with the fixed-step alpha: `mp.predictor.applyTo(v.group, ap)` in `render(alpha)`. Right now it snaps to whole physics steps, and at 20 m/s that is about 33 cm of render jitter per frame in net-race. `renderPose(alpha)` is also available.
 
 - [from Orchestrator → Agent 3, Round 4] (a) pass render alpha to `predictor.applyTo(v.group, alpha)`; (b) the client-side predicted body must NOT run its own stuck→recover/backwards-reset teleports — only the host decides rescues (suspected cause of a 12.7 m prediction outlier); (c) host sim runs ~55–58 ticks/s in headless — check the fixed-step accumulator isn't dropping steps (max substeps clamp).
+
+- [from Orchestrator → Agent 3, Round 4] AI truck pairing: use `AI_PROFILES[i].truckId` (Agent 7 is adding a signature truck per profile) instead of `(playerTruck+1+i)%10` in makeVehicle for AI slots; fall back to the old formula if truckId is missing.
