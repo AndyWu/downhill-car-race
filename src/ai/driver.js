@@ -49,7 +49,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
       if (dsO > 0.5 && dsO < aheadDs && Math.abs(dl) < 3) { ahead = o; aheadDs = dsO; }
       if (Math.abs(dsO) < 4 && Math.abs(dl) > 0.3 && Math.abs(dl) < 2.6) alongside = o;
     }
-    const Ld = Math.max(P.look.min, P.look.time * speed);
+    const outBy = Math.max(0, Math.abs(self.lateral) - plan.widthAt(s) / 2); // metres beyond the verge
+    const Ld = Math.max(P.look.min, P.look.time * speed) + 2.5 * outBy; // look further to rejoin the road at a shallow angle
     const sT = clamp(s + Ld, 0, L);
     const eT = plan.offsetAt(sT);
     if (ahead) {

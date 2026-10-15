@@ -46,7 +46,7 @@ export const Barnaby = make({
   line: { mode: 'center', edge: 0.1, pull: 0.3, maxStep: 3, smooth: 1 },
   speed: { mu: 0.8, cornerFactor: 1.3, brakeDecel: 10, cap: 15 },
   paddle: { mode: 'forgetful', cadence: 2.4, strength: 0.9, jitter: 0.3,
-    attentive: 0.9, startDist: 120 },
+    attentive: 0.7, startDist: 120 },
   brake: { gain: 0.2, dead: 1.0, max: 0.9 },
 });
 
