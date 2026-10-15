@@ -702,11 +702,11 @@ async function boot() {
   function frame(now) {
     requestAnimationFrame(frame);
     const rawDt = (now - last) / 1000; input.noteFrame(rawDt);
-    const dt = Math.min(rawDt, 0.1); last = now;
+    const dt = Math.min(rawDt, 0.25); last = now;   // catch up after stalls up to 250 ms instead of dropping sim time
     acc += dt;
     let n = 0;
-    while (acc >= STEP && n < 6) { fixedUpdate(); acc -= STEP; n++; }
-    if (n === 6) acc = 0;
+    while (acc >= STEP && n < 15) { fixedUpdate(); acc -= STEP; n++; }
+    if (n === 15) acc = 0;
     simT += dt;
     const m = game.state.mode;
     if (m === 'title' || m === 'lobby' || m === 'garage') titleCamera(simT);
