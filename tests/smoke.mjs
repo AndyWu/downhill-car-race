@@ -58,5 +58,5 @@ check(r4.length === 6 && r4.every((x) => x > 300), 'player + 5 AI all advance');
 await page.screenshot({ timeout: 180000, path: '/tmp/claude-0/smoke-ai.png' });
 check(errors.length === 0, 'no console errors ' + JSON.stringify(errors.slice(0, 3)));
 await browser.close();
-if (server) process.kill(-server.pid);
+if (server) try { process.kill(-server.pid); } catch {}
 process.exit(fail ? 1 : 0);

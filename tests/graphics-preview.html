@@ -138,6 +138,7 @@ let hl;
   const lampMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.14, 16).rotateX(Math.PI / 2), mats.metalRusted); lampMesh.position.copy(lamp.position).add(new THREE.Vector3(0, 0, 0.05)); body.add(lampMesh);
   body.position.set(cx, 0, cz); scene.add(body);
   hl = attachHeadlight(lamp);
+  window.__coat = mats.applyMudCoat(body); window.__coat.set(+(q.get('coat') || 0));
   const wall = new THREE.Mesh(scaleUV(new THREE.BoxGeometry(12, 6, 0.4), 6, 3), mats.barnPaint); put(wall, cx + 2, 3, cz - 26);
   for (const [dx, dz] of [[-2.5, -8], [3, -12], [-3.5, -17], [2.2, -21]]) {
     put(new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 2.4, 10), mats.woodWeathered), cx + dx, 1.2, cz + dz);
@@ -186,6 +187,7 @@ const rigs = {
   hazMud: { p: [400, 1.35, -0.5], t: [400, 0.2, -7], fov: 62 },
   hazGravel: { p: [400, 1.35, -13], t: [400, 0.2, -21], fov: 62 },
   hazWater: { p: [400, 1.35, -38], t: [400, 0.2, -45], fov: 62 },
+  coat: { p: [302.6, 1.0, 3.2], t: [300, 0.5, 0], fov: 55 },
   beam: { p: [304.8, 1.5, -2.5], t: [300, 0.7, -9], fov: 60 },
   post: { p: [182, 1.6, 5.0], t: [181, 2.2, -3.0], fov: 62 },
 };

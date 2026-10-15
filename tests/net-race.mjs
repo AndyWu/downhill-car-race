@@ -55,5 +55,5 @@ check(cl0 > 5, 'client sees the host car moving via snapshots: s=' + cl0);
 check(c.me > 5, 'client own car advances: s=' + c.me);
 check(Math.abs(c.me - hostSlot1) < 40, 'client/host agree on client car position');
 check(errors.length === 0, 'no console errors ' + JSON.stringify(errors.slice(0, 3)));
-await browser.close(); if (server) process.kill(-server.pid);
+await browser.close(); if (server) try { process.kill(-server.pid); } catch {}
 process.exit(fail ? 1 : 0);
