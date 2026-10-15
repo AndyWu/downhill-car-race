@@ -166,7 +166,7 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
         track.atS(z.s, pp);
         const cx = pp.px + pp.rhx * z.lateral, cz = pp.pz + pp.rhz * z.lateral;
         const Tx = pp.rhz, Tz = -pp.rhx;
-        const level = terrain.heightAt(cx, cz) + z.dip * 0.86 + 0.012;
+        const level = terrain.heightAt(cx, cz) + z.dip + 0.028;
         for (let k = 0; k <= rings; k++) for (let j = 0; j < (k ? seg : 1); j++) {
           const an = k ? (j / seg) * Math.PI * 2 : 0, rr = (k / rings) * (k ? outline(an) : 0);
           const lx = Math.cos(an) * rr * rx, lz = Math.sin(an) * rr * rz;
