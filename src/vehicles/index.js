@@ -30,9 +30,9 @@ export const TRUCKS = DEFS.map((d) => ({
 }));
 
 /** spec: an entry of TRUCKS (or its id / index). Returns { group, parts } — forward is -Z, origin at axle height. */
-export function buildTruck(spec, { materials } = {}) {
+export function buildTruck(spec, { materials, lod } = {}) {
   const key = typeof spec === 'number' ? DEFS[spec]?.id : typeof spec === 'string' ? spec : spec?.id;
   const def = BY_ID.get(key);
   if (!def) throw new Error(`buildTruck: unknown truck ${key}`);
-  return assemble(def, materials);
+  return assemble(def, materials, lod);
 }

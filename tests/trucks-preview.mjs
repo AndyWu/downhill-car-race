@@ -42,7 +42,7 @@ try {
       const info = await page.evaluate(([i, v]) => window.__show(i, v), [i, view]);
       const file = `/tmp/claude-0/truck-${String(i).padStart(2, '0')}-${info.id}-${view}.png`;
       await page.locator('canvas').screenshot({ path: file });
-      if (view === 'ext') report.push(info);
+      if (view === 'ext' || view === 'far') report.push({ view, ...info });
     }
   }
   console.log(JSON.stringify(report, null, 1));

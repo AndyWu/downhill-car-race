@@ -1,6 +1,7 @@
 // Assembles a truck: model body + shared cockpit rig + wheels + moving parts.
 import * as THREE from 'three';
 import { Kit } from './kit.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { applyMudCoat } from '../graphics/mudcoat.js';
 import {
   buildWheelGeometry, makeWheelObject, buildSteeringWheelMesh, buildPaddle, buildLever,
@@ -32,7 +33,7 @@ function addAxles(k, L) {
   k.metal.box([0.12, 0.04, 0.05], [-0.1, -0.03, zr + 0.04], { c: 0x3a3430 });
 }
 
-export function assemble(def, materials) {
+export function assemble(def, materials, lod = 'near') {
   const L = def.layout;
   const k = new Kit(def.seed, materials);
   k.groundY = -L.R;
@@ -133,12 +134,42 @@ export function assemble(def, materials) {
   driverEye.position.set(0, eyeY, eyeZ);
   group.add(driverEye);
 
+  // ---- far LOD: the whole truck (body, wheels, driver) baked into ONE mesh / one draw call
+  const luminance = { wood: 0.7, metal: 0.55, rope: 0.8, paint: 1 };
+  const [u0p, v0p, szp] = [0.0, 1 - 0.2, 0.2];
+  const farGeos = [];
+  const addFar = (g, kind, m4) => {
+    const c = g.clone();
+    if (m4) c.applyMatrix4(m4);
+    if (kind !== 'paint') { // non-atlas UVs -> plain paint cell, and bake the texture's average brightness into colour
+      const uv = c.attributes.uv, col = c.attributes.color, f = luminance[kind];
+      for (let i = 0; i < uv.count; i++) { uv.setXY(i, u0p + szp * 0.5, v0p + szp * 0.5); col.setXYZ(i, col.getX(i) * f, col.getY(i) * f, col.getZ(i) * f); }
+    }
+    farGeos.push(c);
+  };
+  k.wood.list.forEach((g) => addFar(g, 'wood')); k.metal.list.forEach((g) => addFar(g, 'metal'));
+  k.rope.list.forEach((g) => addFar(g, 'rope')); k.paint.list.forEach((g) => addFar(g, 'paint'));
+  wheels.forEach((w, n) => { const m4 = new THREE.Matrix4().makeTranslation(w.position.x, w.position.y, w.position.z); addFar(n < 2 ? gF : gR, 'paint', m4); });
+  addFar(driver.geometry, 'paint', null);
+  const farMesh = new THREE.Mesh(mergeGeometries(farGeos, false), k.mats.paint);
+  farMesh.name = 'farLOD'; farMesh.visible = false; farMesh.castShadow = false; farMesh.receiveShadow = false;
+  group.add(farMesh);
+  const nearMeshes = [];
+  group.traverse((o) => { if (o.isMesh && o !== farMesh) nearMeshes.push(o); });
+  let lodNow = 'near';
+  const setLOD = (level) => {
+    level = level === 'far' ? 'far' : 'near';
+    if (level === lodNow) return;
+    lodNow = level;
+    nearMeshes.forEach((m) => { m.visible = level === 'near'; });
+    farMesh.visible = level === 'far';
+  };
   // ---- mud coat: vertex-colour blend rising from the ground / tyres (setMudCoat 0..1)
   const mudGeos = new Set();
   group.traverse((o) => { if (o.isMesh && o.geometry.attributes.mud && o.geometry.attributes.color) mudGeos.add(o.geometry); });
   const mudBase = new Map();
   mudGeos.forEach((g) => mudBase.set(g, g.attributes.color.array.slice()));
-  const MUD = new THREE.Color(0x2c1d10);
+  const MUD = new THREE.Color(0x30211a);
   let mudNow = 0, handles = null;
   const setMudCoat = (t) => {
     t = Math.min(1, Math.max(0, t));
@@ -163,7 +194,8 @@ export function assemble(def, materials) {
     mudGeos.forEach((g) => {
       const c0 = mudBase.get(g), col = g.attributes.color, w = g.attributes.mud;
       for (let i = 0; i < w.count; i++) {
-        const a = Math.min(1, w.getX(i) * t * 2.3) * 0.92;
+        const tt = 1 - Math.pow(1 - t, 2.6); // strong early response: 0.4 coat reads as ~0.75
+        const a = Math.min(1, w.getX(i) * tt * 2.4) * 0.96;
         col.array[i * 3] = c0[i * 3] + (MUD.r - c0[i * 3]) * a;
         col.array[i * 3 + 1] = c0[i * 3 + 1] + (MUD.g - c0[i * 3 + 1]) * a;
         col.array[i * 3 + 2] = c0[i * 3 + 2] + (MUD.b - c0[i * 3 + 2]) * a;
@@ -172,9 +204,10 @@ export function assemble(def, materials) {
     });
   };
   const parts = { steeringWheel, paddleL, paddleR, handbrakeLever, gearLever, headlight, flagMount, wheels, driverEye, driver };
-  group.userData = { id: def.id, parts, setMudCoat, wheelRadii: [L.Rf, L.Rf, L.R, L.R] };
+  group.userData = { id: def.id, parts, setMudCoat, setLOD, wheelRadii: [L.Rf, L.Rf, L.R, L.R] };
   let calls = 0;
   group.traverse((o) => { if (o.isMesh) calls++; });
   group.userData.drawCalls = calls;
-  return { group, parts, setMudCoat };
+  if (lod === 'far') setLOD('far');
+  return { group, parts, setMudCoat, setLOD, get lod() { return lodNow; } };
 }

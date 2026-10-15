@@ -183,6 +183,12 @@ export class Collector {
     const tmp = new THREE.Color();
     const nrm = g.attributes.normal;
     const wear = o.wear ? { paint: new THREE.Color(o.wear.paint).multiplyScalar(this.kind === 'wood' ? 1.7 : 1), bare: new THREE.Color(o.wear.bare), amt: o.wear.amt ?? 0.5 } : null;
+    if (wear) { // aged look: desaturate, sun-bleach, then grey weathering and grime
+      const hsl = {}; wear.paint.getHSL(hsl);
+      wear.paint.setHSL(hsl.h, hsl.s * 0.55, Math.min(0.85, hsl.l * 1.12));
+      wear.paint.lerp(new THREE.Color(0x8a8578), 0.16);
+      wear.bare.lerp(new THREE.Color(0x8d897d), 0.3);
+    }
     const mud = new Float32Array(pos.count);
     const seedOff = rand() * 50;
     for (let i = 0; i < pos.count; i++) {
@@ -194,9 +200,11 @@ export class Collector {
         const ax = Math.abs(nrm.getX(i)), ay = Math.abs(nrm.getY(i)), az = Math.abs(nrm.getZ(i));
         const edge = 1 - Math.max(ax, ay, az);
         const n = vnoise(x * 38 + seedOff, y * 38, z * 38) * 0.6 + vnoise(x * 9 + seedOff, y * 9, z * 9) * 0.4;
-        const m = Math.min(1, Math.max(0, edge * 2.6 + (n - 0.5) * 1.8 * wear.amt + (wear.amt - 0.35)));
+        const scuff = vnoise(x * 80 + seedOff, y * 6, z * 80) > 0.7 ? 0.35 : 0; // raised-grain scuffs along the board
+        const m = Math.min(1, Math.max(0, edge * 2.6 + (n - 0.5) * 1.8 * wear.amt + (wear.amt - 0.35) + scuff));
         const ms = m * m * (3 - 2 * m);
         tmp.copy(wear.paint).lerp(wear.bare, ms);
+        tmp.lerp(DIRT, 0.08 + 0.22 * vnoise(x * 22, y * 22, z * 22)); // hand grime
         tmp.multiplyScalar(1 + (rand() - 0.5) * 0.08);
       } else {
         tmp.copy(base);
@@ -212,10 +220,10 @@ export class Collector {
       if (this.mud === 'height') {
         // ground-up coat plus flung splatter on everything below ~0.6 m (hood, panels) biased to the front
         const up = Math.min(1, Math.max(0, 1 - (y - this.kit.groundY - 0.1) / 0.75));
-        w = Math.max((1 - t) * (0.55 + 0.45 * vnoise(x * 14, y * 14, z * 14)), 0.9 * sp(0.4, 0.6) * up);
-      } else if (this.mud === 'cockpit') {
-        // hand-held parts: splatter flecks plus the lower part of the part (hinge end / wheel bottom)
-        w = Math.min(1, 1.0 * sp(0.32, 0.5) + 0.6 * Math.min(1, Math.max(0, (0.12 - (this.mudAxis === 'y' ? y : y)) / 0.2)) * (0.6 + 0.4 * vnoise(x * 20, y * 20, z * 20)));
+        const front = Math.min(1, Math.max(0, (-z - 0.2) / 0.45));
+        const low2 = Math.min(1, Math.max(0, 1 - (y - this.kit.groundY - 0.1) / 0.95));
+        const clump = Math.min(1, Math.max(0, (vnoise(x * 11 + 3, y * 11, z * 11) - 0.3) / 0.2));
+        w = Math.max((1 - t) * (0.55 + 0.45 * vnoise(x * 14, y * 14, z * 14)), 0.9 * sp(0.4, 0.6) * up, 0.95 * front * low2 * clump);
       }
       if (this.mud === 'radial') {
         const r = Math.hypot(y, z) / (this.mudR || 0.25);
@@ -328,6 +336,20 @@ export class Collector {
     if (!this.list.length) return null;
     const g = mergeGeometries(this.list, false);
     g.computeBoundingSphere();
+    if (this.mud === 'cockpit') {
+      // caked mud on the lower `mudFrac` of the part (clumpy noisy edge) plus splatter flecks above
+      g.computeBoundingBox();
+      const p = g.attributes.position, w = new Float32Array(p.count), y0 = g.boundingBox.min.y, rg = Math.max(1e-3, g.boundingBox.max.y - y0);
+      const frac = this.mudFrac ?? 0.6;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i), fy = (y - y0) / rg;
+        const thr = frac + (vnoise(x * 40, y * 40, z * 40) - 0.5) * 0.35;
+        const cake = Math.min(1, Math.max(0, (thr - fy) / 0.08)) * (0.85 + 0.15 * vnoise(x * 70, y * 70, z * 70));
+        const fl = Math.min(1, Math.max(0, (vnoise(x * 33 + 7, y * 33, z * 33) - 0.55) / 0.12));
+        w[i] = Math.max(cake, fl * 0.8);
+      }
+      g.setAttribute('mud', new THREE.BufferAttribute(w, 1));
+    }
     return g;
   }
 }

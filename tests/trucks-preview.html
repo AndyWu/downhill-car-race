@@ -40,7 +40,8 @@ for (let i = 0; i < 60; i++) {
   s.position.set((Math.random() - 0.5) * 20, 0.02, -2 - Math.random() * 16); scene.add(s);
 }
 
-const materials = q.get('lib') === '0' ? undefined : createMaterials(renderer, { quality: 'low' });
+let materials;
+try { materials = q.get('lib') === '0' ? undefined : createMaterials(renderer, { quality: 'low' }); } catch (e) { console.warn('graphics library unavailable, using fallback materials:', e.message); }
 const cam = new THREE.PerspectiveCamera(50, W / H, 0.05, 100);
 let current = null;
 function show(i, view) {
@@ -60,9 +61,11 @@ function show(i, view) {
     parts.handbrakeLever.rotation.x = -0.5; parts.gearLever.rotation.x = -0.5;
     parts.headlight.userData.setOn(true);
   }
+  if (view === 'far' || view === 'farmud') current.setLOD('far');
+  if (view === 'farmud') current.setMudCoat(0.6);
   if (view === 'mud') current.setMudCoat(1);
   if (view === 'fpmud') current.setMudCoat(0.6);
-  if (view === 'chase') {
+  if (view === 'chase' || view === 'far' || view === 'farmud') {
     cam.fov = 40; cam.aspect = W / H; cam.updateProjectionMatrix();
     cam.position.set(0, 1.9, 25); cam.lookAt(0, 0.4, 0);
   } else if (view === 'fp' || view === 'fpmud') {
@@ -78,7 +81,7 @@ function show(i, view) {
   renderer.render(scene, cam);
   renderer.render(scene, cam);
   const info = renderer.info.render;
-  return { id: spec.id, calls: info.calls, triangles: info.triangles, meshes: group.userData.drawCalls };
+  return { id: spec.id, calls: info.calls, triangles: info.triangles, meshes: (() => { let n = 0; group.traverse((o) => { if (o.isMesh && o.visible) n++; }); return n; })() };
 }
 window.__show = show;
 window.__count = TRUCKS.length;

@@ -131,7 +131,8 @@ function tapeFn(a, b, bare, freq = 46, twist = 1.5, wornAmt = 0.16) {
     out.copy(ph < 0.82 ? ca : cb);
     const n = vnoise(x * 55, y * 55, z * 55);
     if (n > 1 - wornAmt) out.lerp(cw, 0.8); // frayed / worn through
-    else out.multiplyScalar(0.85 + n * 0.3);
+    else out.multiplyScalar(0.62 + n * 0.3); // grubby, thumb-polished
+    out.lerp(C(0x4a4036), 0.12 + 0.2 * vnoise(x * 20, y * 20, z * 20));
     return out;
   };
 }
@@ -139,7 +140,7 @@ function tapeFn(a, b, bare, freq = 46, twist = 1.5, wornAmt = 0.16) {
 // ------------------------------------------------------------------ steering wheels (rotate about local Z)
 export function buildSteeringWheelMesh(kit, type, r, col = 0x1c1c1c, col2 = 0x9a9a92) {
   const c = kit.pieceOf('wood');
-  c.tileDefault = 0.3;
+  c.tileDefault = 0.3; c.mudFrac = 0.62;
   const wear = (paint, amt = 0.6) => ({ wear: { paint, bare: WOOD_BARE, amt }, tess: 0.03 });
   const spoke = (a, b, r0, r1, colr) => c.rod(a, b, r0, { r2: r1, seg: 6, c: colr, v: 0.08 });
   if (type === 'car') {
@@ -197,7 +198,7 @@ const PI2 = Math.PI / 2;
 // ------------------------------------------------------------------ paddles & levers (pivot at origin, rotate about X)
 export function buildPaddle(kit, col, L = 0.46, lean = 0.22) {
   const c = kit.pieceOf('wood');
-  c.tileDefault = 0.35;
+  c.tileDefault = 0.35; c.mudFrac = 0.97;
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(lean, 0, 0));
   const at = (d) => [0, Math.cos(lean) * d, Math.sin(lean) * d];
   c.cyl(0.014, 0.1, [0, 0, 0], { axis: 'x', seg: 8, c: 0x8a8a82, v: 0.1 }); // hinge pin
@@ -221,7 +222,7 @@ export function buildPaddle(kit, col, L = 0.46, lean = 0.22) {
 
 export function buildLever(kit, kind, col) {
   const c = kit.pieceOf('wood');
-  c.tileDefault = 0.3;
+  c.tileDefault = 0.3; c.mudFrac = 0.75;
   const lean = kind === 'hand' ? 0.2 : 0.12, L = kind === 'hand' ? 0.38 : 0.34;
   const dir = new THREE.Vector3(0, Math.cos(lean), Math.sin(lean));
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(lean, 0, 0));
