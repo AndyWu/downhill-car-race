@@ -28,10 +28,12 @@ export function buildPlan(world, P, rng) {
     const u = rng(); // always consumed -> deterministic stream
     const pd = P.perception.detect[h.type] ?? P.perception.detect.default ?? 1;
     let seen = u < pd;
-    if (h.type === 'rock' && h.radius < (P.perception.minRockRadius || 0)) seen = false;
+    if (h.type === 'rock' && (h.halfWidth ?? h.radius) < (P.perception.minRockRadius || 0)) seen = false;
     const W = P.hazardWeight[h.type] ?? P.hazardWeight.default ?? 0;
     if (!seen || W <= 0) continue;
-    hz.push({ s: h.s, lat: h.lateral, r: h.radius + CAR_HALF, W });
+    // real hazards are ellipses (halfLength along s, halfWidth across); mock/simple ones are circles
+    const ra = (h.halfLength ?? h.radius) + CAR_HALF, rb = (h.halfWidth ?? h.radius) + CAR_HALF;
+    hz.push({ s: h.s, lat: h.lateral, ra, rb, rm: Math.min(ra, rb), W });
   }
   const stretch = P.hazardStretch, margin = P.hazardMargin;
   const surfW = P.surfaceWeight;
@@ -43,15 +45,21 @@ export function buildPlan(world, P, rng) {
   const edge = P.line.edge;
   for (let i = 0; i < n; i++) {
     const s = i * DS;
-    const near = hz.filter((h) => Math.abs(h.s - s) < (h.r + margin) * stretch);
+    const near = hz.filter((h) => Math.abs(h.s - s) < (h.ra + margin) * stretch);
     for (let j = 0; j < K; j++) {
       const lat = (j - J) * SLOT;
       if (Math.abs(lat) > wd[i] / 2 - edge && j !== J) { hc[i * K + j] = BIG; continue; }
       let c = 0;
       for (const h of near) {
-        const d = Math.hypot((s - h.s) / stretch, lat - h.lat);
-        if (d < h.r) c += h.W * (3 + (h.r - d));
-        else if (d < h.r + margin) { const t = 1 - (d - h.r) / margin; c += h.W * t * t; }
+        const ds_ = (s - h.s) / stretch, dl = lat - h.lat;
+        const ra = h.ra, rb = h.rb;
+        const e2 = (ds_ / ra) ** 2 + (dl / rb) ** 2, ee = Math.sqrt(e2);
+        if (ee < 1) c += h.W * (3 + (1 - ee) * h.rm);
+        else {
+          const g = Math.hypot(ds_ / (ra * ra), dl / (rb * rb));
+          const d = ((ee - 1) * ee) / Math.max(1e-6, g); // first-order distance to the ellipse edge
+          if (d < margin) { const t = 1 - d / margin; c += h.W * t * t; }
+        }
       }
       if (useSurf || P.speed.useSurface) {
         const su = world.surfaceAt(cx[i] + lat * rx[i], cz[i] + lat * rz[i]);
@@ -84,6 +92,14 @@ export function buildPlan(world, P, rng) {
   const e = new Float64Array(n);
   for (let i = 0; i < n; i++) e[i] = (slot[i] - J) * SLOT;
 
+  // --- de-quantise the DP path (non-racing drivers: a few smoothing passes, bounded by the road edge) ---
+  if (P.line.mode !== 'racing') {
+    const tmp = new Float64Array(n);
+    for (let pass = 0; pass < (P.line.smooth ?? 6); pass++) {
+      for (let i = 1; i < n - 1; i++) tmp[i] = 0.25 * e[i - 1] + 0.5 * e[i] + 0.25 * e[i + 1];
+      for (let i = 1; i < n - 1; i++) e[i] = tmp[i];
+    }
+  }
   // --- minimum-curvature relaxation inside the free corridor ---
   const px = new Float64Array(n), pz = new Float64Array(n);
   for (let i = 0; i < n; i++) { px[i] = cx[i] + e[i] * rx[i]; pz[i] = cz[i] + e[i] * rz[i]; }
@@ -108,8 +124,9 @@ export function buildPlan(world, P, rng) {
 
   // --- curvature of the planned path & speed profile ---
   const kap = new Float64Array(n);
-  for (let i = 1; i < n - 1; i++) {
-    const ax = px[i] - px[i - 1], az = pz[i] - pz[i - 1], bx = px[i + 1] - px[i], bz = pz[i + 1] - pz[i];
+  for (let i = 0; i < n; i++) { px[i] = cx[i] + e[i] * rx[i]; pz[i] = cz[i] + e[i] * rz[i]; }
+  for (let i = 2; i < n - 2; i++) { // 4 m baseline: robust against sample noise
+    const ax = px[i] - px[i - 2], az = pz[i] - pz[i - 2], bx = px[i + 2] - px[i], bz = pz[i + 2] - pz[i];
     const la = Math.hypot(ax, az), lb = Math.hypot(bx, bz), lc = Math.hypot(ax + bx, az + bz);
     kap[i] = (2 * Math.abs(ax * bz - az * bx)) / Math.max(1e-6, la * lb * lc);
   }

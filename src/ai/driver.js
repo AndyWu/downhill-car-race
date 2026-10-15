@@ -22,13 +22,13 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
   const P = profile;
   rng = rng || createRng(1);
   const plan = buildPlan(world, P, rng);
-  const WB = spec?.wheelBase ?? 1.4, LOCK = spec?.steerLock ?? 0.45;
+  const WB = spec?.wheelBase ?? 1.7, LOCK = spec?.steerLock ?? 0.5;
   const L = plan.length;
 
   let t = 0, noise = 0, steerOut = 0, hbOut = 0, extra = 0;
   const queue = []; // delayed commands {t, steer, hb}
   // paddling state
-  let side = rng() < 0.5, strokeStart = -1, strokeAmp = 0, nextStroke = 0.2, stamina = 1;
+  let side = rng() < 0.5, nextStroke = 0.2, stamina = 1;
   let attentive = false, nextToggle = 0;
   // stuck recovery
   let stuckT = 0, reverseUntil = 0;
@@ -80,7 +80,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
     const curv = (2 * Math.sin(clamp(err, -1.5, 1.5))) / dist;
     const delta = Math.atan(WB * curv);
     noise += (-noise / P.steerNoiseTau) * dt + P.steerNoise * Math.sqrt((2 * dt) / P.steerNoiseTau) * normal(rng);
-    const rawSteer = clamp((P.steerGain * delta) / LOCK + noise, -1, 1);
+    const lockScale = 0.35 + 0.65 / (1 + 0.7 * (speed / 16) ** 2); // physics reduces effective lock with speed
+    const rawSteer = clamp((P.steerGain * delta) / (LOCK * lockScale) + noise, -1, 1);
 
     // ---- speed target / handbrake ----
     let rb = 1;
@@ -124,19 +125,19 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
     }
     if (hbOut > 0.05) want = 0;
     const fat = PD.stamina.minFactor + (1 - PD.stamina.minFactor) * stamina;
-    const cadence = PD.cadence * fat * (rb > 1 ? 1 + (rb - 1) : 1) * (PD.mode === 'optimal' ? want : 1);
-    if (strokeStart < 0 && want > 0 && t >= nextStroke) {
-      side = !side; strokeStart = t;
-      strokeAmp = Math.min(1, PD.strength * (0.88 + 0.12 * rng()));
-      stamina = Math.max(0, stamina - PD.stamina.drain * strokeAmp);
-      nextStroke = t + (1 / Math.max(0.3, cadence)) * (1 + PD.jitter * (rng() * 2 - 1));
-    } else if (strokeStart < 0) {
-      stamina = Math.min(1, stamina + PD.stamina.regen * dt);
-    }
+    // physics gives dv ~ 1/(1+(v/5.5)^2) per stroke, so the pro bursts hardest when slowest
+    const burst = PD.mode === 'optimal' ? Math.min(4.2 / PD.cadence, 1 + 0.4 * (1 - clamp(speed / 8, 0, 1))) : 1;
+    const cadence = PD.cadence * fat * burst * (rb > 1 ? 1 + (rb - 1) : 1) * (PD.mode === 'optimal' ? want : 1);
+    // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
+    // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;
-    if (strokeStart >= 0) {
-      const ph = (t - strokeStart) / PD.strokeDur;
-      if (ph >= 1) strokeStart = -1; else pv = strokeAmp * Math.sin(Math.PI * ph);
+    if (want > 0 && t >= nextStroke) {
+      side = !side;
+      pv = Math.min(1, PD.strength * (0.88 + 0.12 * rng()));
+      stamina = Math.max(0, stamina - PD.stamina.drain * pv);
+      nextStroke = t + (1 / Math.max(0.3, cadence)) * (1 + PD.jitter * (rng() * 2 - 1));
+    } else {
+      stamina = Math.min(1, stamina + PD.stamina.regen * dt);
     }
 
     // ---- stuck recovery ----
