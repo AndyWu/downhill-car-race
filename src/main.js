@@ -101,6 +101,7 @@ async function boot() {
   const foliageDepth = materials && materials.foliage && materials.foliage.userData && materials.foliage.userData.depthMaterial;
   if (foliageDepth && world.group) world.group.traverse((o) => { if (o.isMesh && o.material && o.material.alphaTest > 0 && !o.customDepthMaterial) o.customDepthMaterial = foliageDepth; });
 
+  if (gfx && gfx.freezeStatic && world.group) safe(() => gfx.freezeStatic(world.group), 'freezeStatic');
   const TRUCKS = (vehMod && vehMod.TRUCKS && vehMod.TRUCKS.length) ? vehMod.TRUCKS : FALLBACK_TRUCKS;
   const input = createInput(canvas);
   const audio = audioMod ? safe(() => audioMod.createAudio(), 'createAudio') : null;
@@ -157,7 +158,7 @@ async function boot() {
     if (flag) (built.parts.flagMount || built.group).add(flag.mesh);
     let ai = null;
     if (kind === 'ai') {
-      if (aiMod && aiMod.createAIDriver && AI_PROFILES.length) ai = safe(() => aiMod.createAIDriver(AI_PROFILES[aiIdx % AI_PROFILES.length], { world, rng: aiMod.createRng(1000 + aiIdx), spec }), 'createAIDriver');
+      if (aiMod && aiMod.createAIDriver && AI_PROFILES.length) ai = safe(() => aiMod.createAIDriver(AI_PROFILES[aiIdx % AI_PROFILES.length], { world, rng: aiMod.createRng(1000 + aiIdx), spec, human: () => (playerV ? playerV.body.state : null) }), 'createAIDriver');
       if (!ai) ai = simpleDriver(aiIdx);
     }
     let headlight = null;
@@ -344,7 +345,7 @@ async function boot() {
     hostLaunch();
   }
   function createHostSync(info) {
-    const sync = netMod.createSync({ role: 'host', peers: info.peers });
+    const sync = netMod.createSync({ role: 'host', peers: info.peers, world });
     game.sync = sync;
     sync.onInput((slot, f) => {
       const d = netMod.decodeInputFrame ? netMod.decodeInputFrame(f) : null; if (!d) return;
@@ -365,7 +366,7 @@ async function boot() {
     game.state.countdown = Math.max(0, (goAt - performance.now()) / 1000);
   }
   function clientReady(info) {
-    const sync = netMod.createSync({ role: 'client', peers: info.peers });
+    const sync = netMod.createSync({ role: 'client', peers: info.peers, world });
     mp.sync = sync; game.sync = sync; mp.localSlot = info.localSlot;
     mp.interp = netMod.createInterpolator();
     sync.onSnapshot((data) => { mp.interp.push(data); if (mp.predictor) mp.predictor.onSnapshot(data); });
@@ -480,7 +481,14 @@ async function boot() {
   const bodies = [];
   let netSeq = 0;
   const frameImpulse = { l: 0, r: 0 };
+  const remoteLast = new Map();
   function remoteInput(slot) {
+    if (mp.sync && mp.sync.takeInput && netMod.decodeInputFrame) {
+      // jitter-buffered: exactly one client frame per host tick; paddles cleared when the buffer repeats a frame
+      const r = mp.sync.takeInput(slot);
+      if (r && r.frame) { const d = netMod.decodeInputFrame(r.frame); remoteLast.set(slot, d); return d; }
+      return remoteLast.get(slot) ? { ...remoteLast.get(slot), paddleL: 0, paddleR: 0 } : idle;
+    }
     const cur = mp.inputs.get(slot);
     if (!cur) return idle;
     const out = { ...cur }; cur.paddleL = 0; cur.paddleR = 0; return out;
@@ -532,6 +540,7 @@ async function boot() {
       else {
         others.length = 0; for (const o of vs) if (o !== v) others.push(o.body.state);
         inp = safe(() => v.ai.think(STEP, v.body.state, others), 'ai.think') || idle;
+        if (v.ai.needsRescue) { v.body.recover(8); if (v.ai.clearStuck) v.ai.clearStuck(); }
         if (v.finished) inp = { ...idle, handbrake: 0.7 };
       }
       inp.draft = draftFactor(v.body, bodies);

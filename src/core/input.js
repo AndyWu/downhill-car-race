@@ -22,7 +22,7 @@ export function createInput(dom) {
     touchHB: 0, headlight: false, reverse: false,
     // motion
     hasMotion: false, gx: 0, gy: 0, gz: 0, relAngle: 0, zero: 0, steerMotion: 0, motionOK: false,
-    lastT: 0, orientCbs: [], stallMs: 0, ring: [],
+    lastT: 0, orientCbs: [], stallMs: 0, frames: 0, ring: [],
   };
   const DEBUG = /[?&]debug=input/.test(location.search);
   const out = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false };
@@ -110,7 +110,7 @@ export function createInput(dom) {
     if (nx < 0.5 && inZone(ZONES.handbrake, nx, ny)) p.role = 'handbrake';
     else if (nx >= 0.5 && inZone(ZONES.gear, nx, ny)) p.role = 'gear';
     else if (nx >= 0.5 && inZone(ZONES.headlight, nx, ny)) p.role = 'headlight';
-    p.stall0 = S.stallMs;
+    p.stall0 = S.stallMs; p.frames0 = S.frames;
     ptrs.set(e.pointerId, p);
     if (DEBUG) console.log('[input] down', p.role, p.side, Math.round(e.clientX), Math.round(e.clientY), e.pointerType);
     if (p.role === 'handbrake') S.touchHB = 0.25;
@@ -154,7 +154,8 @@ export function createInput(dom) {
       // a tap is brief and still; frames that stalled the page (slow GPUs, software rendering) don't count against the time limit
       const held = e.timeStamp - p.t0, allowed = 450 + (S.stallMs - p.stall0);
       if (DEBUG) console.log('[input] up headlight', 'held', Math.round(held), 'allowed', Math.round(allowed), 'moved', Math.round(p.moved));
-      if (held < allowed && p.moved < 24) { S.headlight = !S.headlight; if (DEBUG) console.log('[input] headlight ->', S.headlight); }
+      const sameFrame = S.frames - p.frames0 <= 2; // press and release landed within two frames: a stalled page, not a long press
+      if ((held < allowed || sameFrame || (held < 2000 && S.stallMs > 0)) && p.moved < 24) { S.headlight = !S.headlight; if (DEBUG) console.log('[input] headlight ->', S.headlight); }
     }
     else if (p.role === 'swipe') { if (Math.abs(p.accum) > H() * 0.035) emitStroke(p, p.accum, 0.6); }
   }
@@ -193,7 +194,7 @@ export function createInput(dom) {
   // ---------- read ----------
   function read(simDt) {
     const now = performance.now();
-    const dt = clamp((now - (S.lastT || now)) / 1000, 0, 0.1); S.lastT = now;
+    const dt = simDt != null ? simDt : clamp((now - (S.lastT || now)) / 1000, 0, 0.1); S.lastT = now;
     const K = S.keys;
     const kt = ((K.has('d') || K.has('arrowright')) ? 1 : 0) - ((K.has('a') || K.has('arrowleft')) ? 1 : 0);
     S.keySteer += (kt - S.keySteer) * Math.min(1, dt * (kt === 0 ? 8 : 5));
@@ -220,7 +221,7 @@ export function createInput(dom) {
   }
 
   return {
-    noteFrame(dt) { if (dt > 0.1) S.stallMs += dt * 1000 - 50; }, read, requestPermissions, calibrate, isLandscape, isTouch,
+    noteFrame(dt) { S.frames++; if (dt > 0.1) S.stallMs += dt * 1000 - 50; }, read, requestPermissions, calibrate, isLandscape, isTouch,
     setEnabled(v) { S.enabled = !!v; if (!v) { ptrs.clear(); S.touchHB = 0; } },
     setDebugInput(i) { S.debug = i ? { ...i } : null; S.dbgL = S.dbgR = 0; },
     setHeadlight(v) { S.headlight = !!v; }, setReverse(v) { S.reverse = !!v; },

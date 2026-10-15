@@ -16,7 +16,7 @@ const errors = [];
 const open = async (qs, touch = false) => {
   const ctx = await browser.newContext({ viewport: touch ? { width: 1180, height: 820 } : { width: 640, height: 360 }, hasTouch: touch });
   const p = await ctx.newPage();
-  p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  p.on('console', (m) => { if (process.env.VERBOSE && /input/.test(m.text())) console.log(m.text()); if (m.type() === 'error') errors.push(m.text()); });
   p.on('pageerror', (e) => errors.push('pageerror ' + e.message));
   await p.goto(`${base}/${qs}`);
   await p.waitForFunction(() => window.__game && window.__game.state.mode === 'race', null, { timeout: 120000 });
@@ -25,7 +25,7 @@ const open = async (qs, touch = false) => {
 
 // 1. headlight tap with synthetic touch (start+end back-to-back, page possibly stalled by slow frames)
 {
-  const { p, ctx } = await open('?autostart=1&ai=0&q=low', true);
+  const { p, ctx } = await open('?autostart=1&ai=0&q=low&debug=input', true);
   const cdp = await ctx.newCDPSession(p);
   const before = await p.evaluate(() => window.__game.input.read().headlight);
   for (let n = 0; n < 2; n++) {
@@ -38,6 +38,26 @@ const open = async (qs, touch = false) => {
   await ctx.close();
 }
 
+// 1b. tilt calibration from the pre-GO buffer: already turned 20 deg during the countdown must read as zero at GO
+{
+  const { p, ctx } = await open('?autostart=1&ai=0&q=low&norender=1', true);
+  const r = await p.evaluate(async () => {
+    const g = window.__game; g.startRace({ ai: 0, countdown: 1 });
+    const fire = (a) => window.dispatchEvent(Object.assign(new Event('devicemotion'), { accelerationIncludingGravity: { x: -Math.sin(a) * 9.8, y: Math.cos(a) * 9.8, z: 0 } }));
+    for (let i = 0; i < 40; i++) fire(0.35);   // 20 deg of wheel already applied while the countdown runs
+    g.advance(1.2);                              // GO happens inside: calibration uses the buffered samples
+    for (let i = 0; i < 30; i++) fire(0.35);
+    let s0 = 0; for (let i = 0; i < 60; i++) s0 = g.input.read(1 / 60).steer;
+    for (let i = 0; i < 40; i++) fire(0.35 + 0.35);
+    let s1 = 0; for (let i = 0; i < 60; i++) s1 = g.input.read(1 / 60).steer;
+    return { s0, s1 };
+  });
+  console.log(JSON.stringify(r));
+  check(Math.abs(r.s0) < 0.05, 'pose held at GO reads zero steer (' + r.s0.toFixed(3) + ')');
+  check(r.s1 > 0.3 && r.s1 < 0.6, 'a further 20 deg turn reads ~0.4 steer (' + r.s1.toFixed(3) + ')');
+  await ctx.close();
+}
+
 // 2. deterministic paddle vs coast
 {
   const { p, ctx } = await open('?autostart=1&ai=0&q=low&norender=1');
@@ -45,7 +65,7 @@ const open = async (qs, touch = false) => {
   for (const truck of [0, 3, 6]) {
     const row = await p.evaluate((t) => {
       const g = window.__game; g.startRace({ truck: t, ai: 0, countdown: 0 });
-      const run = (inp) => { g.setDebugInput(inp); g.teleport(100, 2); g.advance(0.05); const s0 = g.state.s; g.advance(10); return +(g.state.s - s0).toFixed(1); };
+      const run = (inp) => { g.setDebugInput(inp); g.teleport(430, 2); g.advance(0.05); const s0 = g.state.s; g.advance(10); return +(g.state.s - s0).toFixed(1); };
       const coast = run({ steer: 0 }), pad1 = run({ steer: 0, paddleL: 1, paddleR: 1 }), pad2 = run({ steer: 0, paddleL: 1, paddleR: 1 });
       g.setDebugInput(null);
       return { truck: g.vehicles[0].spec.id, coast, pad1, pad2 };
@@ -59,7 +79,7 @@ const open = async (qs, touch = false) => {
 
 // 3. finish card: AI keep racing, nobody is DNF the instant the player finishes
 {
-  const { p, ctx } = await open('?autostart=1&ai=3&q=low&s=3050&v=12&norender=1');
+  const { p, ctx } = await open('?autostart=1&ai=3&q=low&s=3100&v=12&norender=1');
   const r = await p.evaluate(async () => {
     const g = window.__game; g.setDebugInput({ steer: 0, paddleL: 1, paddleR: 1 });
     for (let i = 0; i < 60 && !g.state.finished; i++) g.advance(1);
