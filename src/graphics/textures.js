@@ -133,8 +133,8 @@ export const RECIPES = {
   gravel(size, aniso) {
     return bake('gravel', size, (u, v, c) => {
       const soil = fbm(u, v, 6, 6, 3, 161);
-      worley(u, v, 14, 162, W);
-      const id = W.id, rad = 0.36 + 0.3 * hash2(Math.floor(id * 1e4), 5, 6);
+      worley(u, v, 30, 162, W);
+      const id = W.id, rad = 0.3 + 0.28 * hash2(Math.floor(id * 1e4), 5, 6);
       const q = W.f1 / rad;
       let h = 0.15 + soil * 0.1, ao = 0.5 + 0.2 * soil;
       lerp3(c, 0.2, 0.165, 0.125, 0.27, 0.22, 0.16, soil);
@@ -149,13 +149,13 @@ export const RECIPES = {
         const t = 0.8 + 0.4 * fbm(u, v, 40, 40, 2, 163);
         const edge = smoothstep(0.0, 0.25, dome);
         c.r = mix(c.r, r * t, edge); c.g = mix(c.g, g * t, edge); c.b = mix(c.b, b * t, edge);
-        h += dome * 0.7 * (0.6 + 0.4 * pick); ao = mix(ao, 0.75 + 0.25 * dome, edge); rough = mix(0.95, 0.72 + 0.2 * pick, edge);
+        h += dome * 0.45 * (0.5 + 0.5 * pick); ao = mix(ao, 0.72 + 0.28 * dome, edge); rough = mix(0.95, 0.72 + 0.2 * pick, edge);
       }
-      worley(u, v, 33, 164, W);
-      if (W.f1 < 0.28 && W.id < 0.5) { const d = 1 - W.f1 / 0.28; c.r = mix(c.r, 0.36, d * 0.5); c.g = mix(c.g, 0.34, d * 0.5); c.b = mix(c.b, 0.31, d * 0.5); h += d * 0.12; }
+      worley(u, v, 62, 164, W);
+      if (W.f1 < 0.3 && W.id < 0.6) { const d = 1 - W.f1 / 0.28; c.r = mix(c.r, 0.36, d * 0.5); c.g = mix(c.g, 0.34, d * 0.5); c.b = mix(c.b, 0.31, d * 0.5); h += d * 0.12; }
       mul(c, 0.9 + 0.2 * vnoise(u * 128, v * 128, 128, 128, 165));
       c.h = clamp(h); c.rough = rough; c.ao = ao;
-    }, { normalStrength: 5, aniso });
+    }, { normalStrength: 3, aniso });
   },
 
   // ---------------------------------------------------------------- tileable ripple normal for water

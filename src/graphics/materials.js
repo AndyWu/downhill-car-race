@@ -97,7 +97,7 @@ export function createMaterials(renderer, opts = {}) {
   M.water = timed(new THREE.MeshStandardMaterial({
     name: 'water', color: new THREE.Color(0x232619), roughness: 0.04, metalness: 0.0,
     normalMap: T.water.normalMap, normalScale: new THREE.Vector2(0.22, 0.22),
-    transparent: true, opacity: 0.97, depthWrite: false, envMapIntensity: 0.9,
+    transparent: true, opacity: 0.97, depthWrite: false, envMapIntensity: 0.65,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, // decal-like: sits on terrain without z-fighting
   }));
   M.water.onBeforeCompile = (shader) => {
@@ -117,7 +117,7 @@ export function createMaterials(renderer, opts = {}) {
 		vec2 gruv = grc.xy / grc.w * 0.5 + 0.5 + ( normal.xy - nonPerturbedNormal.xy ) * 0.08;
 		vec3 grcol = texture2D( gfxReflTex, gruv ).rgb;
 		float gfres = 0.12 + 0.88 * pow( 1.0 - saturate( dot( normal, geometryViewDir ) ), 4.0 );
-		reflectedLight.indirectSpecular = grcol * gfres * 1.25;
+		reflectedLight.indirectSpecular = grcol * vec3( 0.78, 0.84, 0.76 ) * gfres * 1.1;
 	}`).replace('#include <normal_fragment_maps>', /* glsl */`
 	{
 		vec2 wuv = vNormalMapUv; float t = gfxTime;

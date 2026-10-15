@@ -91,3 +91,12 @@ puddle's `y` as it changes. Without it, water falls back to PMREM sky reflection
 * MSAA 4 half-float target is the main memory/bandwidth cost: `createPostFX(..., { msaa: 0 })` on weak devices.
 * Shadow map 2048 (`setShadowMapSize(1024)` to save). Spot headlight adds a 512 shadow map while on.
 * Bloom threshold 1.0 on HDR (only suns, glints, headlight bloom).
+
+## Round 2 additions
+
+* **Quality tiers** (`?q=low|medium|default|high`, read by the graphics module; `quality.js`): low = scene target 0.7x (floor 0.5), DPR 1, no MSAA/bloom/planar reflection/refraction/motion blur, BasicShadowMap 1024, no parallax, 256 textures, aniso 1, no headlight shadows. medium = 0.85x, no MSAA, bloom, reflection at 0.3x, 1536 shadows, 6-step parallax, aniso 4. default = full. SwiftShader 1024x768 real game, 5 AI, median frame: low ~0.3 s, medium ~0.5 s, default ~2.2 s (shared 4-core box, noisy).
+* **Wet mud** (`materials.mud`, `wetmud.js`): global wetness `mud.userData.wet.value` / `mats.setWetness(v)`; steep parallax (tier steps) 5 cm deep for UV unit = 2.4 m; tyre ruts with herringbone tread hold standing water (roughness 0.04, flat, rippled); albedo x0.55 in wet masks. Height is stored in the ORM texture alpha.
+* **Mud coat**: `mats.applyMudCoat(truckGroup | material)` -> `{set, add, get}` (see docs/requests.md).
+* `materials.gravel` (grey/brown stones + AO). Anti-tiling macro variation on dirt/grass/sand/gravel/rock. Wood/barn crevice grime, edge wear, mildew, rain streaks.
+* Water: wet dark rim from vertex alpha; planar reflection no longer feeds back into itself (also works with scene-made clones).
+* Headlight: near-field attenuation clamp (global `lights_pars_begin` patch), decay 1.3, `intensity` option keeps the old 2600 scale; at most 2 shadow-casting headlights. Bloom threshold 1.4 with a 10x radiance clamp; dusk has no stars (stars fade in only near night).

@@ -23,10 +23,10 @@ export const TIME_PRESETS = {
     cover: 0.42, cloudLit: C(0xffc890), cloudShade: C(0x6a6f8c), glow: 0.7, disc: 40, stars: 0, night: 0,
   },
   dusk: {
-    elev: 0.8, azim: 95, sunColor: C(0xff6a38), sunInt: 1.5,
-    hemiSky: C(0x4d5d8e), hemiGround: C(0x2c2530), hemiInt: 0.45,
+    elev: 0.8, azim: 95, sunColor: C(0xff6a38), sunInt: 2.2,
+    hemiSky: C(0x6070a0), hemiGround: C(0x3a3038), hemiInt: 0.85,
     zenith: C(0x1c2a58), horizon: C(0xd6805f), ground: C(0x38303a), haze: C(0xc8688a),
-    fog: C(0x8a6a78), fogDensity: 0.0052, fogSun: C(0xd05a30), exposure: 1.15, env: 0.3,
+    fog: C(0x8a6a78), fogDensity: 0.0052, fogSun: C(0xd05a30), exposure: 1.3, env: 0.45,
     cover: 0.35, cloudLit: C(0xff8a68), cloudShade: C(0x3a3e66), glow: 0.9, disc: 30, stars: 0, night: 0.55,
   },
   night: {
