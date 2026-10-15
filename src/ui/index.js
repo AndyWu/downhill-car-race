@@ -71,6 +71,7 @@ export function createUI(root, opts = {}) {
     const r = await cb('onGyro'); api.setGyroState(r === false ? 'denied' : 'granted');
   } }, 'Tap to hold the wheel');
   const btn = (label, cls, fn, sub) => h('button', { class: `sbd-btn ${cls || ''}`, onClick: (e) => { tryLock(); fn(e); } }, label, sub ? h('small', {}, sub) : null);
+  const offlineMark = h('div', { class: 'sbd-offline' }, '\u2713 ready to race offline');
   mk('title', 'sbd-barn sbd-title-screen',
     h('div', { class: 'sbd-ply sbd-sign' },
       h('h1', { class: 'sbd-title' }, 'Soap Box', h('span', {}, 'DERBY')),
@@ -82,7 +83,7 @@ export function createUI(root, opts = {}) {
       btn('Join Race', '', () => cb('onJoin'), 'scan the host’s code'),
       btn('Garage', '', () => api.show('garage')),
       btn('Family Pass', '', () => { api.show('familypass'); cb('onFamilyPass'); })),
-    gyroBtn);
+    gyroBtn, offlineMark);
 
   // ---------- garage ----------
   let gi = 0;
@@ -132,6 +133,7 @@ export function createUI(root, opts = {}) {
   const stepsEl = h('ol', { class: 'sbd-steps' });
   const qrBox = h('div', { class: 'sbd-qrbox' }, h('div', { class: 'ph' }, 'Code appears here'));
   const caption = h('div', { class: 'sbd-caption' });
+  const actions = h('div', { class: 'sbd-actions' });
   const seatsEl = h('ul', { class: 'sbd-seats' });
   const statusEl = h('div', { class: 'sbd-status' });
   const lobbyTitle = h('h2', {}, 'Family Race');
@@ -144,7 +146,7 @@ export function createUI(root, opts = {}) {
   }
   mk('lobby', 'sbd-barn sbd-lobby',
     h('div', { class: 'sbd-ply sbd-modal' }, lobbyTitle,
-      h('div', { class: 'sbd-lobby-cols' }, stepsEl, h('div', { class: 'sbd-qrcol' }, qrBox, caption), seatsEl),
+      h('div', { class: 'sbd-lobby-cols' }, stepsEl, h('div', { class: 'sbd-qrcol' }, qrBox, caption, actions), seatsEl),
       statusEl,
       h('div', { class: 'sbd-foot' }, btn('Back', 'small chalk', () => { cb('onLobbyBack'); api.show('title'); }), startBtn)));
 
@@ -235,6 +237,10 @@ export function createUI(root, opts = {}) {
       qrBox.append(h('div', { class: 'sbd-reticle' }, h('b'), h('i')));
       caption.textContent = text;
     },
+    /** Slot under the QR caption for the net lobby's button bar (element or null to clear). */
+    setLobbyActions(el) { actions.replaceChildren(); if (el) actions.append(el); },
+    /** Shows a small chalk "ready to race offline" mark on the title screen. */
+    setOfflineReady(b) { offlineMark.classList.toggle('on', !!b); },
     clearQR() { api.showQR(null, ''); },
     setCaption(t) { caption.textContent = t; },
     setLobbyStatus(t) { statusEl.textContent = t || ''; },

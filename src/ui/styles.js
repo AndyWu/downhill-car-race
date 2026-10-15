@@ -74,6 +74,10 @@ export const CSS = `
 .sbd-gyro { position: absolute; left: 50%; bottom: calc(var(--sab) + 2*var(--u)); transform: translateX(-50%); font-size: calc(2.6*var(--u)); text-align: center; }
 .sbd-gyro.ok { opacity: .8; border-color: var(--paint-green); }
 
+.sbd-actions { flex:0 0 auto; display:flex; gap: calc(1*var(--u)); flex-wrap:wrap; justify-content:center; max-height: calc(12*var(--u)); overflow:auto; }
+.sbd-actions:empty { display:none; }
+.sbd-offline { position:absolute; right: calc(var(--sar) + 3*var(--u)); bottom: calc(var(--sab) + 2.4*var(--u)); font-size: calc(2.3*var(--u)); color: var(--chalk); opacity:0; transform: rotate(-2deg); text-shadow: 0 0 .5vmin rgba(255,255,255,.35); transition: opacity .5s; pointer-events:none; }
+.sbd-offline.on { opacity:.85; }
 /* garage */
 .sbd-garage { flex-direction: column; gap: calc(1.6*var(--u)); }
 .sbd-head { display:flex; align-items:center; justify-content:space-between; gap: calc(2*var(--u)); }
