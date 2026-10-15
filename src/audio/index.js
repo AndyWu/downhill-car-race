@@ -13,7 +13,7 @@ const SURF = {
   dirt:   { f: 900,  q: 0.8, g: 0.10, rate: 3.0, gf: 1400, gq: 1.2, hiss: 0.0 },
   gravel: { f: 2200, q: 0.7, g: 0.14, rate: 6.0, gf: 3200, gq: 0.9, hiss: 0.0 },
   rock:   { f: 500,  q: 1.5, g: 0.09, rate: 1.4, gf: 700,  gq: 2.5, hiss: 0.0 },
-  sand:   { f: 1100, q: 0.7, g: 0.2, rate: 0.5, gf: 800, gq: 0.6, hiss: 0.6 },
+  sand:   { f: 1400, q: 0.7, g: 0.2, rate: 0.5, gf: 800, gq: 0.6, hiss: 0.6 },
   mud:    { f: 260,  q: 1.8, g: 0.14, rate: 1.2, gf: 320,  gq: 3.0, hiss: 0.0 },
   water:  { f: 1800, q: 0.6, g: 0.16, rate: 4.0, gf: 2600, gq: 0.7, hiss: 0.5 },
   grass:  { f: 1200, q: 0.5, g: 0.06, rate: 1.0, gf: 2000, gq: 0.6, hiss: 0.4 },
@@ -298,7 +298,7 @@ export function createAudio(options = {}) {
       n.rollGain.gain.setTargetAtTime(rollG, t, tc);
       n.rollBP.frequency.setTargetAtTime(S.f * (0.7 + sp * 0.7), t, 0.1);
       n.rollBP.Q.setTargetAtTime(S.q, t, 0.1);
-      n.hissHP.frequency.setTargetAtTime(surfName === 'sand' ? 1700 : 3000, t, 0.1);
+      n.hissHP.frequency.setTargetAtTime(surfName === 'sand' ? 2000 : 3000, t, 0.1);
       n.hissGain.gain.setTargetAtTime(S.hiss * 0.1 * sp * ground, t, tc);
       if (ground > 0.1 && speed > 0.8) {
         const rate = S.rate * speed * ground * 0.8, v = 0.55 * Math.min(1, 0.3 + sp);
