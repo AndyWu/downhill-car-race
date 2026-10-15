@@ -153,6 +153,21 @@ async function main() {
   const ready = await host.evaluate(() => window.lobbyReady);
   check(ready && ready.n === 2 && ready.players.length === 3, `host onReady with ${ready?.n} peers: ${ready?.players.map((p) => p.name).join(', ')}`);
 
+  // ---------------- 4. Agent 4 UI slot adapter ----------------
+  console.log('4) Lobby driving the UI slot API (mock ui object)');
+  const calls = await client2.evaluate(async () => {
+    const calls = [];
+    const ui = {};
+    for (const m of ['setLobbyRole', 'setLobbySteps', 'showQR', 'showScanner', 'clearQR', 'setCaption', 'setLobbyStatus', 'setPlayers', 'setStartEnabled']) ui[m] = (...a) => calls.push([m, a[0] instanceof HTMLCanvasElement ? 'canvas' : a[0]]);
+    const l = net.createLobby({ role: 'host', ui, camera: false, name: 'Mum' });
+    l.start();
+    await new Promise((r) => { const iv = setInterval(() => { if (l.state.offerCode) { clearInterval(iv); r(); } }, 50); });
+    l.close({ keepPeers: false });
+    return calls;
+  });
+  const names = new Set(calls.map((c) => c[0]));
+  check(names.has('setLobbyRole') && calls.some((c) => c[0] === 'showQR' && c[1] === 'canvas') && names.has('setPlayers') && names.has('setLobbySteps') , `adapter called ${[...names].join(', ')}`);
+
   await browser.close();
   console.log(failed ? `\n${failed} check(s) FAILED` : '\nall loopback checks passed');
   process.exitCode = failed ? 1 : 0;

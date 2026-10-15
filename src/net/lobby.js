@@ -1,13 +1,17 @@
 // Lobby state machine: hotspot instructions → QR offer/answer exchange → locked-in peers.
 //
-// UI adapter: if `ui.renderLobby(state, actions)` exists it is called on every state change
-// (Agent 4 renders it in the game's style). Otherwise the fallback modal in lobbyView.js is used.
+// UI, in order of preference:
+//   1. ui.renderLobby(state, actions) — called on every state change;
+//   2. Agent 4's slot API (ui.showQR / setLobbySteps / showScanner …) via lobbyUiAdapter.js —
+//      in this mode start() goes straight past the hotspot screen (the steps stay listed);
+//   3. otherwise the fallback modal in lobbyView.js.
 
 import { hostCreateOffer, hostAcceptAnswer, clientAcceptOffer } from './peer.js';
 import { unpackSdp } from './sdpPack.js';
 import { createScanner } from './qr.js';
 import { LOBBY_COPY } from './lobbyCopy.js';
 import { createLobbyView } from './lobbyView.js';
+import { isAgent4UI, createUiAdapter } from './lobbyUiAdapter.js';
 
 const CONNECT_TIMEOUT_MS = 20000;
 
@@ -24,6 +28,7 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
   let scanner = null;
   let view = null;
   let closed = false;
+  const adapter = !ui?.renderLobby && isAgent4UI(ui) ? createUiAdapter(ui, { name }) : null;
 
   const state = {
     role, phase: 'idle', tag, slot: isHost ? 0 : null,
@@ -43,6 +48,7 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
     stateCbs.forEach((cb) => cb(state));
     if (closed) return;
     if (ui?.renderLobby) ui.renderLobby(state, actions);
+    else if (adapter) adapter.render(state, actions);
     else if (typeof document !== 'undefined' && ui !== false) { view ??= createLobbyView(root); view.render(state, actions); }
   }
   const setPhase = (p) => { state.phase = p; state.error = null; render(); };
@@ -57,7 +63,7 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
   function stopCamera() { scanner?.stop(); state.cameraOn = false; }
   async function flipCamera() { await scanner?.flip(); render(); }
 
-  function start() { closed = false; setPhase('radio'); }
+  function start() { closed = false; setPhase('radio'); if (adapter) begin(); }
 
   async function begin() {
     if (isHost) { setPhase('offering'); startCamera(); await offerNext(); }
@@ -157,6 +163,7 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
     for (const [s, p] of slots) if (!keepPeers || p.state !== 'open') { p.close(); slots.delete(s); }
     if (!keepPeers) { peers.forEach((p) => p.close()); peers.clear(); }
     ui?.renderLobby?.({ ...state, phase: 'closed' }, actions);
+    adapter?.render({ ...state, phase: 'closed' }, actions);
   }
 
   return {
