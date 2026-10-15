@@ -81,6 +81,7 @@ function show(i, view) {
 }
 window.__show = show;
 window.__count = TRUCKS.length;
+window.__specs = TRUCKS.map((t) => ({ id: t.id, number: t.number, flagColor: t.flagColor }));
 window.__ready = true;
 const i = q.get('truck');
 if (i !== null) window.__info = show(+i, q.get('view') || 'ext');

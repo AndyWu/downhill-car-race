@@ -30,13 +30,14 @@ function qNorm(q) { const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1; q[0] /= l
 /**
  * @param {{ body, slot:number, maxHistory?:number, smoothHalfLifeMs?:number, snapDistance?:number, softGain?:number }} o
  */
-export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs = 120, snapDistance = 6, softGain = 0.15 } = {}) {
+export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs = 120, snapDistance = 6, softGain = 0.15, deadband = 0.2 } = {}) {
   const history = []; // { seq, dt, input }
   const errPos = [0, 0, 0];
   const errQ = [0, 0, 0, 1];
   const arr = new Float32Array(STATE_FLOATS);
+  const saved = new Float32Array(STATE_FLOATS);
   let autoSeq = 0;
-  const stats = { reconciles: 0, replayed: 0, lastError: 0, snaps: 0 };
+  const stats = { reconciles: 0, replayed: 0, lastError: 0, maxError: 0, corrections: 0, skipped: 0, snaps: 0 };
   const pose = { position: [0, 0, 0], quaternion: [0, 0, 0, 1] };
 
   const curPos = () => { const p = body.state.position; return [p.x, p.y, p.z]; };
@@ -87,6 +88,7 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
         for (let i = history.length - 1; i >= 0; i--) if ((history[i].seq & 255) === ack) { idx = i; break; }
         if (idx < 0) return false; // ack older than our history, or not yet seen
         history.splice(0, idx + 1);
+        body.serialize(saved, 0);
         body.serialize(arr, 0);
         arr[0] = data[b + 1]; arr[1] = data[b + 2]; arr[2] = data[b + 3];
         arr[3] = data[b + 4]; arr[4] = data[b + 5]; arr[5] = data[b + 6]; arr[6] = data[b + 7];
@@ -103,9 +105,18 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
       }
       stats.reconciles++;
       // convert the jump into a decaying visual offset
-      const p = curPos(), q = curQuat();
-      const e = [bp[0] - p[0], bp[1] - p[1], bp[2] - p[2]];
-      stats.lastError = Math.hypot(e[0], e[1], e[2]);
+      let p = curPos(), q = curQuat();
+      let e = [bp[0] - p[0], bp[1] - p[1], bp[2] - p[2]];
+      const err = Math.hypot(e[0], e[1], e[2]);
+      // Compact (quantised, ~5 cm) records: ignore differences inside the quantisation deadband.
+      if (ack >= 0 && data[b + 14] === 0 && err < deadband) {
+        body.deserialize(saved, 0);
+        stats.skipped++;
+        return true;
+      }
+      stats.lastError = err;
+      stats.maxError = Math.max(stats.maxError, err);
+      if (err > 0.01) stats.corrections++;
       if (stats.lastError > snapDistance) { errPos.fill(0); errQ[0] = errQ[1] = errQ[2] = 0; errQ[3] = 1; stats.snaps++; }
       else {
         errPos[0] = e[0]; errPos[1] = e[1]; errPos[2] = e[2];

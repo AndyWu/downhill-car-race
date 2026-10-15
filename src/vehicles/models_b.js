@@ -1,7 +1,7 @@
 // Trucks 6-10: Door Dasher, Crate Comet, Tin Lizzie, Ladder Larry, Sled Dog
 import * as THREE from 'three';
 import { DECAL } from './textures.js';
-import { slatCrate } from './helpers.js';
+import { slatCrate, spareWheel } from './helpers.js';
 
 const PI = Math.PI;
 
@@ -90,7 +90,7 @@ const crateComet = {
     for (const sx of [-1, 1]) {
       k.paint.box([0.012, 0.17, 0.78], [sx * 0.296, -0.02, 0.2], { c: 0xf0ebe0, v: 0.02 });
       k.paint.decal(DECAL.comet, [sx * 0.303, 0.0, 0.24], 0.5, 0.25, { r: [0, sx * PI / 2, 0] });
-      k.paint.decal(DECAL.n13, [sx * 0.303, -0.02, -0.08], 0.14, 0.14, { r: [0, sx * PI / 2, 0] });
+      k.paint.decal(DECAL.n21, [sx * 0.303, -0.02, -0.08], 0.14, 0.14, { r: [0, sx * PI / 2, 0] });
       k.paint.box([0.012, 0.15, 0.5], [sx * 0.256, 0.0, -0.66], { c: 0xc1272d });
       k.paint.decal(DECAL.flames, [sx * 0.263, 0.0, -0.66], 0.4, 0.17, { r: [0, sx * PI / 2, 0] });
     }
@@ -114,8 +114,10 @@ const crateComet = {
     }
     k.rope.lash([0, 0.0, 0.76], 'z', 0.19, 0.04, 4);
     // tall flame billboard on the tail: red board with flames, readable from behind
-    k.paint.box([0.56, 0.62, 0.02], [0, 0.4, 0.68], { c: 0xc1272d, r: [-0.1, 0, 0] });
-    k.paint.decal(DECAL.flames, [0, 0.36, 0.693], 0.5, 0.45, { r: [-0.1, 0, 0] });
+    k.paint.box([0.7, 0.8, 0.02], [0, 0.5, 0.68], { c: 0xc1272d, r: [-0.1, 0, 0] });
+    k.paint.box([0.7, 0.12, 0.022], [0, 0.82, 0.683], { c: 0xf0ebe0, r: [-0.1, 0, 0] });
+    k.paint.decal(DECAL.n21, [0, 0.58, 0.693], 0.4, 0.4, { r: [-0.1, 0, 0] });
+    k.paint.decal(DECAL.flames, [0, 0.28, 0.693], 0.5, 0.26, { r: [-0.1, 0, 0] });
     for (const x of [-0.22, 0.22]) k.wood.bar([x, -0.03, 0.62], [x, 0.4, 0.68], 0.03, 0.03, { c: 0xa68c62 });
     // backrest crate lid
     k.wood.box([0.5, 0.3, 0.02], [0, 0.25, 0.63], { c: 0xc8b084, r: [-0.15, 0, 0] });
@@ -187,6 +189,7 @@ const tinLizzie = {
     k.paint.decal(DECAL.n88, [0.009, LZ.cy + 0.6, 1.35], 0.3, 0.3, { r: [0, PI / 2, 0] });
     k.paint.decal(DECAL.n88, [-0.009, LZ.cy + 0.6, 1.35], 0.3, 0.3, { r: [0, -PI / 2, 0] });
     k.metal.rivets([0, LZ.cy + 0.26, 1.15], [0, LZ.cy + 0.7, 1.45], 6, 0.008);
+    spareWheel(k, [0, LZ.cy + 0.3, 1.52], 0.24, 'bike');
     // tub interior: floor boards and seat box
     k.wood.box([0.34, 0.025, 1.0], [0, -0.2, 0.1], { c: 0xb59c70 });
     k.wood.box([0.34, 0.3, 0.3], [0, -0.06, 0.44], { c: 0xa68c62 });
@@ -250,7 +253,6 @@ const ladderLarry = {
     k.wood.bar([0.0, 0.31, -0.93], [0.05, 0.31, -0.76], 0.02, 0.012, { c: 0xb09468 }); // brush handle
     k.paint.box([0.045, 0.02, 0.05], [-0.0, 0.31, -0.96], { c: 0x5a4a3a });
     k.rope.tube([[-0.26, 0.28, -0.6], [0.0, 0.42, -0.62], [0.26, 0.28, -0.6]], 0.007, { c: 0x181818, uvScale: 1 });
-    k.paint.decal(DECAL.n3, [0.0, 0.287, -0.85], 0.001, 0.001);
     k.paint.decal(DECAL.plateA, [0.282, 0.2, -0.78], 0.2, 0.13, { r: [0, PI / 2, 0] });
     // seat: paint bucket rides on the rungs; tail with a red rag and reflector tape
     k.rope.lash([0, -0.04, 0.37], 'z', 0.19, 0.06, 5);
@@ -259,7 +261,7 @@ const ladderLarry = {
     for (let i = 0; i < 6; i++) k.paint.cyl(0.011, 0.4, [0, 0.1 + i * 0.19, 1.31 + i * 0.019], { axis: 'x', seg: 6, c: 0xc8ccd0 });
     k.paint.box([0.5, 0.3, 0.01], [0.08, 1.05, 1.44], { c: 0xe8352a, r: [0, 0, 0.05] });
     k.paint.box([0.5, 0.1, 0.012], [0.08, 1.0, 1.44], { c: 0xf2c200, r: [0, 0, 0.05] });
-    k.paint.decal(DECAL.checker, [0.0, -0.1, 1.5], 0.0001, 0.0001);
+    k.paint.decal(DECAL.n4, [0.08, 1.07, 1.452], 0.22, 0.22, { r: [0, 0, 0.05] });
     // paddle/lever mount planks
     k.wood.box([0.6, 0.03, 0.12], [0, -0.065, -0.4], { c: 0xb59c70 });
   },
@@ -323,7 +325,7 @@ const sledDog = {
       const a = -1.2 + i * 0.16; // fur tufts along the nose edge
       k.paint.sph(0.035, [Math.sin(a) * 0.3, bedY(-1.25) + 0.16, -1.31 + Math.cos(a) * 0.04], { seg: 5, c: i % 3 ? 0xe8e4dc : 0xb8b4aa, s: [1, 1, 0.8] });
     }
-    k.paint.decal(DECAL.n13, [0, bedY(-0.95) + 0.012, -0.95], 0.26, 0.26, { r: [-PI / 2 + Math.atan(-bedSlope(-0.95)) * 0, 0, 0] });
+    k.paint.decal(DECAL.n10, [0, bedY(-0.95) + 0.012, -0.95], 0.26, 0.26, { r: [-PI / 2 + Math.atan(-bedSlope(-0.95)) * 0, 0, 0] });
     k.paint.decal(DECAL.plateB, [0.322, 0.04, 0.5], 0.3, 0.19, { r: [0, PI / 2, 0] });
     // sheepskin seat pad and backrest sack
     k.paint.box([0.42, 0.04, 0.36], [0, 0.05, 0.36], { c: 0xe4dccc, v: 0.04 });
@@ -333,7 +335,7 @@ const sledDog = {
     for (const sx of [-1, 1]) k.paint.bar([sx * 0.28, 0.05, 0.9], [sx * 0.26, 0.95, 1.1], 0.045, 0.04, { c: 0x2f6fb5 });
     k.paint.box([0.64, 0.05, 0.05], [0, 0.95, 1.1], { c: 0x2f6fb5 });
     k.paint.box([0.5, 0.42, 0.02], [0, 0.72, 1.08], { c: 0x2f6fb5, r: [-0.12, 0, 0] });
-    k.paint.decal(DECAL.n13, [0, 0.72, 1.093], 0.34, 0.34, { r: [-0.12, 0, 0] });
+    k.paint.decal(DECAL.n10, [0, 0.72, 1.093], 0.34, 0.34, { r: [-0.12, 0, 0] });
     k.rope.lash([0, 0.95, 1.1], 'x', 0.03, 0.4, 8);
     // lamp mount
     k.wood.box([0.14, 0.06, 0.26], [0, bedY(-1.15) + 0.1, -1.13], { c: 0xa68c62, r: [Math.atan(-bedSlope(-1.15)), 0, 0] });

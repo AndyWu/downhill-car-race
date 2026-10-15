@@ -45,8 +45,8 @@ export function assemble(def, materials) {
 
   // ---- cockpit rig (static bits)
   const eyeY = L.eyeY, eyeZ = L.eyeZ;
-  const st = { type: 'car', r: 0.17, col: 0x1c1c1c, col2: 0x9a9a92, tilt: 0.9, dz: -0.48, dy: -0.27, ...L.steer };
-  st.r *= 0.7;
+  const st = { type: 'car', r: 0.17, col: 0x1c1c1c, col2: 0x9a9a92, tilt: 0.9, dz: -0.48, dy: -0.285, ...L.steer };
+  st.r *= 0.58;
   const wc = [0, eyeY + st.dy, eyeZ + st.dz];
   const Lc = 0.34;
   const base = [0, wc[1] - Math.sin(st.tilt) * Lc, wc[2] - Math.cos(st.tilt) * Lc];
@@ -158,8 +158,8 @@ export function assemble(def, materials) {
         cache.forEach((e) => handles.push(e.h));
       } catch (err) { handles = null; }
     }
-    if (handles && handles.length) { handles.forEach((h) => h.set(t)); return; }
-    // fallback: vertex-colour blend rising from the ground / tyres
+    if (handles && handles.length) handles.forEach((h) => h.set(t));
+    // vertex-colour splatter always runs too, so cockpit-visible parts (hood, paddles, wheel) darken even where the shader mask sits low
     mudGeos.forEach((g) => {
       const c0 = mudBase.get(g), col = g.attributes.color, w = g.attributes.mud;
       for (let i = 0; i < w.count; i++) {

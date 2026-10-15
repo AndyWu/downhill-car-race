@@ -21,8 +21,8 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
   await tick();
   progress(0.15, 'shaping the hills');
   const gaps = [];
-  for (const f of farms) gaps.push({ s: f.s, side: f.side });
-  for (const sg of [-1, 1]) { gaps.push({ s: TRACK_LENGTH, side: sg, r: 40 }); gaps.push({ s: 30, side: sg, r: 30 }); }
+  for (const f of farms) gaps.push({ s: f.s, side: f.side, r: 0.8 });
+  for (const sg of [-1, 1]) { gaps.push({ s: TRACK_LENGTH + 15, side: sg, r: 30 }); }
   const terrain = buildTerrain(track, field, farms, seed, gaps);
   for (const f of farms) f.y = f.y; // pad heights were written by buildTerrain
   const lib = createMaterialLibrary(materials);
@@ -52,7 +52,11 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
     const i = terrain.roadInfo(x, z);
     const ad = Math.abs(i.d), hw = i.hw;
     if (i.ramp) return { type: 'dirt', friction: 0.92, drag: 0, bump: 0.04 };
-    if (ad > hw + 1.0) return { type: 'grass', ...pick(SURFACES.grass) };
+    if (ad > hw + 1.2) {
+      // verge / bank: soft, sticky ground so a drifting car is slowed hard
+      const k = 1 - Math.min(1, Math.max(0, (ad - (hw + 1.2)) / 8));
+      return { type: 'grass', friction: lerp(SURFACES.grass.friction, 0.32, k), drag: lerp(SURFACES.grass.drag, 1.5, k), bump: lerp(SURFACES.grass.bump, 0.55, k) };
+    }
     const base = SURFACES.dirt;
     let f = base.friction, d = base.drag, b = base.bump, type = 'dirt';
     const edge = ad > hw ? (ad - hw) : 0; // 0..1 blend toward grass

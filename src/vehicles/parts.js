@@ -148,8 +148,10 @@ export function buildSteeringWheelMesh(kit, type, r, col = 0x1c1c1c, col2 = 0x9a
     for (const a of [Math.PI * 0.5, Math.PI * 1.17, Math.PI * -0.17]) {
       spoke([Math.cos(a) * 0.03, Math.sin(a) * 0.03, 0.004], [Math.cos(a) * (r - 0.01), Math.sin(a) * (r - 0.01), 0], 0.014, 0.007, col2);
     }
-    c.lathe([[0.001, 0.0], [0.026, 0.0], [0.034, 0.01], [0.03, 0.022], [0.016, 0.034], [0.001, 0.038]], [0, 0, 0], { r: [PI2, 0, 0], seg: 12, c: col2, v: 0.1 });
-    c.cyl(0.011, 0.012, [0, 0, 0.038], { axis: 'z', seg: 8, c: 0xb8362b }); // worn horn button
+    // leather-wrapped hub boss with a stitched seam and a worn horn button
+    c.lathe([[0.001, 0.0], [0.03, 0.0], [0.034, 0.01], [0.03, 0.022], [0.018, 0.03], [0.001, 0.032]], [0, 0, 0], { r: [PI2, 0, 0], seg: 14, c: 0x4a2c1a, v: 0.12, tile: 1.6 });
+    c.tor(0.031, 0.003, [0, 0, 0.012], { seg: 14, rseg: 3, c: 0xc8b48a, tile: 1.6 });
+    c.cyl(0.009, 0.01, [0, 0, 0.034], { axis: 'z', seg: 8, c: 0xb8362b, tile: 1.6 }); // worn horn button
     c.box([0.05, 0.008, 0.006], [r * 0.5, 0.012, 0.03], { c: 0x9a9a98, r: [0, 0, 0.5] }); // repair tape on a spoke
   } else if (type === 'bike') {
     c.add(new THREE.TorusGeometry(r, 0.0095, 6, 40), { c: 0xb9b9b2, v: 0.08 });
@@ -227,16 +229,16 @@ export function buildLever(kit, kind, col) {
   c.cyl(0.02, 0.07, [0, 0, 0], { axis: 'x', seg: 8, c: 0x6e6e68 });
   c.rod([0, 0, 0], at(L), kind === 'hand' ? 0.011 : 0.008, { seg: 6, c: 0x9a988e, v: 0.1 });
   if (kind === 'hand') {
-    // long worn grip: turned wooden handle with a spiral of black tape and bare patches
-    const prof = [[0.001, -0.06], [0.013, -0.06], [0.015, -0.045], [0.013, -0.025], [0.016, 0.0], [0.013, 0.025], [0.015, 0.045], [0.013, 0.058], [0.001, 0.06]];
-    c.lathe(prof, at(L - 0.02), { q, seg: 10, colorFn: tapeFn(0x181816, 0x2c2c2a, 0x7a5a38, 6, 7, 0.2) });
-    c.add(new THREE.BoxGeometry(0.034, 0.012, 0.034), { q, p: at(L - 0.095), c: 0xa4a39e, v: 0.15 }); // tape ring
-    c.lathe([[0.001, 0], [0.012, 0.0], [0.014, 0.012], [0.01, 0.022], [0.001, 0.026]], at(L + 0.05), { q, seg: 8, wear: { paint: 0xc8352a, bare: WOOD_BARE, amt: 0.7 } }); // release button cap
+    // ribbed black rubber grip on a steel lever, taped at the base, with a small brass-capped button
+    const prof = [[0.001, -0.055], [0.012, -0.055], [0.013, -0.045], [0.011, -0.04], [0.013, -0.03], [0.011, -0.025], [0.013, -0.015], [0.011, -0.01], [0.013, 0.0], [0.011, 0.005], [0.013, 0.015], [0.011, 0.02], [0.013, 0.03], [0.011, 0.035], [0.012, 0.05], [0.001, 0.055]];
+    c.lathe(prof, at(L - 0.03), { q, seg: 10, c: 0x1c1b19, v: 0.1, tile: 1.4 });
+    c.add(new THREE.BoxGeometry(0.03, 0.012, 0.03), { q, p: at(L - 0.1), colorFn: tapeFn(0x8a8984, 0x6a6964, WOOD_DARK, 1, 6, 0.1) }); // tape wrap
+    c.cyl(0.008, 0.012, at(L + 0.03), { q, seg: 8, c: 0xc8a030, tile: 1.4 }); // brass cap
   } else {
-    // gear lever: turned wooden ball knob, painted per truck, rubbed bare where the hand goes
-    const prof = [[0.001, -0.03], [0.012, -0.028], [0.019, -0.012], [0.023, 0.006], [0.02, 0.022], [0.011, 0.032], [0.001, 0.034]];
-    c.lathe(prof, at(L + 0.015), { q, seg: 12, tess: 0.02, wear: { paint: col || 0xe8e0c8, bare: WOOD_BARE, amt: 0.75 } });
-    c.add(new THREE.CylinderGeometry(0.014, 0.022, 0.06, 8), { q, p: at(0.065), colorFn: tapeFn(0x2a2a28, 0x1c1c1a, WOOD_DARK, 3, 5, 0.25) }); // taped boot
+    // gear lever: lathe-turned wooden knob (bulb with a collar ring), varnished dark, rubbed bare on top
+    const prof = [[0.001, -0.022], [0.007, -0.022], [0.0085, -0.012], [0.012, -0.008], [0.0105, -0.002], [0.014, 0.008], [0.0165, 0.02], [0.014, 0.033], [0.008, 0.042], [0.001, 0.045]];
+    c.lathe(prof, at(L + 0.01), { q, seg: 14, tess: 0.015, tile: 1.4, wear: { paint: col || 0x6a3a22, bare: WOOD_BARE, amt: 0.55 } });
+    c.add(new THREE.CylinderGeometry(0.011, 0.016, 0.05, 8), { q, p: at(0.06), c: 0x1e1d1b, tile: 1.4 }); // rubber boot
   }
   const g = new THREE.Group();
   const m = new THREE.Mesh(c.merged(), kit.mats.wood);

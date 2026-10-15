@@ -217,7 +217,7 @@ async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = 0
       c.body.step(dt, inp);
       if (racing && c.finished == null) {
         const st = c.body.state, w = world.track.sampleAt(Math.max(0, st.s)).width;
-        if (Math.abs(st.lateral) > w / 2) c.offroad += dt;
+        if (Math.abs(st.lateral) > w / 2) { c.offroad += dt; if (process.env.OFF && c.name === process.env.OFF && !c.wasOff) console.log('OFFROAD', c.name, 's', st.s.toFixed(0), 'lat', st.lateral.toFixed(2), 'hw', (w / 2).toFixed(2), 'v', st.speed.toFixed(1), 'plan e', c.driver.plan.offsetAt(st.s).toFixed(2), 'yaw', st.angularVelocity.y.toFixed(2), 'surf', st.surface); c.wasOff = true; if (process.env.OFF && c.name === process.env.OFF && c.offroad < 0.02) console.log('  near hazards', world.hazards.filter((h) => Math.abs(h.s - st.s) < 25).map((h) => `${h.kind}@${h.s.toFixed(0)}/${h.lateral.toFixed(1)}`).join(' '), '| cars', cars.map((o) => o.name[0] + o.body.state.s.toFixed(0)).join(' ')); } else c.wasOff = false;
         for (const h of world.hazards) {
           if (Math.abs(h.s - st.s) > 20 || !(h.type === 'mud' || h.type === 'water' || h.type === 'rock')) continue;
           const ra = (h.halfLength ?? h.radius) + 0.4, rb = (h.halfWidth ?? h.radius) + 0.4;

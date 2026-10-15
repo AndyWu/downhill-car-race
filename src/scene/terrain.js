@@ -45,15 +45,18 @@ export function buildTerrain(track, field, pads, seed = 1, gaps = []) {
 
   // verge ditch + berm: continuous lip beyond the shoulder, with openings at driveways
   function bermAmp(s, d) {
-    let a = 0.78 + 0.22 * nzr.n1(s / 37 + 5);
+    let a = 0.94 + 0.06 * nzr.n1(s / 37 + 5);
     const sd = d < 0 ? -1 : 1;
-    for (const g of gaps) if (g.side === sd) { const r = g.r === undefined ? 5 : g.r; a *= smoothstep(r, r + 5, Math.abs(s - g.s)); }
+    for (const g of gaps) if (g.side === sd) { const r = g.r === undefined ? 5 : g.r; a *= smoothstep(r, r + (r > 5 ? 5 : 2.2), Math.abs(s - g.s)); }
     return a;
   }
+  const BERM_H = 0.95;
   function verge(s, d, hw) {
     const ad = Math.abs(d), a = bermAmp(s, d);
-    const t1 = (ad - (hw + 2.3)) / 0.6, t2 = (ad - (hw + 4.0)) / 0.95;
-    return a * (-0.2 * Math.exp(-t1 * t1) + 0.58 * Math.exp(-t2 * t2));
+    const t1 = (ad - (hw + 1.9)) / 0.45;
+    const wall = clamp((ad - (hw + 2.1)) / 1.0, 0, 1);          // ~43 deg inner face
+    const back = 1 - smoothstep(hw + 4.0, hw + 6.4, ad);       // gentle outer fall-off
+    return a * (-0.22 * Math.exp(-t1 * t1) + BERM_H * wall * back);
   }
 
   // ---- terrain grid ----

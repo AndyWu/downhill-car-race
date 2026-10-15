@@ -123,8 +123,10 @@ function ropeTexture() {
 export const DECAL = {
   plain: 0, plateA: 1, plateB: 2, n7: 3, n42: 4, n13: 5, n9: 6, bomber: 7,
   flames: 8, checker: 9, n3: 10, n88: 11, betty: 12, fragile: 13, willy: 14, comet: 15,
+  n5: 16, n21: 17, n4: 18, n10: 19,
 };
-export const CELL = 0.25;
+export const GRID = 5;
+export const CELL = 1 / GRID;
 
 function outlined(g, text, x, y, font, fill, stroke, lw) {
   g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -142,9 +144,9 @@ function paintNumber(g, ox, oy, text, fill, stroke, size = 170, rot = -0.06) {
 }
 
 function atlasTexture() {
-  const S = 1024, C = 256, r = mulberry(77);
+  const S = 1280, C = 256, r = mulberry(77);
   const c = canvas(S, S), g = c.getContext('2d');
-  const cell = (i) => [(i % 4) * C, ((i / 4) | 0) * C];
+  const cell = (i) => [(i % 5) * C, ((i / 5) | 0) * C];
   // 0: plain paint, mottled; multiplies with vertex colour
   g.fillStyle = '#ececec'; g.fillRect(0, 0, C, C);
   for (let i = 0; i < 60; i++) {
@@ -180,6 +182,10 @@ function atlasTexture() {
   [ox, oy] = cell(DECAL.n9); paintNumber(g, ox, oy, '9', '#d8352a', '#f4f1e6', 170, 0.04);
   [ox, oy] = cell(DECAL.n3); paintNumber(g, ox, oy, '3', '#f4f1e6', '#102a5a');
   [ox, oy] = cell(DECAL.n88); paintNumber(g, ox, oy, '88', '#f4f1e6', '#1a1a1a', 130);
+  [ox, oy] = cell(DECAL.n5); paintNumber(g, ox, oy, '5', '#1a1a1a', '#f4f1e6', 170, 0.05);
+  [ox, oy] = cell(DECAL.n21); paintNumber(g, ox, oy, '21', '#f4f1e6', '#1a2a6a', 130, -0.04);
+  [ox, oy] = cell(DECAL.n4); paintNumber(g, ox, oy, '4', '#1a1a1a', '#f4f1e6', 170, 0.03);
+  [ox, oy] = cell(DECAL.n10); paintNumber(g, ox, oy, '10', '#f4f1e6', '#3a1a5a', 130, 0.04);
   // stencil / script names
   [ox, oy] = cell(DECAL.bomber); outlined(g, 'BOMBER', ox + 128, oy + 128, '900 66px Impact, sans-serif', '#f0e6c8', '#1a1a1a', 8);
   [ox, oy] = cell(DECAL.betty); outlined(g, 'Betty', ox + 128, oy + 128, 'italic 900 80px "Brush Script MT", cursive, serif', '#e7508a', '#fff', 6);

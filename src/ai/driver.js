@@ -67,7 +67,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
         goal = (dl >= 0 ? -1 : 1) * 2.0 * P.carAvoid;
       }
     }
-    if (P.aggression > 0.5 && alongside) goal = clamp(alongside.lateral - eT, -2.5, 2.5) * 0.8; // shove
+    if (P.aggression > 0.5 && alongside) goal = clamp(alongside.lateral - eT, -2.5, 2.5) * 0.35; // shove
+    else if (P.carAvoid > 0 && alongside && !goal) goal = (alongside.lateral > self.lateral ? -1 : 1) * 0.9 * P.carAvoid; // give room
     if (goal !== 0 && plan.costAt(sT, eT + goal) > plan.costAt(sT, eT) + 1) goal = 0; // don't drive into a hazard for it
     extra += (goal - extra) * (1 - Math.exp(-dt / 0.4));
 
@@ -85,7 +86,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
     const delta = Math.atan(WB * curv) + P.yawDamp * clamp(yaw - yawDes, -1.5, 1.5);
     noise += (-noise / P.steerNoiseTau) * dt + P.steerNoise * Math.sqrt((2 * dt) / P.steerNoiseTau) * normal(rng);
     const lockScale = 0.35 + 0.65 / (1 + 0.7 * (speed / 16) ** 2); // physics reduces effective lock with speed
-    const rawSteer = clamp((P.steerGain * delta) / (LOCK * lockScale) + noise, -1, 1);
+    const rawSteer = clamp((P.steerGain * (1 + 0.5 * Math.min(1, outBy)) * delta) / (LOCK * lockScale) + noise, -1, 1);
 
     // ---- speed target / handbrake ----
     let rb = 1;
@@ -95,7 +96,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
       const gap = mx - s; // >0: behind the leader, <0: we lead
       rb = gap > 0 ? 1 + 0.12 * rubberBand * Math.min(1, gap / 80) : 1 - 0.1 * rubberBand * Math.min(1, -gap / 80);
     }
-    const vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * rb;
+    const vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * rb * (outBy > 0 ? 0.65 : 1);
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
     if (P.brake.tap && hbRaw > 0 && over < 1.2) hbRaw = ((t * 6) % 1) < 0.5 ? Math.min(0.4, hbRaw * 2) : 0; // light taps
@@ -148,12 +149,13 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
 
     // ---- stuck recovery: speed < 1.5 for 2 s beyond s>20 -> reverse 0.8 s with opposite steer, then kick forward ----
     let reverse = false;
-    if (s > 20 && t > 3 && speed < 1.5 && t > kickUntil) stuckT += dt; else if (speed >= 1.5 || t <= kickUntil) stuckT = 0;
-    if (stuckT > 2) { reverseUntil = t + 0.8; kickUntil = t + 0.8 + 2.0; stuckT = 0; recoveries++; revSteer = rawSteer >= 0 ? -1 : 1; }
+    const slowNow = speed < 1.5 || (speed < 2 && outBy > 0);
+    if (s > 20 && t > 3 && slowNow && t > kickUntil) stuckT += dt; else if (!slowNow || t <= kickUntil) stuckT = 0;
+    if (stuckT > 1) { reverseUntil = t + 0.8; kickUntil = t + 0.8 + 2.0; stuckT = 0; recoveries++; revSteer = err >= 0 ? -1 : 1; }
     let steer = steerOut;
     let rpv = pv, rhb = hbOut;
     if (t < reverseUntil) { // reversing is done with paddle strokes in the physics
-      reverse = true; steer = revSteer * Math.min(1, Math.abs(rawSteer) + 0.5) * -1; rhb = 0;
+      reverse = true; steer = revSteer; rhb = 0; // reversing: opposite wheel swings the nose toward the centre-line target
       rpv = 0;
       if (t >= revNext) { revNext = t + 0.2; side = !side; rpv = 1; }
     } else if (t < kickUntil) { // forward kick to get going again

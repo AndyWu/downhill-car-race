@@ -1,7 +1,6 @@
 // Planner: lateral-offset line vs s (hazard/surface-aware DP + optional minimum-curvature relaxation)
 // and a target speed profile vs s (grip-limited, backward/forward passes).
 const G = 9.81;
-const SLOT = 0.5;      // lateral grid spacing (m)
 const DS = 2;          // sample spacing along s (m)
 const CAR_HALF = 0.5;  // clearance assumed for car half-width
 const BIG = 1e4;
@@ -19,7 +18,8 @@ export function buildPlan(world, P, rng) {
     wd[i] = sp.width; slope[i] = sp.tangent.y;
     if (sp.width > maxW) maxW = sp.width;
   }
-  const J = Math.min(16, Math.ceil(maxW / 2 / SLOT));
+  const SLOT = P.line.slot ?? 0.5; // lateral grid spacing (m); finer = gentler lateral rate limit
+  const J = Math.min(40, Math.ceil(maxW / 2 / SLOT));
   const K = 2 * J + 1;
 
   // --- perception: which hazards does this driver know about, and how much does he care ---
@@ -71,7 +71,7 @@ export function buildPlan(world, P, rng) {
   }
 
   // --- DP over lateral slots ---
-  const pull = P.line.pull, stepCost = 0.15, m = P.line.maxStep;
+  const pull = P.line.pull, stepCost = 0.3 * (P.line.slot ?? 0.5), m = P.line.maxStep;
   const dp = new Float64Array(n * K), bk = new Int16Array(n * K);
   for (let j = 0; j < K; j++) dp[j] = hc[j] + pull * Math.abs(j - J) * SLOT;
   for (let i = 1; i < n; i++) {

@@ -86,10 +86,11 @@ export const Maeve = make({
   look: { min: 7, time: 0.6 },
   hazardWeight: { rock: 50, mud: 18, water: 15, default: 15 }, hazardMargin: 1.5, hazardStretch: 1.5,
   surfaceWeight: { sand: 2.5, gravel: 1.2, grass: 5, mud: 4, water: 3 },
-  line: { mode: 'racing', edge: 0.9, pull: 0.02, maxStep: 1, relaxIters: 400, corridorTol: 0.8 },
+  line: { mode: 'racing', edge: 1.3, pull: 0.02, maxStep: 1, slot: 0.25, relaxIters: 600, corridorTol: 0.8 },
   speed: { mu: 0.8, cornerFactor: 1.0, brakeDecel: 3.8, cap: 16, useSurface: true },
   paddle: { mode: 'rhythm', cadence: 3.0, strength: 1.0, jitter: 0, slopeMax: 0.12, stamina: { drain: 0.01, regen: 0.08, minFactor: 0.8 } },
   brake: { gain: 0.45, dead: 0.3 },
+  carAvoid: 0.8,
 });
 
 export const Ace = make({
@@ -99,11 +100,12 @@ export const Ace = make({
   look: { min: 8, time: 0.6 },
   hazardWeight: { rock: 60, mud: 25, water: 22, default: 20 }, hazardMargin: 1.5, hazardStretch: 1.8,
   surfaceWeight: { sand: 4, gravel: 2.5, grass: 6, mud: 5, water: 4 },
-  line: { mode: 'racing', edge: 0.8, pull: 0.02, maxStep: 1, relaxIters: 500, corridorTol: 1.0 },
+  line: { mode: 'racing', edge: 1.3, pull: 0.02, maxStep: 1, slot: 0.25, relaxIters: 700, corridorTol: 1.0 },
   speed: { mu: 0.85, cornerFactor: 1.0, brakeDecel: 3.8, cap: 24, useSurface: true, forward: true },
   paddle: { mode: 'optimal', cadence: 2.5, strength: 1.0, jitter: 0, slopeMax: 0.08, stamina: { drain: 0.005, regen: 0.1, minFactor: 0.9 } },
   brake: { gain: 0.5, dead: 0.2, tap: true },
   draft: { range: 8, strength: 0.9, overtake: true },
+  carAvoid: 0.8,
 });
 
 export const AI_PROFILES = [Barnaby, Clementine, Buster, Maeve, Ace];

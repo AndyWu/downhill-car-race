@@ -27,6 +27,13 @@ try {
   await page.waitForFunction(() => window.__ready, null, { timeout: 60000 });
   const n = await page.evaluate(() => window.__count);
   const ids = await page.evaluate(() => Array.from({ length: window.__count }, (_, i) => i));
+  // uniqueness checks: race numbers and flag colours must differ across all 10 trucks
+  const specs = await page.evaluate(() => window.__specs);
+  const dupes = (key) => specs.map((t) => t[key]).filter((v, i, a) => a.indexOf(v) !== i);
+  if (dupes('number').length || dupes('flagColor').length || specs.some((t) => !Number.isInteger(t.number))) {
+    throw new Error('duplicate or missing race number / flagColor: ' + JSON.stringify(specs.map((t) => [t.id, t.number, t.flagColor])));
+  }
+  console.log('race numbers:', specs.map((t) => t.number).join(','));
   const report = [];
   for (const i of ids) {
     if (only.length && !only.includes(i)) continue;

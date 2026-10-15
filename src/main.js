@@ -131,7 +131,7 @@ async function boot() {
     advance: (sec) => advance(sec),
     startRace: (o) => startRace(o),
   };
-  if (netMod && netMod.onOfflineReady) safe(() => netMod.onOfflineReady(() => { game.state.offlineReady = true; if (game.ui && game.ui.toast && game.state.mode === 'title') game.ui.toast('Ready to play offline', 2600); }), 'onOfflineReady');
+  if (netMod && netMod.onOfflineReady) safe(() => netMod.onOfflineReady(() => { game.state.offlineReady = true; if (game.ui) { if (game.ui.setOfflineReady) game.ui.setOfflineReady(true); else if (game.ui.toast && game.state.mode === 'title') game.ui.toast('Ready to play offline', 2600); } }), 'onOfflineReady');
   let resolveReady; game.screenshotReady = new Promise((r) => { resolveReady = r; });
   window.__game = game;
   let readyFrames = 0;
@@ -242,7 +242,7 @@ async function boot() {
     cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam });
     const cd = o.countdown ?? 3;
     Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });
-    mp.goAtLocal = o.goAtLocal || 0; mp.results = [];
+    mp.goAtLocal = o.goAtLocal || 0; mp.results = []; playerFinishT = null; lastFinishedCount = 0; finishRefresh = 0;
     mp.predictor = role === 'client' && netMod && netMod.createPredictor ? safe(() => netMod.createPredictor({ body: playerV.body, slot: o.localSlot }), 'createPredictor') : null;
     input.setEnabled(true); input.calibrate();
     if (o.headlight ?? P.headlight) input.setHeadlight(true);
@@ -387,16 +387,43 @@ async function boot() {
     ui.setLobbyStatus && ui.setLobbyStatus('Connected — waiting for the host to start');
   }
 
+  // Standings: finished cars show their real time; cars still racing show an *estimated* finish (est: true) that is refreshed
+  // while the finish card is up; DNF (time null) only after DNF_AFTER s of racing past the player's finish.
+  const DNF_AFTER = 120;
+  let playerFinishT = null, finishRefresh = 0, lastFinishedCount = 0;
   function standings() {
-    const vs = game.vehicles.slice().sort((a, b) => (a.finished && b.finished ? a.finishTime - b.finishTime : a.finished ? -1 : b.finished ? 1 : b.body.state.s - a.body.state.s));
-    return vs.map((v) => ({ name: v.isPlayer ? (v.name || 'You') : v.name || `Car ${v.slot + 1}`, time: v.finished ? v.finishTime : null, you: v.isPlayer }));
+    const now = game.state.raceTime;
+    const rows = game.vehicles.map((v) => {
+      const st = v.body.state;
+      let time = null, status = 'running', eta;
+      if (v.finished) { time = v.finishTime; status = 'finished'; }
+      else if (playerFinishT != null && now >= playerFinishT + DNF_AFTER) status = 'dnf';
+      else {
+        const remaining = Math.max(0, TRACK_LENGTH - 3 - st.s);
+        const avg = now > 1 ? st.s / now : 0;
+        eta = remaining / Math.max(2.5, 0.5 * avg + 0.5 * st.speed);
+      }
+      return { name: v.isPlayer ? (v.name || 'You') : v.name || `Car ${v.slot + 1}`, time, status, eta, you: v.isPlayer, s: st.s };
+    });
+    const key = (r) => (r.status === 'finished' ? r.time : r.status === 'running' ? now + r.eta : 1e9);
+    rows.sort((a, b) => key(a) - key(b) || b.s - a.s);
+    return rows;
+  }
+  function refreshFinish(force) {
+    if (game.state.mode !== 'finish' || !ui || !ui.showFinish) return;
+    const fc = game.vehicles.filter((v) => v.finished).length;
+    if (!force && fc === lastFinishedCount && ++finishRefresh < 120) return;
+    finishRefresh = 0; lastFinishedCount = fc;
+    if (!force && ui.updateFinish) safe(() => ui.updateFinish(standings()), 'updateFinish');
+    else safe(() => ui.showFinish({ place: game.state.place, total: game.vehicles.length, time: game.state.finishTime, standings: standings() }), 'showFinish');
   }
   function finishPlayer(time, place) {
     if (game.state.finished) return;
     game.state.finished = true; game.state.finishTime = time; game.state.place = place; game.state.mode = 'finish';
+    playerFinishT = time;
     if (playerV) playerV.finished = true;
     audioOnce('finish');
-    if (ui && ui.showFinish) safe(() => ui.showFinish({ place, total: game.vehicles.length, time, standings: standings() }), 'showFinish');
+    refreshFinish(true);
   }
 
   async function onFamilyPass() {
@@ -437,6 +464,7 @@ async function boot() {
       },
     }), 'createUI');
     game.ui = ui;
+    if (ui && game.state.offlineReady && ui.setOfflineReady) ui.setOfflineReady(true);
     if (ui && !input.isTouch && ui.showGyroButton) safe(() => ui.showGyroButton(false), 'showGyroButton');
   }
   input.onOrientationChange((landscape) => {
@@ -475,7 +503,7 @@ async function boot() {
     else if (cd === 0 && mode === 'finish') game.state.raceTime += STEP;
 
     if (role === 'client') {
-      const inp = input.read();
+      const inp = input.read(STEP);
       if (cd > 0) { inp.paddleL = inp.paddleR = 0; }
       frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
       playerV.lastInp = inp;
@@ -492,7 +520,7 @@ async function boot() {
     for (const v of vs) {
       let inp;
       if (v.kind === 'local') {
-        inp = input.read();
+        inp = input.read(STEP);
         if (cd > 0) { inp.handbrake = 1; inp.paddleL = inp.paddleR = 0; }
         if (v.finished) { inp = { ...inp, handbrake: 0.7, paddleL: 0, paddleR: 0 }; }
         frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
@@ -521,6 +549,7 @@ async function boot() {
       }
     }
     if (playerV) { game.state.s = playerV.body.state.s; game.state.speed = playerV.body.state.speed; }
+    if (game.state.mode === 'finish') refreshFinish(false);
     // host: broadcast snapshot
     if (role === 'host' && mp.sync) {
       const n = vs.length, H = netMod.SNAP_HEADER, S = netMod.SNAP_STRIDE;
@@ -643,7 +672,8 @@ async function boot() {
   let acc = 0, last = performance.now(), simT = 0;
   function frame(now) {
     requestAnimationFrame(frame);
-    const dt = Math.min((now - last) / 1000, 0.1); last = now;
+    const rawDt = (now - last) / 1000; input.noteFrame(rawDt);
+    const dt = Math.min(rawDt, 0.1); last = now;
     acc += dt;
     let n = 0;
     while (acc >= STEP && n < 6) { fixedUpdate(); acc -= STEP; n++; }

@@ -22,8 +22,9 @@ export function createInput(dom) {
     touchHB: 0, headlight: false, reverse: false,
     // motion
     hasMotion: false, gx: 0, gy: 0, gz: 0, relAngle: 0, zero: 0, steerMotion: 0, motionOK: false,
-    lastT: 0, orientCbs: [],
+    lastT: 0, orientCbs: [], stallMs: 0, ring: [],
   };
+  const DEBUG = /[?&]debug=input/.test(location.search);
   const out = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false };
   const DEAD = 3 * Math.PI / 180, FULL = 45 * Math.PI / 180;
 
@@ -64,15 +65,30 @@ export function createInput(dom) {
     // clockwise rotation of the device (as the user sees it) about the screen normal
     const theta = Math.atan2(-sg * S.gx, sg * S.gy);
     S.relAngle = wrapPi(theta + screenAngle());
+    S.ring.push(S.relAngle); if (S.ring.length > RING) S.ring.shift();
     if (S.calLeft > 0) {
       S.calS += Math.sin(S.relAngle); S.calC += Math.cos(S.relAngle);
       if (--S.calLeft === 0) S.zero = Math.atan2(S.calS, S.calC);
     }
   }
   win && win.addEventListener('devicemotion', onMotion);
-  // Calibrate: take the circular mean of the next ~10 motion samples as "wheel straight" (so a noisy sample
-  // never sets the zero); falls back to the current angle immediately so steer is sane in the meantime.
-  function calibrate() { S.zero = S.relAngle; S.calLeft = 10; S.calS = 0; S.calC = 0; S.steerMotion = 0; }
+  // Calibrate from the samples collected BEFORE this call (a ~0.5 s ring buffer, i.e. the countdown): take the median,
+  // drop samples more than 8 deg from it, circular-mean the rest. A player already turning at GO therefore can't bake the turn
+  // into zero. With too little history (first gesture) fall back to the next 10 samples.
+  const RING = 40;
+  const wrapped = (a, ref) => wrapPi(a - ref);
+  function calibrate() {
+    S.steerMotion = 0;
+    const r = S.ring;
+    if (r.length >= 8) {
+      const ref = r[r.length - 1];
+      const rel = r.map((a) => wrapped(a, ref)).sort((x, y) => x - y);
+      const med = rel[rel.length >> 1];
+      const keep = rel.filter((x) => Math.abs(x - med) < 8 * Math.PI / 180);
+      const mean = keep.reduce((a, b) => a + b, 0) / Math.max(1, keep.length);
+      S.zero = wrapPi(ref + mean); S.calLeft = 0;
+    } else { S.zero = S.relAngle; S.calLeft = 10; S.calS = 0; S.calC = 0; }
+  }
   function motionSteer(dt) {
     if (!S.hasMotion || !isTouch || S.flat) return null;
     let a = wrapPi(S.relAngle - S.zero);
@@ -94,7 +110,9 @@ export function createInput(dom) {
     if (nx < 0.5 && inZone(ZONES.handbrake, nx, ny)) p.role = 'handbrake';
     else if (nx >= 0.5 && inZone(ZONES.gear, nx, ny)) p.role = 'gear';
     else if (nx >= 0.5 && inZone(ZONES.headlight, nx, ny)) p.role = 'headlight';
+    p.stall0 = S.stallMs;
     ptrs.set(e.pointerId, p);
+    if (DEBUG) console.log('[input] down', p.role, p.side, Math.round(e.clientX), Math.round(e.clientY), e.pointerType);
     if (p.role === 'handbrake') S.touchHB = 0.25;
     try { dom.setPointerCapture && dom.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     e.preventDefault && e.preventDefault();
@@ -132,7 +150,12 @@ export function createInput(dom) {
     if (!p) return;
     ptrs.delete(e.pointerId);
     if (p.role === 'handbrake') S.touchHB = 0;
-    else if (p.role === 'headlight') { if (e.timeStamp - p.t0 < 450 && p.moved < 24) S.headlight = !S.headlight; }
+    else if (p.role === 'headlight') {
+      // a tap is brief and still; frames that stalled the page (slow GPUs, software rendering) don't count against the time limit
+      const held = e.timeStamp - p.t0, allowed = 450 + (S.stallMs - p.stall0);
+      if (DEBUG) console.log('[input] up headlight', 'held', Math.round(held), 'allowed', Math.round(allowed), 'moved', Math.round(p.moved));
+      if (held < allowed && p.moved < 24) { S.headlight = !S.headlight; if (DEBUG) console.log('[input] headlight ->', S.headlight); }
+    }
     else if (p.role === 'swipe') { if (Math.abs(p.accum) > H() * 0.035) emitStroke(p, p.accum, 0.6); }
   }
   if (dom) {
@@ -168,7 +191,7 @@ export function createInput(dom) {
   }
 
   // ---------- read ----------
-  function read() {
+  function read(simDt) {
     const now = performance.now();
     const dt = clamp((now - (S.lastT || now)) / 1000, 0, 0.1); S.lastT = now;
     const K = S.keys;
@@ -186,8 +209,9 @@ export function createInput(dom) {
       const d = S.debug;
       if (d.steer != null) out.steer = d.steer;
       // debug paddles act as a stroke cadence (~every 0.33 s) so tests can "paddle continuously"
-      if (d.paddleL) { S.dbgL = (S.dbgL || 0) - dt; if (S.dbgL <= 0) { out.paddleL = d.paddleL; S.dbgL = 0.33; } }
-      if (d.paddleR) { S.dbgR = (S.dbgR || 0) - dt; if (S.dbgR <= 0) { out.paddleR = d.paddleR; S.dbgR = 0.33; } }
+      const sdt = simDt != null ? simDt : dt; // simulation time keeps advance() deterministic
+      if (d.paddleL) { S.dbgL = (S.dbgL || 0) - sdt; if (S.dbgL <= 0) { out.paddleL = d.paddleL; S.dbgL = 0.33; } }
+      if (d.paddleR) { S.dbgR = (S.dbgR || 0) - sdt; if (S.dbgR <= 0) { out.paddleR = d.paddleR; S.dbgR = 0.33; } }
       if (d.handbrake != null) out.handbrake = d.handbrake;
       if (d.headlight != null) out.headlight = !!d.headlight;
       if (d.reverse != null) out.reverse = !!d.reverse;
@@ -196,7 +220,7 @@ export function createInput(dom) {
   }
 
   return {
-    read, requestPermissions, calibrate, isLandscape, isTouch,
+    noteFrame(dt) { if (dt > 0.1) S.stallMs += dt * 1000 - 50; }, read, requestPermissions, calibrate, isLandscape, isTouch,
     setEnabled(v) { S.enabled = !!v; if (!v) { ptrs.clear(); S.touchHB = 0; } },
     setDebugInput(i) { S.debug = i ? { ...i } : null; S.dbgL = S.dbgR = 0; },
     setHeadlight(v) { S.headlight = !!v; }, setReverse(v) { S.reverse = !!v; },

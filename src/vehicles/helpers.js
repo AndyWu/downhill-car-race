@@ -57,3 +57,19 @@ export function slatCrate(k, p, size, o = {}) {
     k.metal.nail([p[0] + sx * (w / 2 - 0.0175), p[1] - h / 2 + sh * (i + 0.5), p[2] + sz * (d / 2 + 0.0)], 'z');
   }
 }
+
+/** spare wheel mounted upright facing the rear (axle along Z). kind 'tyre' = fat black tyre + painted hub, 'bike' = spoked */
+export function spareWheel(k, p, R, kind = 'tyre', hub = 0xc8352a) {
+  if (kind === 'tyre') {
+    k.paint.tor(R - 0.07, 0.07, p, { seg: 20, rseg: 8, c: 0x1c1c1a, grime: 0.6, tile: 1 });
+    k.paint.cyl(R - 0.1, 0.06, p, { axis: 'z', seg: 18, c: hub });
+    k.paint.cyl(0.04, 0.09, p, { axis: 'z', seg: 8, c: 0x9a9a92 });
+    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2; k.paint.cyl(0.01, 0.075, [p[0] + Math.cos(a) * 0.09, p[1] + Math.sin(a) * 0.09, p[2]], { axis: 'z', seg: 5, c: 0x555048 }); }
+  } else {
+    k.paint.tor(R - 0.02, 0.02, p, { seg: 28, rseg: 6, c: 0x161616 });
+    k.paint.tor(R - 0.045, 0.006, p, { seg: 28, rseg: 4, c: 0xc4c4be });
+    for (let i = 0; i < 20; i++) { const a = (i / 20) * Math.PI * 2; k.paint.rod([p[0], p[1], p[2]], [p[0] + Math.cos(a) * (R - 0.045), p[1] + Math.sin(a) * (R - 0.045), p[2]], 0.003, { seg: 3, c: 0xd0d0cc }); }
+    k.paint.cyl(0.03, 0.05, p, { axis: 'z', seg: 8, c: 0xb8b8b0 });
+  }
+  k.metal.rod([p[0], p[1] - R * 0.5, p[2] - 0.12], [p[0], p[1], p[2] - 0.04], 0.015, { seg: 6, c: 0x6a625a });
+}

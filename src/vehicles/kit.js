@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TessellateModifier } from 'three/addons/modifiers/TessellateModifier.js';
-import { getTextures, CELL } from './textures.js';
+import { getTextures, CELL, GRID } from './textures.js';
 
 export function rng(seed) {
   let a = seed >>> 0;
@@ -79,7 +79,7 @@ function planarUV(g, tile, off) {
 }
 
 function cellRect(cell, inset = 0.004) {
-  const col = cell % 4, row = (cell / 4) | 0;
+  const col = cell % GRID, row = (cell / GRID) | 0;
   return [col * CELL + inset, 1 - (row + 1) * CELL + inset, CELL - inset * 2];
 }
 
@@ -208,8 +208,16 @@ export class Collector {
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
       // mud mask for setMudCoat(): rises from the ground, or from the tyre tread on wheels
       let w = 0;
-      if (this.mud === 'height') w = (1 - t) * (0.55 + 0.45 * vnoise(x * 14, y * 14, z * 14));
-      else if (this.mud === 'radial') {
+      const sp = (a, b) => { const s = Math.min(1, Math.max(0, (vnoise(x * 30 + 7, y * 30, z * 30) - a) / (b - a))); return s * s * (3 - 2 * s); };
+      if (this.mud === 'height') {
+        // ground-up coat plus flung splatter on everything below ~0.6 m (hood, panels) biased to the front
+        const up = Math.min(1, Math.max(0, 1 - (y - this.kit.groundY - 0.1) / 0.75));
+        w = Math.max((1 - t) * (0.55 + 0.45 * vnoise(x * 14, y * 14, z * 14)), 0.85 * sp(0.5, 0.68) * up);
+      } else if (this.mud === 'cockpit') {
+        // hand-held parts: splatter flecks plus the lower part of the part (hinge end / wheel bottom)
+        w = Math.min(1, 0.95 * sp(0.45, 0.62) + 0.6 * Math.min(1, Math.max(0, (0.12 - (this.mudAxis === 'y' ? y : y)) / 0.2)) * (0.6 + 0.4 * vnoise(x * 20, y * 20, z * 20)));
+      }
+      if (this.mud === 'radial') {
         const r = Math.hypot(y, z) / (this.mudR || 0.25);
         w = Math.min(1, Math.max(0, (r - 0.45) * 2)) * (0.45 + 0.55 * vnoise(x * 20, y * 20, z * 20));
       }
@@ -337,7 +345,7 @@ export class Kit {
   }
 
   /** un-grimed collector of any kind for moving parts */
-  pieceOf(kind, mud = 'none') { const c = new Collector(kind, this, false); c.mud = mud; return c; }
+  pieceOf(kind, mud = 'cockpit') { const c = new Collector(kind, this, false); c.mud = mud; return c; }
 
   /** run fn with every baked primitive transformed by (pos, euler rot) — for tilted sub-assemblies */
   withXf(pos, rot, fn) {

@@ -1,7 +1,7 @@
 // Trucks 1-5: Barrel Bomber, Pallet Pounder, Rust Bucket, Wagon Wheel Willy, Bathtub Betty
 import * as THREE from 'three';
 import { DECAL } from './textures.js';
-import { pallet } from './helpers.js';
+import { pallet, spareWheel } from './helpers.js';
 
 const PI = Math.PI;
 
@@ -60,6 +60,8 @@ const barrelBomber = {
     // rear board with number plate
     k.wood.box([0.74, 0.12, 0.025], [0, 0.0, 1.0], { c: 0xc0a77a });
     k.paint.decal(DECAL.plateA, [0, 0.0, 1.016], 0.3, 0.19);
+    spareWheel(k, [0, 0.2, 1.1], 0.27, 'tyre', 0xc83a28);
+    k.paint.decal(DECAL.n7, [r + 0.002, cy + 0.1, -0.2], 0.2, 0.2, { r: [0, PI / 2, 0] });
     // diagonal braces
     k.wood.bar([-0.2, -0.04, -0.3], [-0.22, 0.05, -0.55], 0.03, 0.03, { c: 0xa68c62 });
     k.wood.bar([0.2, -0.04, -0.3], [0.22, 0.05, -0.55], 0.03, 0.03, { c: 0xa68c62 });
@@ -172,6 +174,14 @@ const rustBucket = {
     k.metal.cyl(0.04, 0.012, [0.37, 0.01, 0.8], { axis: 'z', seg: 10, c: 0x2a2622 });
     for (const z of [0.0, 0.5, 0.75]) k.rope.lash([0.37, 0.01, z], 'z', 0.048, 0.03, 3, { r: 0.006 });
     k.wood.bar([0.34, -0.03, 0.0], [0.37, -0.03, 0.75], 0.03, 0.03, { c: 0xa88e62 });
+    // orange jerry cans and a rope coil stacked on the tail: distinct rear profile
+    for (const [x, y, z] of [[0.14, 0.14, 0.97], [-0.08, 0.14, 0.97], [0.03, 0.37, 0.97]]) {
+      k.paint.box([0.2, 0.26, 0.1], [x, y, z], { c: 0xe8780f, v: 0.08 });
+      k.paint.box([0.12, 0.04, 0.05], [x, y + 0.15, z], { c: 0xc8620a });
+      k.paint.cyl(0.03, 0.04, [x + 0.05, y + 0.16, z + 0.03], { seg: 8, c: 0x2a2622 });
+      k.paint.box([0.06, 0.1, 0.004], [x, y, z + 0.052], { c: 0xf0e8d0 });
+    }
+    k.rope.tor(0.1, 0.022, [0.22, 0.28, 1.04], { seg: 14, rseg: 5, uvScale: 1 });
     // tall tin chimney with a rain cap (bold silhouette)
     k.metal.cyl(0.06, 1.0, [-0.3, 0.45, 0.62], { seg: 12, open: true, c: 0xa8c4de });
     k.metal.cyl(0.0, 0.12, [-0.3, 1.01, 0.62], { seg: 12, r2: 0.11, c: 0xd8c8c0 });
@@ -213,7 +223,9 @@ const wagonWheelWilly = {
       k.metal.rivets([sx * 0.352, -0.09, -0.5], [sx * 0.352, -0.09, 0.9], 8, 0.007);
     }
     k.wood.box([0.64, 0.18, 0.025], [0, -0.04, 0.93], { c: wd(0.85) }); // tailgate
-    k.paint.decal(DECAL.plateA, [0, -0.04, 0.948], 0.28, 0.17);
+    k.paint.box([0.62, 0.17, 0.004], [0, -0.04, 0.945], { c: 0xf2c200, v: 0.05 });
+    k.paint.decal(DECAL.n5, [0.0, -0.04, 0.9485], 0.16, 0.16);
+    k.paint.decal(DECAL.plateA, [0.2, -0.04, 0.9485], 0.18, 0.11);
     // toolbox hood with sloped lid
     k.wood.box([0.52, 0.28, 0.5], [0, 0.0, -0.74], { c: wd(0.8) }); // body (hidden mostly)
     for (const sx of [-1, 1]) k.wood.box([0.02, 0.3, 0.52], [sx * 0.27, 0.0, -0.74], { c: wd(0.85) });
