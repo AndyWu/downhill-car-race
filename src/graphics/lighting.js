@@ -103,7 +103,7 @@ export function setupLighting(scene, renderer, opts = {}) {
     u.uHaze.value.copy(cur.haze); u.uSunColor.value.copy(cur.sunColor); u.uGlow.value = cur.glow; u.uDisc.value = cur.disc;
     u.uCover.value = cur.cover; u.uCloudLit.value.copy(cur.cloudLit); u.uCloudShade.value.copy(cur.cloudShade); u.uStars.value = cur.stars;
     u.uDiscSize.value = cur.night > 0.9 ? 0.9996 : 0.99986;
-    fog.color.copy(cur.fog); fog.density = cur.fogDensity;
+    fog.color.copy(cur.horizon).lerp(cur.haze, 0.55); fog.density = cur.fogDensity;
     G.gfxSunFog.value.copy(cur.fogSun);
     G.gfxNight.value = cur.night;
     renderer.toneMappingExposure = cur.exposure;

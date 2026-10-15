@@ -33,8 +33,6 @@ precision highp float;
 varying vec3 vDir;
 uniform vec3 uSunDir, uZenith, uHorizon, uGround, uHaze, uSunColor, uCloudLit, uCloudShade;
 uniform float uGlow, uDisc, uDiscScale, uDiscSize, uCover, uStars, uTime;
-#include <tonemapping_pars_fragment>
-#include <colorspace_pars_fragment>
 float h21( vec2 p ) { p = fract( p * vec2( 123.34, 456.21 ) ); p += dot( p, p + 45.32 ); return fract( p.x * p.y ); }
 float h31( vec3 p ) { p = fract( p * 0.3183099 + 0.1 ); p *= 17.0; return fract( p.x * p.y * p.z * ( p.x + p.y + p.z ) ); }
 float vn( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f );

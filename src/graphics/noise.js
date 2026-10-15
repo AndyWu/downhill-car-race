@@ -14,10 +14,19 @@ export const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); ret
 /** Periodic value noise; (x,y) in lattice units, period (px,py) integers. 0..1 */
 export function vnoise(x, y, px, py, seed = 0) {
   const xi = Math.floor(x), yi = Math.floor(y);
-  const fx = sm(x - xi), fy = sm(y - yi);
-  const x0 = mod(xi, px), x1 = mod(xi + 1, px), y0 = mod(yi, py), y1 = mod(yi + 1, py);
-  const a = hash2(x0, y0, seed), b = hash2(x1, y0, seed), c = hash2(x0, y1, seed), d = hash2(x1, y1, seed);
+  let fx = x - xi, fy = y - yi;
+  fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+  let x0 = xi % px, y0 = yi % py;
+  if (x0 < 0) x0 += px; if (y0 < 0) y0 += py;
+  const x1 = x0 + 1 === px ? 0 : x0 + 1, y1 = y0 + 1 === py ? 0 : y0 + 1;
+  const sd = Math.imul(seed + 1, 1274126177);
+  const a = hs(x0, y0, sd), b = hs(x1, y0, sd), c = hs(x0, y1, sd), d = hs(x1, y1, sd);
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+}
+function hs(x, y, sd) {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ sd;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) * 2.3283064365386963e-10;
 }
 
 /** Periodic fBm over u,v in [0,1). fx,fy base lattice frequency (integers). 0..1 */

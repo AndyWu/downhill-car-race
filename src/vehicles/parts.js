@@ -109,11 +109,11 @@ export function buildSteeringWheelMesh(kit, type, r, col = 0x1c1c1c, col2 = 0x9a
   const tube = type === 'bike' ? 0.01 : 0.016;
   if (type === 'car') {
     c.tor(r, tube + 0.003, [0, 0, 0], { c: col, seg: 24, rseg: 6 });
-    c.cyl(0.04, 0.05, [0, 0, 0.012], { axis: 'z', seg: 10, c: col2 });
+    c.cyl(0.03, 0.04, [0, 0, 0.01], { axis: 'z', seg: 10, c: col2 });
     for (const a of [Math.PI * 0.5 + 0.0, Math.PI * 1.17, Math.PI * -0.17]) {
-      c.bar([0, 0, 0], [Math.cos(a) * r, Math.sin(a) * r, 0], 0.024, 0.014, { c: col2 });
+      c.bar([0, 0, 0], [Math.cos(a) * r, Math.sin(a) * r, 0], 0.016, 0.012, { c: col2 });
     }
-    c.sph(0.02, [0, 0, 0.04], { c: 0xc7352b, seg: 6 }); // horn button
+    c.sph(0.014, [0, 0, 0.03], { c: 0xc7352b, seg: 6 }); // horn button
   } else if (type === 'bike') {
     c.tor(r, 0.009, [0, 0, 0], { c: 0xc8c8c2, seg: 26, rseg: 4 });
     c.tor(r + 0.012, 0.011, [0, 0, 0], { c: 0x222222, seg: 26, rseg: 4 }); // old tyre left on
@@ -123,14 +123,19 @@ export function buildSteeringWheelMesh(kit, type, r, col = 0x1c1c1c, col2 = 0x9a
       c.rod([Math.cos(a + 0.2) * 0.03, Math.sin(a + 0.2) * 0.03, i % 2 ? 0.012 : -0.012], [Math.cos(a) * r, Math.sin(a) * r, 0], 0.0028, { seg: 3, c: 0xd2d2ce });
     }
     for (const sx of [-1, 1]) c.cyl(0.018, 0.1, [sx * r, 0, 0.035], { axis: 'z', seg: 7, c: 0xc7352b }); // taped grips
-  } else if (type === 'disc') {
-    c.cyl(r, 0.022, [0, 0, 0], { axis: 'z', seg: 22, c: col, v: 0.08 });
+  } else if (type === 'disc') { // plywood disc with three cut-out holes, dowel handles
+    const sh = new THREE.Shape(); sh.absarc(0, 0, r, 0, TAU, false);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU + Math.PI / 2, h = new THREE.Path();
+      h.absarc(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55, r * 0.3, 0, TAU, true); sh.holes.push(h);
+    }
+    c.add(new THREE.ExtrudeGeometry(sh, { depth: 0.02, bevelEnabled: false, curveSegments: 14 }).translate(0, 0, -0.01), { c: col, v: 0.08 });
     c.tor(r, 0.008, [0, 0, 0.011], { c: 0x8a6a3a, seg: 22, rseg: 4 });
-    c.cyl(0.03, 0.04, [0, 0, 0.03], { axis: 'z', seg: 8, c: col2 });
-    for (const sx of [-1, 1]) c.cyl(0.016, 0.1, [sx * r * 0.82, 0, 0.06], { axis: 'z', seg: 7, c: sx > 0 ? 0xd8352a : 0xe8c030 });
+    c.cyl(0.026, 0.04, [0, 0, 0.025], { axis: 'z', seg: 8, c: col2 });
+    for (const sx of [-1, 1]) c.cyl(0.014, 0.09, [sx * r * 0.88, 0, 0.05], { axis: 'z', seg: 7, c: sx > 0 ? 0xd8352a : 0xe8c030 });
   } else if (type === 'helm') {
     c.tor(r * 0.75, 0.016, [0, 0, 0], { c: 0x6b4a2a, seg: 24, rseg: 6 });
-    c.cyl(0.05, 0.06, [0, 0, 0], { axis: 'z', seg: 10, c: 0xb08a38 });
+    c.cyl(0.032, 0.05, [0, 0, 0], { axis: 'z', seg: 10, c: 0xb08a38 });
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * TAU;
       c.bar([0, 0, 0], [Math.cos(a) * r, Math.sin(a) * r, 0], 0.016, 0.016, { c: 0x6b4a2a });
@@ -150,15 +155,15 @@ export function buildSteeringWheelMesh(kit, type, r, col = 0x1c1c1c, col2 = 0x9a
 }
 
 // ------------------------------------------------------------------ paddles & levers (pivot at origin, rotate about X)
-export function buildPaddle(kit, col, L = 0.44, lean = 0.22) {
+export function buildPaddle(kit, col, L = 0.46, lean = 0.22) {
   const c = kit.piece(false);
   c.cyl(0.014, 0.1, [0, 0, 0], { axis: 'x', seg: 8, c: 0x888880 });
   const dir = [0, Math.cos(lean), Math.sin(lean)];
   c.bar([0, 0, 0], [0, dir[1] * L, dir[2] * L], 0.03, 0.018, { c: 0x9a7a4a, v: 0.1 });
   // blade
-  const bc = [0, dir[1] * (L - 0.07), dir[2] * (L - 0.07)];
-  c.box([0.13, 0.19, 0.016], bc, { r: [lean, 0, 0], c: col, v: 0.08 });
-  c.box([0.13, 0.02, 0.022], [0, dir[1] * (L - 0.16), dir[2] * (L - 0.16)], { r: [lean, 0, 0], c: 0x1a1a1a }); // rubber tread strip
+  const bc = [0, dir[1] * (L - 0.055), dir[2] * (L - 0.055)];
+  c.box([0.1, 0.15, 0.016], bc, { r: [lean, 0, 0], c: col, v: 0.08 });
+  c.box([0.1, 0.018, 0.022], [0, dir[1] * (L - 0.14), dir[2] * (L - 0.14)], { r: [lean, 0, 0], c: 0x1a1a1a }); // rubber tread strip
   c.tape([0, dir[1] * (L * 0.5), dir[2] * (L * 0.5)], [0.036, 0.05, 0.026], { r: [lean, 0, 0] });
   const g = new THREE.Group();
   const m = new THREE.Mesh(c.merged(), kit.mats.paint);
@@ -168,16 +173,16 @@ export function buildPaddle(kit, col, L = 0.44, lean = 0.22) {
 
 export function buildLever(kit, kind, col) {
   const c = kit.piece(false);
-  const lean = kind === 'hand' ? 0.2 : 0.12, L = kind === 'hand' ? 0.34 : 0.3;
+  const lean = kind === 'hand' ? 0.2 : 0.12, L = kind === 'hand' ? 0.38 : 0.34;
   const dir = [0, Math.cos(lean), Math.sin(lean)];
   c.cyl(0.02, 0.07, [0, 0, 0], { axis: 'x', seg: 8, c: 0x777770 });
   c.rod([0, 0, 0], [0, dir[1] * L, dir[2] * L], kind === 'hand' ? 0.011 : 0.008, { seg: 6, c: 0xb4b4ae });
   if (kind === 'hand') {
-    c.cyl(0.019, 0.15, [0, dir[1] * (L - 0.04), dir[2] * (L - 0.04)], { r: [lean, 0, 0], seg: 8, c: 0x141414 }); // grip
-    c.tape([0, dir[1] * (L - 0.09), dir[2] * (L - 0.09)], [0.04, 0.02, 0.04], { r: [lean, 0, 0] });
-    c.sph(0.016, [0, dir[1] * (L + 0.04), dir[2] * (L + 0.04)], { c: 0xd2352a, seg: 6 }); // release button
+    c.cyl(0.013, 0.11, [0, dir[1] * (L - 0.03), dir[2] * (L - 0.03)], { r: [lean, 0, 0], seg: 8, c: 0x141414 }); // grip
+    c.tape([0, dir[1] * (L - 0.09), dir[2] * (L - 0.09)], [0.03, 0.016, 0.03], { r: [lean, 0, 0] });
+    c.sph(0.011, [0, dir[1] * (L + 0.03), dir[2] * (L + 0.03)], { c: 0xd2352a, seg: 6 }); // release button
   } else {
-    c.sph(0.032, [0, dir[1] * L, dir[2] * L], { c: col || 0xe8e0c8, seg: 8 }); // shifter knob
+    c.sph(0.022, [0, dir[1] * L, dir[2] * L], { c: col || 0xe8e0c8, seg: 8 }); // shifter knob
     c.cyl(0.02, 0.05, [0, dir[1] * 0.06, dir[2] * 0.06], { r: [lean, 0, 0], seg: 8, c: 0x222222, r2: 0.014 }); // boot
   }
   const g = new THREE.Group();
@@ -237,7 +242,7 @@ export function addHeadlight(k, p, style = 'flash', mount = 'wood') {
     for (const sx of [-1, 1]) k.metal.box([0.012, 0.16, 0.012], [x + sx * 0.06, y, z - 0.002], { c: 0x3a4a3a });
     k.paint.box([0.07, 0.07, 0.1], [x, y + 0.14, z + 0.075], { c: 0x226a3a }); // 6V lantern battery on top
     for (const sx of [-1, 1]) k.metal.cyl(0.008, 0.03, [x + sx * 0.02, y + 0.19, z + 0.075], { seg: 5, c: 0xb8b0a0 });
-    k.tape([x, y + 0.115, z + 0.075], [0.135, 0.03, 0.135]);
+    k.paint.tape([x, y + 0.115, z + 0.075], [0.135, 0.03, 0.135]);
     k.rope.lash([x, y + 0.095, z + 0.075], 'y', 0.09, 0.05, 2, { r: 0.007 });
     wires([x + 0.02, y + 0.19, z + 0.075], [x + 0.02, y - 0.05, z + 0.55], 0xb82a22);
     wires([x - 0.02, y + 0.19, z + 0.075], [x - 0.02, y - 0.05, z + 0.55], 0x111111);
@@ -248,7 +253,7 @@ export function addHeadlight(k, p, style = 'flash', mount = 'wood') {
     k.paint.box([0.1, 0.1, 0.07], [x, y, z + 0.17], { c: 0x2a2a2a });
     k.paint.box([0.1, 0.07, 0.15], [x + 0.0, y - 0.1, z + 0.28], { c: 0x2c3a5a }); // moto battery
     for (const sx of [-1, 1]) k.metal.cyl(0.008, 0.02, [x + sx * 0.03, y - 0.055, z + 0.28], { seg: 5, c: 0xc8b890 });
-    k.tape([x, y, z + 0.05], [0.15, 0.03, 0.03]);
+    k.paint.tape([x, y, z + 0.05], [0.15, 0.03, 0.03]);
     k.rope.lash([x, y - 0.1, z + 0.28], 'z', 0.06, 0.08, 2, { r: 0.006 });
     wires([x, y - 0.12, z + 0.36], [x + 0.04, y - 0.18, z + 0.6], 0xb82a22);
     wires([x + 0.025, y - 0.12, z + 0.36], [x + 0.06, y - 0.18, z + 0.6], 0x111111);
@@ -258,8 +263,8 @@ export function addHeadlight(k, p, style = 'flash', mount = 'wood') {
     k.paint.cyl(0.045, 0.1, [x, y, z + 0.05], { axis: 'z', seg: 12, c: 0x1c1c1c, r2: 0.035 });
     k.metal.cyl(0.012, 0.1, [x, y - 0.07, z + 0.06], { seg: 6, c: 0x888880 });
     k.paint.box([0.06, 0.04, 0.12], [x + 0.08, y - 0.02, z + 0.2], { c: 0x242428 }); // pack of AAs
-    k.tape([x + 0.08, y - 0.02, z + 0.2], [0.065, 0.045, 0.02]);
-    k.tape([x, y, z + 0.06], [0.06, 0.06, 0.02]);
+    k.paint.tape([x + 0.08, y - 0.02, z + 0.2], [0.065, 0.045, 0.02]);
+    k.paint.tape([x, y, z + 0.06], [0.06, 0.06, 0.02]);
     wires([x + 0.07, y - 0.02, z + 0.26], [x + 0.05, y - 0.08, z + 0.5], 0xb82a22);
     wires([x + 0.01, y, z + 0.1], [x + 0.065, y - 0.02, z + 0.2], 0x111111);
   }
@@ -281,11 +286,10 @@ export function addHeadlight(k, p, style = 'flash', mount = 'wood') {
 export function addFlagPole(k, p, h = 0.55, col = 0xc8b48a) {
   const [x, y, z] = p;
   k.metal.cyl(0.03, 0.08, [x, y + 0.03, z], { seg: 8, c: 0x6a625a, r2: 0.024 }); // pipe socket
-  k.rod([x, y, z], [x, y + h, z], 0.0085, { seg: 6, c: col, v: 0.1, grime: 0 }); // dowel
+  k.wood.rod([x, y, z], [x, y + h, z], 0.0085, { seg: 6, c: col, v: 0.1, grime: 0 }); // dowel
   k.rope.lash([x, y + 0.05, z], 'y', 0.014, 0.08, 4, { r: 0.0055 });
-  k.tape([x, y + 0.12, z], [0.026, 0.03, 0.026], { r: [0, 0.5, 0] });
+  k.paint.tape([x, y + 0.12, z], [0.026, 0.03, 0.026], { r: [0, 0.5, 0] });
   k.paint.sph(0.015, [x, y + h + 0.012, z], { c: 0xe8c030, seg: 6, grime: 0 });
-  k.paint.cyl(0.004, 0.14, [x, y + h - 0.05, z - 0.0], { axis: 'x', seg: 4, c: 0x888 });
   const fm = new THREE.Object3D();
   fm.name = 'flagMount';
   fm.position.set(x, y + h - 0.03, z);

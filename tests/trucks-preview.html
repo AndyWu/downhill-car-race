@@ -1,0 +1,81 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Trucks preview</title>
+<style>html,body{margin:0;background:#9bb8d0;overflow:hidden}canvas{display:block}</style></head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { TRUCKS, buildTruck } from '/src/vehicles/index.js';
+
+const q = new URLSearchParams(location.search);
+const W = +(q.get('w') || 1280), H = +(q.get('h') || 720);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H);
+renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xa9c4dc);
+scene.fog = new THREE.Fog(0xa9c4dc, 14, 60);
+scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x6b5a45, 1.5));
+const sun = new THREE.DirectionalLight(0xfff0d8, 3.2);
+sun.position.set(-4, 7, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 20 });
+scene.add(sun);
+// simple procedural environment so metals are not black
+const pm = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene(); envScene.background = new THREE.Color(0x8aa6c0);
+const eg = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ color: 0x6b5a45 })); eg.rotation.x = -Math.PI / 2; eg.position.y = -2; envScene.add(eg);
+scene.environment = pm.fromScene(envScene, 0.04).texture;
+scene.environmentIntensity = 0.6;
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x8a7455, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+// scattered stones/ruts so FP has some context
+for (let i = 0; i < 60; i++) {
+  const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.05 + Math.random() * 0.12, 0), new THREE.MeshStandardMaterial({ color: 0x6f6a60, roughness: 1 }));
+  s.position.set((Math.random() - 0.5) * 20, 0.02, -2 - Math.random() * 16); scene.add(s);
+}
+
+const cam = new THREE.PerspectiveCamera(50, W / H, 0.05, 100);
+let current = null;
+function show(i, view) {
+  if (current) scene.remove(current.group);
+  const spec = TRUCKS[i];
+  current = buildTruck(spec);
+  const { group, parts } = current;
+  group.position.y = spec.wheelRadius; // wheels rest on the ground
+  scene.add(group);
+  group.updateMatrixWorld(true);
+  parts.driver.visible = view !== 'fp';
+  if (view === 'mech') { // exercise every articulated part
+    parts.wheels[0].rotation.y = parts.wheels[1].rotation.y = -0.4;
+    parts.wheels.forEach((w, n) => { w.rotation.x = 0.7 + n; });
+    parts.steeringWheel.rotation.z = 0.8;
+    parts.paddleL.rotation.x = -0.6; parts.paddleR.rotation.x = -0.25;
+    parts.handbrakeLever.rotation.x = -0.5; parts.gearLever.rotation.x = -0.5;
+    parts.headlight.userData.setOn(true);
+  }
+  if (view === 'fp') {
+    cam.fov = +(q.get('fov') || 65); cam.aspect = W / H; cam.updateProjectionMatrix();
+    const p = new THREE.Vector3(); parts.driverEye.getWorldPosition(p);
+    cam.position.copy(p); cam.lookAt(p.x, p.y - 0.05, p.z - 5);
+  } else {
+    cam.fov = 36; cam.updateProjectionMatrix();
+    cam.position.set(-2.3, 1.35, -2.9);
+    cam.lookAt(0, 0.38 + spec.wheelRadius * 0.3, -0.1);
+  }
+  renderer.info.reset();
+  renderer.render(scene, cam);
+  renderer.render(scene, cam);
+  const info = renderer.info.render;
+  return { id: spec.id, calls: info.calls, triangles: info.triangles, meshes: group.userData.drawCalls };
+}
+window.__show = show;
+window.__count = TRUCKS.length;
+window.__ready = true;
+const i = q.get('truck');
+if (i !== null) window.__info = show(+i, q.get('view') || 'ext');
+</script></body></html>

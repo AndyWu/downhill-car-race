@@ -139,6 +139,10 @@ export class Collector {
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    if (!Number.isFinite(pos.getX(0) + pos.getY(0) + pos.getZ(0) + pos.getX(pos.count - 1))) {
+      console.warn('[vehicles] dropped NaN geometry', geo.type, this.kind, new Error().stack.split('\n')[3]);
+      return this;
+    }
     this.list.push(g);
     return this;
   }
@@ -227,7 +231,8 @@ export class Collector {
       else if (axis === 'y') pts.push([c[0] + u, c[1] + s, c[2] + w]);
       else pts.push([c[0] + u, c[1] + w, c[2] + s]);
     }
-    return this.tube(pts, o.r || 0.0085, { rseg: 4, segs: n * 2, c: 0xffffff, grime: 0.3, ...o });
+    const { r, ...rest } = o;
+    return this.tube(pts, r || 0.0085, { rseg: 4, segs: n * 2, c: 0xffffff, grime: 0.3, ...rest });
   }
 
   /** silver duct-tape patch (thin box) */

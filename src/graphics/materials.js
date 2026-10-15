@@ -8,7 +8,7 @@ export function createMaterials(renderer, opts = {}) {
   installFog();
   const maxA = renderer?.capabilities?.getMaxAnisotropy?.() ?? 4;
   const aniso = Math.min(opts.anisotropy ?? 8, maxA);
-  const big = opts.quality === 'low' ? 256 : (opts.bigTextureSize ?? 512);
+  const big = opts.quality === 'low' ? 256 : (opts.bigTextureSize ?? (opts.quality === 'high' ? 512 : 384));
   const small = opts.quality === 'low' ? 256 : (opts.textureSize ?? 256);
   const T = {};
   const M = {};
@@ -75,13 +75,13 @@ export function createMaterials(renderer, opts = {}) {
   // UVs expected in metres (1 UV unit = 1 ripple tile).
   T.water = RECIPES.waterNormal(256, aniso);
   M.water = timed(new THREE.MeshStandardMaterial({
-    name: 'water', color: new THREE.Color(0x1d1a12), roughness: 0.035, metalness: 0.0,
-    normalMap: T.water.normalMap, normalScale: new THREE.Vector2(0.55, 0.55),
-    transparent: true, opacity: 0.9, depthWrite: false, envMapIntensity: 1.3,
+    name: 'water', color: new THREE.Color(0x2a2214), roughness: 0.04, metalness: 0.0,
+    normalMap: T.water.normalMap, normalScale: new THREE.Vector2(0.28, 0.28),
+    transparent: true, opacity: 0.95, depthWrite: false, envMapIntensity: 0.85,
   }));
   M.water.onBeforeCompile = (shader) => {
     injectGlobals(shader);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', /* glsl */`
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nuniform float gfxTime;').replace('#include <normal_fragment_maps>', /* glsl */`
 	{
 		vec2 wuv = vNormalMapUv; float t = gfxTime;
 		vec3 n1 = texture2D( normalMap, wuv + vec2( t * 0.021, t * 0.013 ) ).xyz * 2.0 - 1.0;
@@ -113,7 +113,7 @@ export function createMaterials(renderer, opts = {}) {
     injectGlobals(shader);
     shader.uniforms.gWind = wind;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float gWind;')
+      .replace('#include <common>', '#include <common>\nuniform float gWind; uniform float gfxTime;')
       .replace('#include <begin_vertex>', /* glsl */`#include <begin_vertex>
 	{
 		#ifdef USE_INSTANCING

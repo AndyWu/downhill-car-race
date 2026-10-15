@@ -78,25 +78,25 @@ export const RECIPES = {
     return bake('dirtRoad', size, (u, v, c) => {
       const uu = u + (vnoise(v * 6, 0.5, 6, 1, 5) - 0.5) * 0.05;
       const n1 = fbm(u, v, 4, 4, 5, 1), n2 = fbm(u, v, 24, 24, 3, 2), grain = vnoise(u * size / 3, v * size / 3, size / 3, size / 3, 3);
-      const d1 = wrapd(uu - 0.25) / 0.085, d2 = wrapd(uu - 0.75) / 0.085;
+      const d1 = wrapd(uu - 0.25) / 0.06, d2 = wrapd(uu - 0.75) / 0.06;
       const rut = Math.max(Math.exp(-d1 * d1), Math.exp(-d2 * d2));
-      let h = 0.58 - rut * 0.3 + n1 * 0.22 + n2 * 0.08 + grain * 0.04;
+      let h = 0.58 - rut * 0.2 + n1 * 0.22 + n2 * 0.08 + grain * 0.04;
       lerp3(c, 0.43, 0.33, 0.22, 0.3, 0.22, 0.145, n1);
       const dust = smoothstep(0.58, 0.8, n2) * (1 - rut) * 0.35;
       c.r = mix(c.r, 0.55, dust); c.g = mix(c.g, 0.45, dust); c.b = mix(c.b, 0.33, dust);
-      c.r = mix(c.r, 0.24, rut * 0.6); c.g = mix(c.g, 0.175, rut * 0.6); c.b = mix(c.b, 0.12, rut * 0.6);
+      c.r = mix(c.r, 0.3, rut * 0.35); c.g = mix(c.g, 0.22, rut * 0.35); c.b = mix(c.b, 0.15, rut * 0.35);
       mul(c, 0.85 + grain * 0.3);
       let rough = 0.94 - rut * 0.14 + (grain - 0.5) * 0.08, ao = 0.75 + clamp(h - 0.3) * 0.35;
       worley(u, v, 26, 11, W);
-      if (W.id < 0.24) {
-        const rad = 0.12 + 0.2 * (W.id / 0.24);
+      if (W.id < 0.18) {
+        const rad = 0.1 + 0.16 * (W.id / 0.18);
         const q = W.f1 / rad;
         if (q < 1) {
           const dome = Math.sqrt(1 - q * q);
           const tone = 0.55 + 0.7 * hash2(Math.floor(W.id * 1e4), 3, 4);
-          const g = 0.40 * tone;
+          const g = 0.27 * tone;
           c.r = mix(c.r, g * 1.04, dome > 0.15 ? 1 : dome / 0.15); c.g = mix(c.g, g, dome > 0.15 ? 1 : dome / 0.15); c.b = mix(c.b, g * 0.92, dome > 0.15 ? 1 : dome / 0.15);
-          h += dome * 0.25; rough = 0.72;
+          h += dome * 0.25; rough = 0.86;
         } else if (q < 1.5) ao *= 0.65 + (q - 1) * 0.7;
       }
       c.h = h; c.rough = rough; c.ao = ao;
@@ -106,14 +106,14 @@ export const RECIPES = {
   // ---------------------------------------------------------------- wet mud
   mud(size, aniso) {
     return bake('mud', size, (u, v, c) => {
-      const wet = smoothstep(0.47, 0.58, fbm(u, v, 3, 3, 4, 31));
+      const wet = smoothstep(0.52, 0.64, fbm(u, v, 3, 3, 4, 31));
       const lumps = fbm(u, v, 8, 8, 5, 32);
       const ridges = 1 - Math.abs(2 * fbm(u, v, 5, 5, 3, 33) - 1);
       const grain = vnoise(u * size / 4, v * size / 4, size / 4, size / 4, 34);
       let h = lumps * 0.5 + ridges * 0.38 + grain * 0.03;
       h = mix(h, 0.34 + fbm(u, v, 20, 20, 2, 35) * 0.04, wet * 0.85);
-      lerp3(c, 0.2, 0.135, 0.08, 0.3, 0.215, 0.13, lumps);
-      c.r = mix(c.r, 0.095, wet * 0.8); c.g = mix(c.g, 0.07, wet * 0.8); c.b = mix(c.b, 0.048, wet * 0.8);
+      lerp3(c, 0.27, 0.185, 0.11, 0.38, 0.275, 0.17, lumps);
+      c.r = mix(c.r, 0.16, wet * 0.8); c.g = mix(c.g, 0.115, wet * 0.8); c.b = mix(c.b, 0.075, wet * 0.8);
       worley(u, v, 40, 36, W);
       let rough = mix(0.82, 0.16, wet) + (grain - 0.5) * 0.18;
       if (W.id < 0.14 && W.f1 < 0.3) { const d = Math.sqrt(1 - (W.f1 / 0.3) ** 2); h += d * 0.12; c.r = mix(c.r, 0.36, d * 0.7); c.g = mix(c.g, 0.31, d * 0.7); c.b = mix(c.b, 0.26, d * 0.7); rough = 0.6; }
@@ -133,18 +133,19 @@ export const RECIPES = {
   // ---------------------------------------------------------------- fractured rock
   rock(size, aniso) {
     return bake('rock', size, (u, v, c) => {
-      worley(u, v, 6, 51, W);
-      const crack = smoothstep(0.0, 0.14, W.f2 - W.f1);
+      const wu = u + (fbm(u, v, 4, 4, 3, 55) - 0.5) * 0.1, wv = v + (fbm(u, v, 4, 4, 3, 56) - 0.5) * 0.1;
+      worley(wu, wv, 6, 51, W);
+      const crack = 0.4 + 0.6 * smoothstep(0.0, 0.2, W.f2 - W.f1);
       const strata = Math.sin((v + fbm(u, v, 3, 3, 3, 52) * 0.25) * Math.PI * 2 * 9) * 0.5 + 0.5;
-      const fine = fbm(u, v, 12, 12, 5, 53);
-      const h = crack * 0.45 + fine * 0.38 + W.id * 0.17;
-      const tone = 0.82 + (W.id - 0.5) * 0.3 + (fine - 0.5) * 0.45;
-      set(c, 0.41 * tone, 0.385 * tone, 0.35 * tone);
-      c.r += strata * 0.05; c.g += strata * 0.03;
-      const lich = smoothstep(0.6, 0.74, fbm(u, v, 7, 7, 3, 54)) * 0.55;
-      c.r = mix(c.r, 0.40, lich); c.g = mix(c.g, 0.46, lich); c.b = mix(c.b, 0.22, lich);
-      mul(c, 0.45 + 0.55 * crack);
-      c.h = h; c.rough = 0.9 - fine * 0.15; c.ao = 0.4 + 0.6 * crack;
+      const fine = fbm(u, v, 12, 12, 5, 53), grit = vnoise(u * 96, v * 96, 96, 96, 57);
+      const h = crack * 0.35 + fine * 0.45 + W.id * 0.15 + grit * 0.05;
+      const tone = 0.8 + (W.id - 0.5) * 0.25 + (fine - 0.5) * 0.7 + (grit - 0.5) * 0.15;
+      set(c, 0.42 * tone, 0.39 * tone, 0.35 * tone);
+      c.r += strata * 0.04; c.g += strata * 0.025;
+      const lich = smoothstep(0.6, 0.74, fbm(u, v, 7, 7, 3, 54)) * 0.5;
+      c.r = mix(c.r, 0.40, lich); c.g = mix(c.g, 0.45, lich); c.b = mix(c.b, 0.23, lich);
+      mul(c, 0.6 + 0.4 * crack);
+      c.h = h; c.rough = 0.9 - fine * 0.15; c.ao = 0.55 + 0.45 * crack;
     }, { normalStrength: 4.2, aniso });
   },
 
@@ -223,17 +224,17 @@ export const RECIPES = {
       const wood = 0.74 + gr * 0.5;
       const wr = 0.47 * wood * (0.8 + 0.2 * lines), wg = 0.43 * wood * (0.8 + 0.2 * lines), wb = 0.39 * wood * (0.82 + 0.18 * lines);
       // paint presence (streaky, peeling more at plank edges)
-      const streak = fbm(u, v, 24, 4, 4, 92), blob = fbm(u, v, 5, 5, 4, 93);
-      const pm = streak * 0.55 + blob * 0.45 + (1 - edge) * 0.06 + (1 - smoothstep(0, 0.18, fu)) * 0.05;
-      const paint = 1 - smoothstep(0.585, 0.625, pm);
+      const streak = fbm(u, v, 16, 2, 4, 92), blob = fbm(u, v, 3, 3, 4, 93), rag = fbm(u, v, 28, 28, 3, 98);
+      const pm = streak * 0.4 + blob * 0.5 + rag * 0.12 + (1 - edge) * 0.05 + (1 - smoothstep(0, 0.18, fu)) * 0.05;
+      const paint = 1 - smoothstep(0.585, 0.615, pm);
       const rim = 1 - smoothstep(0.0, 0.05, Math.abs(pm - 0.6));
       const chalk = fbm(u, v, 3, 3, 3, 95);
-      let pr = 0.46, pg = 0.075, pb = 0.05;
+      let pr = 0.38, pg = 0.07, pb = 0.05;
       const vary = 0.78 + 0.45 * fbm(u, v, 8, 8, 3, 94);
       pr *= vary; pg *= vary; pb *= vary;
-      pr = mix(pr, 0.64, chalk * 0.45); pg = mix(pg, 0.27, chalk * 0.45); pb = mix(pb, 0.21, chalk * 0.45);
-      pr = mix(pr, 0.7, rim * 0.5); pg = mix(pg, 0.34, rim * 0.5); pb = mix(pb, 0.28, rim * 0.5);
-      const sk = 0.78 + 0.4 * fbm(u, v, 44, 2, 3, 96);
+      pr = mix(pr, 0.5, chalk * 0.4); pg = mix(pg, 0.22, chalk * 0.4); pb = mix(pb, 0.18, chalk * 0.4);
+      pr = mix(pr, 0.55, rim * 0.5); pg = mix(pg, 0.27, rim * 0.5); pb = mix(pb, 0.22, rim * 0.5);
+      const sk = 0.6 + 0.55 * fbm(u, v, 44, 2, 3, 96) * (0.7 + 0.5 * fbm(u, v, 6, 6, 3, 99));
       pr *= sk; pg *= sk; pb *= sk;
       c.r = mix(wr, pr, paint); c.g = mix(wg, pg, paint); c.b = mix(wb, pb, paint);
       const grime = clamp(gap * 0.9 + (1 - paint) * 0.15 * (1 - fbm(u, v, 6, 6, 2, 97)));

@@ -1,0 +1,19 @@
+{
+  "name": "Soap Box Derby",
+  "short_name": "Soap Box",
+  "description": "Homemade soap box downhill racing for the whole family — works offline, races over local Wi-Fi.",
+  "id": "./",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#2b2418",
+  "theme_color": "#2b2418",
+  "categories": ["games", "kids", "family"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/apple-touch-icon-180.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

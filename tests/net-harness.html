@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Net harness</title>
+<style>body{font:14px system-ui;background:#222;color:#eee;margin:16px}</style>
+</head>
+<body>
+<p id="status">loading…</p>
+<script type="module">
+  import * as net from '/src/net/index.js';
+  import jsQR from 'jsqr';
+  window.jsQR = jsQR;
+  window.net = net;
+  window.netReady = true;
+  document.getElementById('status').textContent = 'net loaded';
+</script>
+</body>
+</html>
