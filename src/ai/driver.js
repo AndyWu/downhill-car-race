@@ -72,8 +72,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
         } else {
           goal = clamp(ahead.lateral - eT, -2.5, 2.5) * P.draft.strength; // sit in the slipstream
         }
-      } else if (P.aggression > 0.5 && aheadDs < 14) {
-        goal = clamp(ahead.lateral - eT, -3, 3); // line up for a bump
+      } else if (P.aggression > 0.5 && aheadDs < 6 && (ahead.speed || 0) > speed - 0.3 && Math.abs(dl) < 1.2) {
+        goal = clamp(ahead.lateral - eT, -1.5, 1.5) * 0.5; // nudge a rival that is not slower
       } else if (P.carAvoid > 0 && aheadDs < 12 && Math.abs(dl) < 1.8 && speed > (ahead.speed || 0) - 0.5) {
         goal = (dl >= 0 ? -1 : 1) * 2.0 * P.carAvoid;
       }

@@ -166,6 +166,67 @@ export const RECIPES = {
     }, { normalStrength: 3.2, aniso });
   },
 
+  // ---------------------------------------------------------------- tileable ripple normal for water
+  waterNormal(size, aniso) {
+    return bake('waterNormal', size, (u, v, c) => {
+      const a = fbm(u, v, 5, 5, 5, 41, 0.55);
+      const r = Math.sin((u * 6 + fbm(u, v, 3, 3, 3, 42) * 1.5) * Math.PI * 2) * 0.5 + 0.5;
+      c.h = a * 0.8 + r * 0.04; set(c, 0.1, 0.1, 0.1);
+    }, { normalStrength: 2.2, aniso, needsOrm: false });
+  },
+
+  // ---------------------------------------------------------------- fractured rock
+  rock(size, aniso) {
+    return bake('rock', size, (u, v, c) => {
+      const wu = u + (fbm(u, v, 4, 4, 3, 55) - 0.5) * 0.1, wv = v + (fbm(u, v, 4, 4, 3, 56) - 0.5) * 0.1;
+      worley(wu, wv, 6, 51, W);
+      const crack = 0.4 + 0.6 * smoothstep(0.0, 0.2, W.f2 - W.f1);
+      const strata = Math.sin((v + fbm(u, v, 3, 3, 3, 52) * 0.25) * Math.PI * 2 * 9) * 0.5 + 0.5;
+      const fine = fbm(u, v, 12, 12, 5, 53), grit = vnoise(u * 96, v * 96, 96, 96, 57);
+      const h = crack * 0.35 + fine * 0.45 + W.id * 0.15 + grit * 0.05;
+      const tone = 0.8 + (W.id - 0.5) * 0.25 + (fine - 0.5) * 0.7 + (grit - 0.5) * 0.15;
+      set(c, 0.42 * tone, 0.39 * tone, 0.35 * tone);
+      c.r += strata * 0.04; c.g += strata * 0.025;
+      const lich = smoothstep(0.6, 0.74, fbm(u, v, 7, 7, 3, 54)) * 0.5;
+      c.r = mix(c.r, 0.40, lich); c.g = mix(c.g, 0.45, lich); c.b = mix(c.b, 0.23, lich);
+      mul(c, 0.6 + 0.4 * crack);
+      c.h = h; c.rough = 0.9 - fine * 0.15; c.ao = 0.55 + 0.45 * crack;
+    }, { normalStrength: 4.2, aniso });
+  },
+
+  // ---------------------------------------------------------------- sand with wind ripples
+  sand(size, aniso) {
+    return bake('sand', size, (u, v, c) => {
+      const warp = fbm(u, v, 3, 3, 3, 61);
+      const ph = (v + warp * 0.14 + (fbm(u, v, 8, 2, 2, 63) - 0.5) * 0.02) * Math.PI * 2 * 10;
+      const rip = 1 - Math.abs(Math.sin(ph));
+      const grain = vnoise(u * size / 2, v * size / 2, size / 2, size / 2, 62);
+      const lowf = fbm(u, v, 5, 5, 4, 64);
+      lerp3(c, 0.65, 0.54, 0.38, 0.83, 0.72, 0.52, rip);
+      mul(c, 0.86 + lowf * 0.28);
+      if (grain > 0.93) mul(c, 1.14);
+      c.h = rip * 0.4 + lowf * 0.25 + grain * 0.06; c.rough = 0.95; c.ao = 0.7 + rip * 0.3;
+    }, { normalStrength: 2.4, aniso });
+  },
+
+  // ---------------------------------------------------------------- muted grass ground
+  grass(size, aniso) {
+    return bake('grass', size, (u, v, c) => {
+      const clump = fbm(u, v, 8, 8, 4, 71), dry = fbm(u, v, 3, 3, 3, 73);
+      const A = vnoise(u * 128, v * 32, 128, 32, 72), B = vnoise(u * 32, v * 128, 32, 128, 75), C = vnoise(u * 90, v * 90, 90, 90, 76);
+      const blade = (A + B + C) / 3;
+      lerp3(c, 0.16, 0.25, 0.07, 0.3, 0.34, 0.12, clump);
+      const dr = smoothstep(0.45, 0.7, dry) * 0.6;
+      c.r = mix(c.r, 0.42, dr); c.g = mix(c.g, 0.36, dr); c.b = mix(c.b, 0.17, dr);
+      const soil = smoothstep(0.66, 0.78, fbm(u, v, 5, 5, 3, 74));
+      c.r = mix(c.r, 0.27, soil); c.g = mix(c.g, 0.2, soil); c.b = mix(c.b, 0.13, soil);
+      mul(c, 0.65 + blade * 0.7);
+      const l = c.r * 0.3 + c.g * 0.59 + c.b * 0.11; // desaturate a touch (TLoU palette)
+      c.r = mix(c.r, l, 0.18); c.g = mix(c.g, l, 0.18); c.b = mix(c.b, l, 0.18);
+      c.h = blade * 0.55 + clump * 0.3 + (1 - soil) * 0.1; c.rough = 0.92; c.ao = 0.5 + 0.5 * blade;
+    }, { normalStrength: 2.2, aniso });
+  },
+
   // ---------------------------------------------------------------- dusty weathered boards (tile = 1x1 m, 4 boards, grain along U)
   woodWeathered(size, aniso) {
     return bake('wood', size, (u, v, c) => {

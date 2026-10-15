@@ -39,14 +39,14 @@ const make = (o) => Object.freeze(merge(BASE, o));
 export const Barnaby = make({
   id: 'barnaby', name: 'Barnaby', tier: 1, title: 'Rookie',
   description: 'Oversteers, weaves, misses rocks, forgets to paddle, brakes late.',
-  reactionTime: 0.2, steerGain: 1.05, yawDamp: 0.12, steerNoise: 0.035, steerNoiseTau: 0.5, steerTau: 0.1,
+  reactionTime: 0.15, steerGain: 0.95, yawDamp: 0.15, steerNoise: 0.03, steerNoiseTau: 0.5, steerTau: 0.1,
   look: { min: 7, time: 0.5 },
   perception: { detect: { rock: 0.5, mud: 1, water: 1, default: 0.5 } },
   hazardWeight: { rock: 20, mud: 10, water: 8, default: 5 }, hazardMargin: 0.8, hazardStretch: 0.9,
   line: { mode: 'center', edge: 0.1, pull: 0.3, maxStep: 3, smooth: 1 },
-  speed: { mu: 0.8, cornerFactor: 1.2, brakeDecel: 9, cap: 10.8 },
+  speed: { mu: 0.8, cornerFactor: 1.2, brakeDecel: 9, cap: 10.3 },
   paddle: { mode: 'forgetful', cadence: 2.7, strength: 0.9, jitter: 0.3,
-    attentive: 0.85, startDist: 120 },
+    attentive: 0.6, startDist: 120 },
   brake: { gain: 0.3, dead: 0.5, max: 0.9 },
 });
 
@@ -76,7 +76,7 @@ export const Buster = make({
   paddle: { mode: 'furious', cadence: 3.7, strength: 1.0, jitter: 0.04,
     stamina: { drain: 0.02, regen: 0.1, minFactor: 0.85 } },
   brake: { gain: 0.5, dead: 0.7 },
-  aggression: 0.8,
+  aggression: 0.8, pass: true,
 });
 
 export const Maeve = make({

@@ -28,10 +28,15 @@ export function createInterpolator({ delayMs = 100, tickRate = 60, maxBuffer = 4
     while (win.length > 2 && local - win[0][0] > 3) win.shift();
     // tick rate from the window (lowest-latency samples at both ends would be ideal; the 3 s
     // baseline keeps jitter error to a few %)
-    let lo = win[0], hi = win[win.length - 1];
-    if (hi[0] - lo[0] > 0.75 && hi[1] > lo[1]) {
-      const r = Math.max(10, Math.min(120, (hi[1] - lo[1]) / (hi[0] - lo[0])));
-      rate += (r - rate) * 0.1;
+    // lower-envelope fit: lowest-latency arrival in each half of the window
+    if (win[win.length - 1][0] - win[0][0] > 0.75) {
+      const mid = win.length >> 1;
+      const best = (from, to) => { let bi = from; for (let i = from; i < to; i++) if (win[i][0] - win[i][1] / tickRate < win[bi][0] - win[bi][1] / tickRate) bi = i; return win[bi]; };
+      const lo = best(0, mid), hi = best(mid, win.length);
+      if (hi[0] - lo[0] > 0.5 && hi[1] > lo[1]) {
+        const r = Math.max(10, Math.min(120, (hi[1] - lo[1]) / (hi[0] - lo[0])));
+        rate += (r - rate) * 0.1;
+      }
     }
     let o = Infinity;
     for (const [l, t] of win) o = Math.min(o, l - t / rate);

@@ -154,6 +154,10 @@ async function runRace(mode) {
   const hl = hostLog.length ? (hostLog[hostLog.length - 1][0] - hostLog[0][0]) / ((hostLog[hostLog.length - 1][3] - hostLog[0][3]) / 1000) : 0;
   const crate = await client.evaluate(() => window.__netDebug.interp?.hostTickRate);
   console.log(`  host simulation rate ${hl.toFixed(1)} ticks/s (client estimate ${crate?.toFixed(1)})`);
+  if (process.env.NET_DEBUG) {
+    const worst = []; for (const [seq, x, y, z] of predLog) { const hp = hostAtSeq.get(seq); if (hp) worst.push([Math.hypot(x - hp[0], y - hp[1], z - hp[2]), seq]); }
+    worst.sort((a, b) => b[0] - a[0]); console.log('  worst pred seqs', JSON.stringify(worst.slice(0, 8).map((w) => [+w[0].toFixed(2), w[1]])), 'seq range', predLog[0]?.[0], predLog.at(-1)?.[0], 'skipBefore', skipBefore);
+  }
   const pops = popLog.slice(Math.floor(popLog.length * 0.15));
   const cSec = (t1.t - t0.t) / 1000, hSec = (h1.t - h0.t) / 1000;
   const clientTx = (t1.tx - t0.tx) / cSec, clientRx = (t1.rx - t0.rx) / cSec, hostTx = (h1.tx - h0.tx) / hSec;
