@@ -5,7 +5,7 @@ import { mulberry32, Noise, clamp, smoothstep, lerp, ihash } from './util.js';
 import { Batch, boxG, cylG, prep, xf } from './batch.js';
 import { bannerTexture } from './materials.js';
 
-export const SCENERY_CHUNK = 250;
+export const SCENERY_CHUNK = 125;
 
 // ---------- geometry builders ----------
 function colorize(g, fn) {
@@ -121,7 +121,7 @@ function makeGrass() {
     const cols = [[0.16, 0.24, 0.08], [0.16, 0.24, 0.08], [0.34, 0.48, 0.15]];
     for (let i = 0; i < 3; i++) { P.push(...vs[i]); C.push(...cols[i]); N.push(0, 1, 0); }
   };
-  for (let i = 0; i < 12; i++) blade(rng() * 6.28, rng() * 0.2 + 0.04, 0.25 + rng() * 0.38, 0.02 + rng() * 0.02, rng() * 0.2);
+  for (let i = 0; i < 8; i++) blade(rng() * 6.28, rng() * 0.2 + 0.04, 0.25 + rng() * 0.38, 0.02 + rng() * 0.02, rng() * 0.2);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(P.length / 3 * 2), 2));
@@ -135,6 +135,60 @@ function makePole() {
     { g: boxG(2.2, 0.12, 0.12, 2), m: xf(0, 8.3, 0), shade: col },
     { g: boxG(1.8, 0.1, 0.1, 2), m: xf(0, 7.4, 0), shade: col },
     ...[-0.9, 0, 0.9].map((x) => ({ g: cylG(0.04, 0.05, 0.18, 5, 1), m: xf(x, 8.45, 0), shade: (a, b, c, o) => { o[0] = 0.2; o[1] = 0.45; o[2] = 0.4; } })),
+  ]);
+}
+
+
+// ---------- baking helpers (merge many placed copies into one static geometry) ----------
+function bakeStatic(geo, ms, cols) {
+  const base = prep(geo), list = [];
+  for (let i = 0; i < ms.length; i++) {
+    const g = base.clone(); g.applyMatrix4(ms[i]);
+    const n = g.attributes.position.count, c = cols ? cols[i] : null;
+    const arr = new Float32Array(n * 3);
+    const src = base.attributes.color;
+    for (let k = 0; k < n; k++) {
+      const m = src ? src.getX(k) : 1, m2 = src ? src.getY(k) : 1, m3 = src ? src.getZ(k) : 1;
+      arr[k * 3] = m * (c ? c.r : 1); arr[k * 3 + 1] = m2 * (c ? c.g : 1); arr[k * 3 + 2] = m3 * (c ? c.b : 1);
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    list.push(g);
+  }
+  const out = mergeGeometries(list, false); out.computeBoundingSphere();
+  return out;
+}
+/** merge placed trees; adds swayH (height factor incl. species amplitude) and swayO (tree origin xz) for the vertex shader */
+function bakeTrees(items, part) {
+  const list = [];
+  for (const it of items) {
+    const g0 = it.sp[part]; if (!g0) continue;
+    const g = g0.clone(); const p = g.attributes.position, n = p.count;
+    const sh = new Float32Array(n), so = new Float32Array(n * 2), col = new Float32Array(n * 3), c0 = g.attributes.color;
+    const pos = new THREE.Vector3(); it.m.decompose(pos, new THREE.Quaternion(), new THREE.Vector3());
+    const k = (it.sp.amp / 0.14) / it.sp.h;
+    for (let i = 0; i < n; i++) {
+      sh[i] = Math.max(0, p.getY(i)) * k; so[i * 2] = pos.x; so[i * 2 + 1] = pos.z;
+      col[i * 3] = c0.getX(i) * it.col.r; col[i * 3 + 1] = c0.getY(i) * it.col.g; col[i * 3 + 2] = c0.getZ(i) * it.col.b;
+    }
+    g.applyMatrix4(it.m);
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('swayH', new THREE.BufferAttribute(sh, 1)); g.setAttribute('swayO', new THREE.BufferAttribute(so, 2));
+    for (const nme of Object.keys(g.attributes)) if (!['position', 'normal', 'uv', 'color', 'swayH', 'swayO'].includes(nme)) g.deleteAttribute(nme);
+    list.push(g);
+  }
+  if (!list.length) return null;
+  const out = mergeGeometries(list, false); out.computeBoundingSphere(); return out;
+}
+function makeFarConifer() {
+  return mergeParts([
+    { g: cylG(0.22, 0.3, 3, 4, 2), m: xf(0, 1.5, 0), shade: (x, y, z, o) => { o[0] = 0.4; o[1] = 0.32; o[2] = 0.25; } },
+    { g: new THREE.ConeGeometry(2.2, 8, 6, 1), m: xf(0, 6.0, 0), shade: (x, y, z, o) => { const t = clamp((y - 2) / 8, 0, 1); lerp3([0.12, 0.24, 0.13], [0.22, 0.36, 0.18], t, o); } },
+  ]);
+}
+function makeFarBroad() {
+  return mergeParts([
+    { g: cylG(0.3, 0.45, 4, 4, 2), m: xf(0, 2, 0), shade: (x, y, z, o) => { o[0] = 0.4; o[1] = 0.32; o[2] = 0.25; } },
+    { g: blob(2.9, 0, 3, 0.8), m: xf(0, 6.2, 0), shade: (x, y, z, o) => { const t = clamp((y - 4) / 5, 0, 1); lerp3([0.2, 0.33, 0.14], [0.4, 0.55, 0.22], t, o); } },
   ]);
 }
 
@@ -174,6 +228,11 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
     if (sp.trunk) trunkMats[sp.name] = lib.get('woodWeathered', { vertexColors: true, sway: { amp: sp.amp * 0.5, freq: 1.2, hpow: 2, hscale: 1 / sp.h } });
     if (sp.canopy) canopyMats[sp.name] = lib.get('foliage', { vertexColors: true, side: THREE.DoubleSide, sway: { amp: sp.amp * 1.6, freq: 1.35, hpow: 2, hscale: 1 / sp.h } });
   }
+  const trunkMatNear = lib.get('woodWeathered', { vertexColors: true, sway: { amp: 0.07, freq: 1.2, hpow: 2, hscale: 1, attr: true } });
+  const canopyMatNear = lib.get('foliage', { vertexColors: true, side: THREE.DoubleSide, sway: { amp: 0.22, freq: 1.35, hpow: 2, hscale: 1, attr: true } });
+  const farConiferGeo = makeFarConifer(), farBroadGeo = makeFarBroad();
+  const farMat = lib.get('blade', { vertexColors: true, side: THREE.DoubleSide, sway: { amp: 0.2, freq: 1.3, hpow: 2, hscale: 0.1 } });
+  const fenceMat = lib.get('woodWeathered', { vertexColors: true });
   const railGeo = boxG(1, 0.08, 0.11, 2), postGeo = boxG(0.14, 1.3, 0.14, 2);
   const wireMat = new THREE.LineBasicMaterial({ color: 0x15181a });
   const signMat = new THREE.MeshStandardMaterial({ map: bannerTexture('SLOW - KIDS RACING', '#e8dcb8', '#9c1d14'), roughness: 0.9, side: THREE.DoubleSide });
@@ -212,14 +271,16 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
 
   for (let c = 0; c < nC; c++) {
     const s0 = c * SCENERY_CHUNK, s1 = Math.min(L + 40, (c + 1) * SCENERY_CHUNK);
-    const group = new THREE.Group(); group.name = 'scenery_' + c;
+    const group = new THREE.Group(); group.name = 'scenery_near_' + c;
+    const mid = new THREE.Group(); mid.name = 'scenery_mid_' + c;
+    const farG = new THREE.Group(); farG.name = 'scenery_far_' + c;
     const rng = mulberry32(seed * 1000 + c * 31 + 7);
     const o = {};
 
     // ---- trees, bushes ----
     {
-      const buckets = species.map(() => ({ ms: [], cols: [] }));
-      for (let i = 0; i < 250; i++) {
+      const items = [];
+      for (let i = 0; i < 125; i++) {
         const s = s0 + rng() * (s1 - s0), side = rng() < 0.5 ? -1 : 1;
         track.atS(s, pp);
         const off = pp.hw + 6.5 + Math.pow(rng(), 1.8) * 85;
@@ -230,21 +291,23 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
         const si = pickSpecies(nz.n1(s / 170 + side * 17 + 3 + off / 150), rng());
         const sp = species[si], sc = lerp(sp.sc[0], sp.sc[1], rng());
         const wv = lerp(0.8, 1.28, rng()), hv = lerp(0.78, 1.35, rng());
-        buckets[si].ms.push(compose(o.x, o.y - 0.15, o.z, rng() * 6.28, sc * wv, sc * hv, sc * lerp(0.8, 1.28, rng()), (rng() - 0.5) * 0.09, (rng() - 0.5) * 0.09));
+        const mt = compose(o.x, o.y - 0.15, o.z, rng() * 6.28, sc * wv, sc * hv, sc * lerp(0.8, 1.28, rng()), (rng() - 0.5) * 0.09, (rng() - 0.5) * 0.09);
         const br = 0.82 + rng() * 0.3, t = rng();
-        buckets[si].cols.push(new THREE.Color(br * lerp(sp.pal[0][0], sp.pal[0][1], t), br * lerp(sp.pal[1][0], sp.pal[1][1], rng() * 0.6 + t * 0.4), br * lerp(sp.pal[2][0], sp.pal[2][1], rng())));
+        items.push({ sp, si, m: mt, col: new THREE.Color(br * lerp(sp.pal[0][0], sp.pal[0][1], t), br * lerp(sp.pal[1][0], sp.pal[1][1], rng() * 0.6 + t * 0.4), br * lerp(sp.pal[2][0], sp.pal[2][1], rng())) });
       }
-      species.forEach((sp, i) => {
-        const bk = buckets[i]; if (!bk.ms.length) return;
-        if (sp.trunk) { const m = mkInst(sp.trunk, trunkMats[sp.name], bk.ms, null, true); m.name = sp.name + '_trunk'; group.add(m); }
-        if (sp.canopy) { const m = mkInst(sp.canopy, canopyMats[sp.name], bk.ms, bk.cols, true); m.name = sp.name + '_canopy'; group.add(m); }
-      });
+      const tg = bakeTrees(items, 'trunk'), cg = bakeTrees(items, 'canopy');
+      if (tg) { const m = new THREE.Mesh(tg, trunkMatNear); m.castShadow = true; m.name = 'trees_trunk'; group.add(m); }
+      if (cg) { const m = new THREE.Mesh(cg, canopyMatNear); m.castShadow = true; m.name = 'trees_canopy'; group.add(m); }
+      // far LOD: cheap instanced silhouettes
+      const con = items.filter((it) => it.sp.name.startsWith('pine')), brd = items.filter((it) => !it.sp.name.startsWith('pine') && it.sp.name !== 'dead' && it.sp.name !== 'bush');
+      if (con.length) { const m = mkInst(farConiferGeo, farMat, con.map((i) => i.m), con.map((i) => i.col), false); m.name = 'far_conifers'; farG.add(m); }
+      if (brd.length) { const m = mkInst(farBroadGeo, farMat, brd.map((i) => i.m), brd.map((i) => i.col), false); m.name = 'far_broadleaf'; farG.add(m); }
     }
 
     // ---- boulders + rock fields ----
     {
       const ms = [], cols = [];
-      for (let i = 0; i < 16; i++) {
+      for (let i = 0; i < 8; i++) {
         const s = s0 + rng() * (s1 - s0), side = rng() < 0.5 ? -1 : 1;
         track.atS(s, pp);
         place(s, side * (pp.hw + 1.8 + Math.pow(rng(), 2) * 40), o);
@@ -265,7 +328,7 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
           const t = 0.7 + rng() * 0.5; cols.push(new THREE.Color(t, t, t * 0.95));
         }
       }
-      if (ms.length) { const m = mkInst(rockGeo, rockMat, ms, cols, true, true); m.name = 'rocks'; group.add(m); }
+      if (ms.length) { const m = mkInst(rockGeo, rockMat, ms, cols, false, true); m.name = 'rocks'; mid.add(m); }
     }
 
     // ---- fences ----
@@ -299,8 +362,10 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
           if (broken) { rails.push(compose(cur.x + (rng() - 0.5) * 1.5, cur.y + 0.08, cur.z + (rng() - 0.5) * 1.5, rng() * 6.28, 2.8, 1, 1, 0, (rng() - 0.5) * 0.2)); rcols.push(new THREE.Color(0.6, 0.55, 0.5)); }
         }
       }
-      if (posts.length) { const m = mkInst(postGeo, postMat, posts, pcols, true, false); m.name = 'fence_posts'; group.add(m); }
-      if (rails.length) { const m = mkInst(railGeo, postMat, rails, rcols, true, false); m.name = 'fence_rails'; group.add(m); }
+      const fg = [];
+      if (posts.length) fg.push(bakeStatic(postGeo, posts, pcols));
+      if (rails.length) fg.push(bakeStatic(railGeo, rails, rcols));
+      if (fg.length) { const geo = mergeGeometries(fg.map((g) => prep(g)), false); geo.computeBoundingSphere(); const m = new THREE.Mesh(geo, fenceMat); m.name = 'fence'; mid.add(m); }
     }
 
     // ---- utility poles + wires ----
@@ -324,10 +389,10 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
           }
         }
       }
-      if (ms.length) { const m = mkInst(poleGeo, poleMat, ms, null, true, false); m.name = 'poles'; group.add(m); }
+      if (ms.length) { const m = new THREE.Mesh(bakeStatic(poleGeo, ms, null), poleMat); m.name = 'poles'; mid.add(m); }
       if (pts.length) {
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3)); g.computeBoundingSphere();
-        const ln = new THREE.LineSegments(g, wireMat); ln.name = 'wires'; group.add(ln);
+        const ln = new THREE.LineSegments(g, wireMat); ln.name = 'wires'; mid.add(ln);
       }
     }
 
@@ -388,22 +453,19 @@ export function buildScenery({ track, terrain, field, lib, parent, L, seed, farm
       if (b.parts.size) group.add(b.build(lib, { shadow: false }));
     }
 
-    if (group.children.length) {
-      track.atS((s0 + s1) / 2, pp);
-      group.userData.center = new THREE.Vector3(pp.px, pp.py, pp.pz);
-      group.userData.radius = (s1 - s0) / 2 + 130;
-      parent.add(group);
-      chunks.push({ group, center: group.userData.center, radius: group.userData.radius, kind: 'scenery' });
-    }
+    track.atS((s0 + s1) / 2, pp);
+    const ctr = new THREE.Vector3(pp.px, pp.py, pp.pz);
+    for (const g of [group, mid, farG]) if (g.children.length) parent.add(g);
+    chunks.push({ near: group, mid, far: farG, center: ctr, radius: (s1 - s0) / 2 + 40, kind: 'scenery' });
   }
 
   // ---- grass patches (125 m, shorter view range) ----
   const grass = [];
-  const GP = 125, nG = Math.ceil((L + 60) / GP);
+  const GP = 60, nG = Math.ceil((L + 60) / GP);
   for (let c = 0; c < nG; c++) {
     const s0 = c * GP, s1 = Math.min(L + 40, s0 + GP);
     const rng = mulberry32(seed * 777 + c * 13 + 3), o = {};
-    const ms = [], cols = [], count = 2600;
+    const ms = [], cols = [], count = 1200;
     for (let i = 0; i < count; i++) {
       const s = s0 + rng() * (s1 - s0), side = rng() < 0.5 ? -1 : 1;
       track.atS(s, pp);

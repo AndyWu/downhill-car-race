@@ -30,8 +30,8 @@ export function createHazardField(track, seed = 1) {
   const zones = [];
   const pp = {};
   const order = ['puddle', 'mud', 'rutpool', 'gravel', 'stream', 'rock', 'rutpool', 'sand', 'puddle', 'stream', 'mud', 'rock', 'rutpool', 'sand', 'gravel', 'stream'];
-  let s = 85 + rng() * 25, last = '', oi = 0, streamIdx = 0;
-  while (s < L - 90) {
+  let s = 110 + rng() * 25, last = '', oi = 0, streamIdx = 0;
+  while (s < L - 100) {
     let kind = order[(oi++ + Math.floor(rng() * 2)) % order.length];
     if (kind === last) kind = order[(oi++) % order.length];
     last = kind;

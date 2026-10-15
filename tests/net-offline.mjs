@@ -20,8 +20,14 @@ injectPWAHead();
 window.events = [];
 window.addEventListener('sbd:offline-ready', (e) => window.events.push(e.detail));
 window.early = getOfflineStatus();
-registerServiceWorker();
-offlineReady.then((s) => { window.ready = s; });
+window.stateLog = [];
+registerServiceWorker().then((reg) => {
+  const w = reg && (reg.installing || reg.waiting || reg.active);
+  if (!w) return;
+  window.stateLog.push([w.state, !!window.ready]);
+  w.addEventListener('statechange', () => window.stateLog.push([w.state, !!window.ready]));
+});
+offlineReady.then(async (s) => { const r = await navigator.serviceWorker.getRegistration(); window.ready = { ...s, activeStateAtResolve: r?.active?.state }; window.stateLog.push(['<resolved>', true]); });
 onOfflineReady((s) => { window.cbReady = s; });
 document.getElementById('s').textContent = 'app ok';
 </script></body></html>`);
@@ -39,7 +45,10 @@ try {
   const st = await p.waitForFunction(() => window.ready, null, { timeout: 30000 }).then((h) => h.jsonValue());
   const sw = await p.evaluate(async () => ({ state: navigator.serviceWorker.controller?.state, reg: (await navigator.serviceWorker.getRegistration()).active.state, keys: await caches.keys() }));
   check(st.ready && st.cached === st.total && st.total > 0, `offlineReady: ${st.cached}/${st.total} files cached, version ${st.version}`);
-  check(sw.reg === 'activated', `SW state at ready: ${sw.reg}`);
+  check(sw.reg === 'activated' && st.activeStateAtResolve === 'activated', `SW state when offlineReady resolved: ${st.activeStateAtResolve}`);
+  const log = await p.evaluate(() => window.stateLog);
+  const early2 = log.filter(([state]) => ['installing', 'installed', 'activating'].includes(state));
+  check(early2.length >= 2 && early2.every(([, r]) => !r), `offlineReady NOT resolved during ${early2.map((x) => x[0]).join(' → ')} (log: ${log.map((x) => x[0] + (x[1] ? '✓' : '·')).join(' → ')})`);
   check(await p.evaluate(() => !!window.cbReady && window.events.length === 1), 'onOfflineReady callback + sbd:offline-ready event fired once');
   await ctx.setOffline(true);
   await p.reload();

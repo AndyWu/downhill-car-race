@@ -34,6 +34,7 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
   const queues = new Map();       // host: peerId → pending input frames (jitter buffer for takeInput)
   const consumed = new Map();     // host: peerId → last seq handed out by takeInput (used as ack)
   const lastTaken = new Map();
+  const depthWin = new Map();      // host: peerId → { n, min } jitter-buffer depth window
   const sendEvery = Math.max(1, Math.round(tickRate / snapshotHz));
   let lastSentTick = -Infinity;
   const pendingEvents = new Map(); // id → event bits from ticks we skipped
@@ -66,13 +67,19 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
         if (!isHost) return;
         const frames = unpackInputPacket(data); // newest first
         const last = lastSeq.has(peer.id) ? lastSeq.get(peer.id) : -1;
+        let q = queues.get(peer.id); if (!q) queues.set(peer.id, (q = []));
+        const done = consumed.has(peer.id) ? consumed.get(peer.id) : -1;
         for (let i = frames.length - 1; i >= 0; i--) {
           const f = frames[i];
+          // jitter buffer accepts late / reordered frames (redundant copies fill the gaps)
+          if (f[0] > done && f[0] < last && !q.some((x) => x[0] === f[0])) {
+            let at = q.length; while (at > 0 && q[at - 1][0] > f[0]) at--;
+            q.splice(at, 0, f);
+          }
           if (f[0] > last) {
             lastSeq.set(peer.id, f[0]);
             stats.inputsRx++;
-            let q = queues.get(peer.id); if (!q) queues.set(peer.id, (q = []));
-            q.push(f); if (q.length > 16) q.shift();
+            q.push(f); if (q.length > 32) q.shift();
             inputCbs.forEach((cb) => cb(peer.id, f));
           }
         }
@@ -149,10 +156,20 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
      */
     takeInput(id) {
       const q = queues.get(id);
-      if (q && q.length > inputBacklog) {
+      const merge = (n) => { // fold n queued frames into one (latest steer, paddle pulses kept)
         let pl = 0, pr = 0;
-        while (q.length > inputBacklog) { const d = q.shift(); pl = Math.max(pl, d[2]); pr = Math.max(pr, d[3]); stats.inputsMerged = (stats.inputsMerged || 0) + 1; }
+        for (let i = 0; i < n - 1; i++) { const d = q.shift(); pl = Math.max(pl, d[2]); pr = Math.max(pr, d[3]); }
         q[0][2] = Math.max(q[0][2], pl); q[0][3] = Math.max(q[0][3], pr);
+        stats.inputsMerged = (stats.inputsMerged || 0) + n - 1;
+      };
+      if (q && q.length > inputBacklog) merge(q.length - inputBacklog + 1);
+      // Shed standing latency: if the buffer never dipped below 2 frames for ~1 s, the link no
+      // longer needs that much cushion → fold one frame (one small, smoothed correction).
+      if (q) {
+        const w = depthWin.get(id) || { n: 0, min: Infinity };
+        w.min = Math.min(w.min, q.length); w.n++;
+        if (w.n >= 60) { if (w.min >= 2 && q.length >= 2) { merge(2); stats.inputsTrimmed = (stats.inputsTrimmed || 0) + 1; } w.n = 0; w.min = Infinity; }
+        depthWin.set(id, w);
       }
       if (q && q.length) {
         const f = q.shift();
@@ -162,7 +179,7 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
       const last = lastTaken.get(id);
       if (!last) { consumed.set(id, consumed.get(id) ?? -1); return null; }
       const rep = last.slice(); rep[2] = 0; rep[3] = 0;
-      stats.inputsRepeated = (stats.inputsRepeated || 0) + 1; (stats.repeatLog ??= []).push(performance.now() | 0);
+      stats.inputsRepeated = (stats.inputsRepeated || 0) + 1;
       return { frame: rep, seq: last[0], repeated: true };
     },
     /**

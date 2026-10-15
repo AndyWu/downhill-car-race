@@ -103,8 +103,8 @@ export function createInput(dom) {
   const W = () => win.innerWidth, H = () => win.innerHeight;
   function ignoreTarget(t) { return t && t.closest && t.closest('button,a,input,select,textarea,[data-ui],.ui-interactive'); }
   function down(e) {
-    if (!S.enabled || e.pointerType === 'mouse' && !S.mouseTouch) return;
-    if (ignoreTarget(e.target)) return;
+    if (!S.enabled || e.pointerType === 'mouse' && !S.mouseTouch) { if (DEBUG) console.log('[input] down ignored: enabled=', S.enabled, e.pointerType); return; }
+    if (ignoreTarget(e.target)) { if (DEBUG) console.log('[input] down ignored: target', e.target && (e.target.tagName + '.' + e.target.className)); return; }
     const nx = e.clientX / W(), ny = e.clientY / H();
     const p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientY * 0 + e.clientX, y: e.clientY, t0: e.timeStamp, tl: e.timeStamp, role: 'swipe', side: nx < 0.5 ? 'L' : 'R', accum: 0, dir: 0, moved: 0 };
     if (nx < 0.5 && inZone(ZONES.handbrake, nx, ny)) p.role = 'handbrake';

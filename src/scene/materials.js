@@ -61,6 +61,7 @@ const FALLBACK = {
   dirtRoad: () => std({ map: tex('dirt'), roughness: 0.96, metalness: 0 }),
   mud: () => std({ map: tex('mud'), roughness: 0.35, metalness: 0.0 }),
   water: () => std({ map: tex('water'), color: 0xbfd6dc, roughness: 0.06, metalness: 0.0 }),
+  waterPuddle: () => FALLBACK.water(),
   rock: () => std({ map: tex('rock'), roughness: 0.92, metalness: 0, flatShading: true }),
   gravel: () => std({ map: tex('gravel'), roughness: 0.95, metalness: 0 }),
   sand: () => std({ map: tex('sand'), roughness: 0.98, metalness: 0 }),
@@ -87,20 +88,20 @@ function applySway(m, wind, o) {
     if (prev) prev.call(m, shader, renderer);
     shader.uniforms.uWindTime = wind.uTime;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uWindTime;')
+      .replace('#include <common>', '#include <common>\nuniform float uWindTime;' + (o.attr ? '\nattribute float swayH;\nattribute vec2 swayO;' : ''))
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        #ifdef USE_INSTANCING
+        ${o.attr ? 'vec2 swIp = swayO;' : `#ifdef USE_INSTANCING
           vec2 swIp = instanceMatrix[3].xz;
         #else
           vec2 swIp = vec2(0.0);
-        #endif
-        float swH = pow(max(position.y * ${f(o.hscale)}, 0.0), ${f(o.hpow)});
+        #endif`}
+        float swH = pow(max(${o.attr ? 'swayH' : 'position.y'} * ${f(o.hscale)}, 0.0), ${f(o.hpow)});
         float swP = uWindTime * ${f(o.freq)} + dot(swIp, vec2(0.37, 0.29));
         transformed.x += (sin(swP) + 0.35 * sin(swP * 2.3 + 1.7)) * ${f(o.amp)} * swH;
         transformed.z += cos(swP * 0.83 + 0.5) * ${f(o.amp * 0.6)} * swH;`);
   };
   const baseKey = m.customProgramCacheKey ? m.customProgramCacheKey.bind(m) : () => '';
-  m.customProgramCacheKey = () => `${baseKey()}|sway${o.amp}_${o.freq}_${o.hpow}_${o.hscale}`;
+  m.customProgramCacheKey = () => `${baseKey()}|sway${o.amp}_${o.freq}_${o.hpow}_${o.hscale}${o.attr ? 'A' : ''}`;
 }
 
 export function createMaterialLibrary(provided = {}) {
@@ -111,8 +112,9 @@ export function createMaterialLibrary(provided = {}) {
     const ck = key + JSON.stringify(opts);
     if (cache.has(ck)) return cache.get(ck);
     const p = provided && provided[key];
+    if (p && p.isMaterial && opts.direct) { cache.set(ck, p); return p; }
     let m;
-    if (p && p.isMaterial) { m = p.clone(); if (p.onBeforeCompile) m.onBeforeCompile = p.onBeforeCompile; }
+    if (p && p.isMaterial) { m = p.clone(); if (p.onBeforeCompile) m.onBeforeCompile = p.onBeforeCompile; if (p.onBeforeRender) m.onBeforeRender = p.onBeforeRender; if (p.customProgramCacheKey && p.customProgramCacheKey.toString().indexOf('onBeforeCompile') < 0) m.customProgramCacheKey = p.customProgramCacheKey; }
     else m = (FALLBACK[key] || FALLBACK.dirtRoad)();
     if (opts.vertexColors) m.vertexColors = true;
     if (opts.side !== undefined) m.side = opts.side;

@@ -1,6 +1,7 @@
 // Road + terrain ribbon chunks (100 m), hazard decals, start ramp and finish structures.
 import * as THREE from 'three';
 import { Noise, clamp, smoothstep, lerp, mulberry32 } from './util.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SHOULDER_IN, RAMP } from './terrain.js';
 import { Batch, boxG, cylG, sphG, xf } from './batch.js';
 import { bannerTexture, textureOf } from './materials.js';
@@ -31,6 +32,9 @@ function gridIndices(P, rows, cols, base, idx) {
   }
 }
 
+const OFFS1 = [0, 2.8, 5.6, 9, 16, 31, 64, 130, 250];
+const LOD1_SINK = 0.12;
+
 export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
   const cnz = new Noise(seed * 5 + 1), rnz = new Noise(seed * 17 + 2);
   const roadMat = lib.get('dirtRoad', { vertexColors: true });
@@ -39,93 +43,101 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
   const chunks = [];
   const nChunks = Math.ceil(L / CHUNK);
 
+  const mkGeo = (P, N, UV, C, idx) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(UV, 2)); geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
+    geo.setIndex(idx); geo.computeBoundingSphere();
+    return geo;
+  };
+  /** road strip geometry between sA..sB */
+  function roadGeo(sA, sB, rowStep, cols, detail, sink) {
+    const rows = Math.round((sB - sA) / rowStep) + 1, n = rows * cols;
+    const P = new Float32Array(n * 3), N = new Float32Array(n * 3), UV = new Float32Array(n * 2), C = new Float32Array(n * 3);
+    for (let r = 0; r < rows; r++) {
+      const s = sA + r * rowStep;
+      track.atS(s, pp);
+      const hwe = pp.hw + SHOULDER_IN;
+      for (let k = 0; k < cols; k++) {
+        const u = (k / (cols - 1)) * 2 - 1, d = u * hwe;
+        const x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, i = r * cols + k;
+        P[i * 3] = x; P[i * 3 + 1] = terrain.heightAt(x, z) - sink; P[i * 3 + 2] = z;
+        if (detail) { const nrm = terrain.normalAt(x, z, 0.3); N[i * 3] = nrm.x; N[i * 3 + 1] = nrm.y; N[i * 3 + 2] = nrm.z; } else { N[i * 3 + 1] = 1; }
+        UV[i * 2] = d / 3.2; UV[i * 2 + 1] = s / 3.2;
+        const ad = Math.abs(d);
+        const edge = smoothstep(pp.hw - 0.4, pp.hw + 1.4, ad);
+        const rut = Math.exp(-(((ad - 0.95) / 0.32) ** 2)) * 0.16;
+        const nzv = 0.92 + 0.14 * (rnz.n2(s * 0.8, d * 1.1) * 0.5 + 0.5) + (rnz.n2(s * 0.12, d * 0.3) * 0.06);
+        const grassy = 0.5 * (rnz.n2(s * 0.3 + 5, d * 0.5) * 0.5 + 0.5);
+        const centerWear = 1.0 + 0.06 * (1 - smoothstep(0, 1.2, ad));
+        const wetv = detail ? field.wet(s, d) : 0;
+        const base = nzv * (1 - rut) * centerWear * (1 - 0.62 * wetv);
+        C[i * 3] = lerp(base, 0.70 * base, edge * (0.6 + grassy)); C[i * 3 + 1] = lerp(base, 0.86 * base, edge * (0.6 + grassy)); C[i * 3 + 2] = lerp(base, 0.52 * base, edge * (0.6 + grassy));
+      }
+    }
+    const idx = []; gridIndices(P, rows, cols, 0, idx);
+    return mkGeo(P, N, UV, C, idx);
+  }
+  /** both-sides terrain ribbon geometry */
+  function terrGeo(sA, sB, rowStep, offs, detail, sink) {
+    const rowsT = Math.floor((sB - sA) / rowStep) + 1, S = offs.length, per = rowsT * S, n = per * 2;
+    const P = new Float32Array(n * 3), N = new Float32Array(n * 3), UV = new Float32Array(n * 2), C = new Float32Array(n * 3);
+    const idx = [];
+    for (let side = 0; side < 2; side++) {
+      const sg = side === 0 ? -1 : 1, base = side * per;
+      for (let r = 0; r < rowsT; r++) {
+        const s = sA + r * rowStep;
+        track.atS(s, pp);
+        const hwe = pp.hw + SHOULDER_IN;
+        for (let j = 0; j < S; j++) {
+          const d = sg * (hwe + offs[j]);
+          const x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, i = base + r * S + j;
+          P[i * 3] = x; P[i * 3 + 1] = terrain.heightAt(x, z) - sink; P[i * 3 + 2] = z;
+          const nrm = detail ? terrain.normalAt(x, z, 0.8 + offs[j] * 0.04) : terrain.normalAt(x, z, 3 + offs[j] * 0.05);
+          N[i * 3] = nrm.x; N[i * 3 + 1] = nrm.y; N[i * 3 + 2] = nrm.z;
+          UV[i * 2] = x / 6; UV[i * 2 + 1] = z / 6;
+          terrainColor(cnz, x, z, col);
+          const f = 1 - smoothstep(0, 5, offs[j]);
+          let cr = lerp(col[0], 0.78, f * 0.7), cg = lerp(col[1], 0.92, f * 0.7), cb = lerp(col[2], 0.62, f * 0.7);
+          const bare = smoothstep(0.1, 0.5, rnz.n1(s / 11 + sg * 7)) * (1 - smoothstep(1.5, 4.6, offs[j]));
+          cr = lerp(cr, 1.0, bare * 0.8); cg = lerp(cg, 0.72, bare * 0.8); cb = lerp(cb, 0.52, bare * 0.8);
+          const wv = detail ? field.wet(s, d) * (1 - smoothstep(0, 9, offs[j])) : 0;
+          const wk = 1 - 0.5 * wv;
+          C[i * 3] = cr * wk; C[i * 3 + 1] = cg * wk; C[i * 3 + 2] = cb * wk * 0.95;
+        }
+      }
+      for (let r = 0; r < rowsT - 1; r++) for (let j = 0; j < S - 1; j++) {
+        const a = base + r * S + j, b = a + 1, d2 = a + S, e = d2 + 1;
+        emitTri(idx, P, a, b, d2); emitTri(idx, P, b, e, d2);
+      }
+    }
+    return mkGeo(P, N, UV, C, idx);
+  }
+
+  const far = new Map(); // super-chunk (4 chunks) -> { road: [], terr: [] }
   for (let c = 0; c < nChunks; c++) {
     const sA = c === 0 ? -20 : c * CHUNK;
     const sB = c === nChunks - 1 ? 3280 : (c + 1) * CHUNK;
-    const rows = Math.round((sB - sA) / ROW) + 1;
-    // ---------- road ----------
-    {
-      const n = rows * COLS;
-      const P = new Float32Array(n * 3), N = new Float32Array(n * 3), UV = new Float32Array(n * 2), C = new Float32Array(n * 3);
-      for (let r = 0; r < rows; r++) {
-        const s = sA + r * ROW;
-        track.atS(s, pp);
-        const hwe = pp.hw + SHOULDER_IN;
-        for (let k = 0; k < COLS; k++) {
-          const u = (k / (COLS - 1)) * 2 - 1, d = u * hwe;
-          const x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, i = r * COLS + k;
-          const y = terrain.heightAt(x, z);
-          P[i * 3] = x; P[i * 3 + 1] = y; P[i * 3 + 2] = z;
-          const nrm = terrain.normalAt(x, z, 0.3);
-          N[i * 3] = nrm.x; N[i * 3 + 1] = nrm.y; N[i * 3 + 2] = nrm.z;
-          UV[i * 2] = d / 3.2; UV[i * 2 + 1] = s / 3.2;
-          const ad = Math.abs(d);
-          const edge = smoothstep(pp.hw - 0.4, pp.hw + 1.4, ad);
-          const rut = Math.exp(-(((ad - 0.95) / 0.32) ** 2)) * 0.16;
-          const nzv = 0.92 + 0.14 * (rnz.n2(s * 0.8, d * 1.1) * 0.5 + 0.5) + (rnz.n2(s * 0.12, d * 0.3) * 0.06);
-          const grassy = 0.5 * (rnz.n2(s * 0.3 + 5, d * 0.5) * 0.5 + 0.5);
-          const centerWear = 1.0 + 0.06 * (1 - smoothstep(0, 1.2, ad));
-          const wetv = field.wet(s, d);
-          const base = nzv * (1 - rut) * centerWear * (1 - 0.62 * wetv);
-          C[i * 3] = lerp(base, 0.70 * base, edge * (0.6 + grassy)); C[i * 3 + 1] = lerp(base, 0.86 * base, edge * (0.6 + grassy)); C[i * 3 + 2] = lerp(base, 0.52 * base, edge * (0.6 + grassy));
-        }
-      }
-      const idx = []; gridIndices(P, rows, COLS, 0, idx);
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
-      geo.setAttribute('uv', new THREE.BufferAttribute(UV, 2)); geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
-      geo.setIndex(idx); geo.computeBoundingSphere();
-      const mesh = new THREE.Mesh(geo, roadMat); mesh.receiveShadow = true; mesh.name = 'road_' + c;
-      parent.add(mesh);
-      chunks.push({ mesh, kind: 'road', c });
-    }
-    // ---------- terrain ribbons (both sides) ----------
-    {
-      const rowsT = Math.floor((sB - sA) / TROW) + 1;
-      const S = OFFS.length, per = rowsT * S, n = per * 2;
-      const P = new Float32Array(n * 3), N = new Float32Array(n * 3), UV = new Float32Array(n * 2), C = new Float32Array(n * 3);
-      const idx = [];
-      for (let side = 0; side < 2; side++) {
-        const sg = side === 0 ? -1 : 1, base = side * per;
-        for (let r = 0; r < rowsT; r++) {
-          const s = sA + r * TROW;
-          track.atS(s, pp);
-          const hwe = pp.hw + SHOULDER_IN;
-          for (let j = 0; j < S; j++) {
-            const d = sg * (hwe + OFFS[j]);
-            const x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, i = base + r * S + j;
-            const y = terrain.heightAt(x, z);
-            P[i * 3] = x; P[i * 3 + 1] = y; P[i * 3 + 2] = z;
-            const nrm = terrain.normalAt(x, z, 0.8 + OFFS[j] * 0.04);
-            N[i * 3] = nrm.x; N[i * 3 + 1] = nrm.y; N[i * 3 + 2] = nrm.z;
-            UV[i * 2] = x / 6; UV[i * 2 + 1] = z / 6;
-            terrainColor(cnz, x, z, col);
-            const f = 1 - smoothstep(0, 5, OFFS[j]);
-            let cr = lerp(col[0], 0.78, f * 0.7), cg = lerp(col[1], 0.92, f * 0.7), cb = lerp(col[2], 0.62, f * 0.7);
-            // tyre-worn bare verge patches near the shoulder
-            const bare = smoothstep(0.1, 0.5, rnz.n1(s / 11 + sg * 7)) * (1 - smoothstep(1.5, 4.6, OFFS[j]));
-            cr = lerp(cr, 1.0, bare * 0.8); cg = lerp(cg, 0.72, bare * 0.8); cb = lerp(cb, 0.52, bare * 0.8);
-            const wv = field.wet(s, d) * (1 - smoothstep(0, 9, OFFS[j]));
-            const wk = 1 - 0.5 * wv;
-            C[i * 3] = cr * wk; C[i * 3 + 1] = cg * wk; C[i * 3 + 2] = cb * wk * 0.95;
-          }
-        }
-        // grid is rows x S with 'cols' = S
-        for (let r = 0; r < rowsT - 1; r++) for (let j = 0; j < S - 1; j++) {
-          const a = base + r * S + j, b = a + 1, d2 = a + S, e = d2 + 1;
-          emitTri(idx, P, a, b, d2); emitTri(idx, P, b, e, d2);
-        }
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
-      geo.setAttribute('uv', new THREE.BufferAttribute(UV, 2)); geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
-      geo.setIndex(idx); geo.computeBoundingSphere();
-      const mesh = new THREE.Mesh(geo, grassMat); mesh.receiveShadow = true; mesh.name = 'terrain_' + c;
-      parent.add(mesh);
-      chunks.push({ mesh, kind: 'terrain', c });
-    }
+    const road = new THREE.Mesh(roadGeo(sA, sB, ROW, COLS, true, 0), roadMat); road.receiveShadow = true; road.name = 'road_' + c;
+    const terr = new THREE.Mesh(terrGeo(sA, sB, TROW, OFFS, true, 0), grassMat); terr.receiveShadow = true; terr.name = 'terrain_' + c;
+    parent.add(road); parent.add(terr);
+    const mid = track.atS((sA + sB) / 2, {});
+    chunks.push({ lod0: [road, terr], center: new THREE.Vector3(mid.px, mid.py, mid.pz), radius: 62, kind: 'ground', c, sup: c >> 2 });
+    // coarse LOD, merged per 400 m super-chunk
+    const sup = c >> 2;
+    if (!far.has(sup)) far.set(sup, { road: [], terr: [], pts: [] });
+    const f = far.get(sup);
+    const sB1 = sA + Math.ceil((sB - sA) / 10) * 10;
+    f.road.push(roadGeo(sA, sB1, 10, 9, false, LOD1_SINK)); f.terr.push(terrGeo(sA, sB1, 10, OFFS1, false, LOD1_SINK)); f.pts.push(new THREE.Vector3(mid.px, mid.py, mid.pz));
   }
-  for (const ch of chunks) { const bs = ch.mesh.geometry.boundingSphere; ch.center = bs.center.clone(); ch.radius = bs.radius; }
+  const farItems = [];
+  for (const [sup, f] of far) {
+    const r = new THREE.Mesh(mergeGeometries(f.road, false), roadMat), t = new THREE.Mesh(mergeGeometries(f.terr, false), grassMat);
+    r.receiveShadow = t.receiveShadow = false; r.name = 'road_far_' + sup; t.name = 'terrain_far_' + sup;
+    parent.add(r); parent.add(t);
+    const first = chunks.find((ch) => ch.sup === sup), cs = chunks.filter((ch) => ch.sup === sup);
+    farItems.push({ meshes: [r, t], sup, chunks: cs });
+  }
 
   // ---------- hazard decals (merged per type per 400 m) ----------
   const decalKey = { puddle: 'water', rutpool: 'water', stream: 'water', mud: 'mud', gravel: 'gravel', rock: 'rock', sand: 'sand' };
@@ -137,17 +149,48 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
     groups.get(gk).zones.push(z);
   }
   const decals = [];
+  const up = new THREE.Vector3(0, 1, 0);
   for (const g of groups.values()) {
     const Pa = [], Na = [], UVa = [], Ca = [], Ia = [];
+    const tri = (p, q2, r2) => {
+      const ny = (Pa[q2 * 3 + 2] - Pa[p * 3 + 2]) * (Pa[r2 * 3] - Pa[p * 3]) - (Pa[q2 * 3] - Pa[p * 3]) * (Pa[r2 * 3 + 2] - Pa[p * 3 + 2]);
+      if (ny >= 0) Ia.push(p, q2, r2); else Ia.push(p, r2, q2);
+    };
     for (const z of g.zones) {
+      if (z.kind === 'puddle' || z.kind === 'rutpool') {
+        // irregular soft-rimmed polar puddle (same construction as graphics makePuddleGeometry), draped flat at the water level
+        const rings = 5, seg = z.kind === 'rutpool' ? 28 : 36, base = Pa.length / 3;
+        const rx = z.a * 1.08, rz = z.kind === 'rutpool' ? z.b * 1.35 : z.b * 1.12;
+        const ph = [z.seed * 1.7, z.seed * 3.1, z.seed * 5.3];
+        const outline = (an) => 1 + 0.16 * Math.sin(an * 2 + ph[0]) + 0.09 * Math.sin(an * 3 + ph[1]) + 0.05 * Math.sin(an * 5 + ph[2]);
+        track.atS(z.s, pp);
+        const cx = pp.px + pp.rhx * z.lateral, cz = pp.pz + pp.rhz * z.lateral;
+        const Tx = pp.rhz, Tz = -pp.rhx;
+        const level = terrain.heightAt(cx, cz) + z.dip * 0.86 + 0.012;
+        for (let k = 0; k <= rings; k++) for (let j = 0; j < (k ? seg : 1); j++) {
+          const an = k ? (j / seg) * Math.PI * 2 : 0, rr = (k / rings) * (k ? outline(an) : 0);
+          const lx = Math.cos(an) * rr * rx, lz = Math.sin(an) * rr * rz;
+          Pa.push(cx + Tx * lx + pp.rhx * lz, level, cz + Tz * lx + pp.rhz * lz);
+          Na.push(0, 1, 0); UVa.push(lx, lz);
+          const t = k / rings, alpha = t < 0.6 ? 1 : 1 - ((t - 0.6) / 0.4) ** 1.2, dk = 0.55 + 0.45 * t;
+          Ca.push(dk, dk, dk, Math.max(0, alpha));
+        }
+        const rs = (k) => (k === 0 ? 0 : 1 + (k - 1) * seg);
+        for (let j = 0; j < seg; j++) tri(base, base + rs(1) + ((j + 1) % seg), base + rs(1) + j);
+        for (let k = 1; k < rings; k++) for (let j = 0; j < seg; j++) {
+          const a0 = base + rs(k) + j, b0 = base + rs(k) + ((j + 1) % seg), c0 = base + rs(k + 1) + j, d0 = base + rs(k + 1) + ((j + 1) % seg);
+          tri(a0, b0, c0); tri(b0, d0, c0);
+        }
+        continue;
+      }
       const ext = z.a * 1.15 + Math.abs(z.skew) * z.b + 0.6;
       const s0 = z.s - ext, s1 = z.s + ext;
-      const nS = Math.max(2, Math.ceil((s1 - s0) / 0.6)) + 1;
+      const nS = Math.max(2, Math.ceil((s1 - s0) / 0.9)) + 1;
       track.atS(z.s, pp);
       const hwe = pp.hw + SHOULDER_IN;
       const wide = z.kind === 'stream';
       const d0 = wide ? z.lateral - z.b * 0.95 : Math.max(z.lateral - z.b * 1.25, -hwe), d1 = wide ? z.lateral + z.b * 0.95 : Math.min(z.lateral + z.b * 1.25, hwe);
-      const nD = Math.max(2, Math.ceil((d1 - d0) / 0.45)) + 1;
+      const nD = Math.max(2, Math.ceil((d1 - d0) / 0.65)) + 1;
       const base = Pa.length / 3;
       for (let i = 0; i < nS; i++) {
         const s = s0 + (s1 - s0) * (i / (nS - 1));
@@ -157,10 +200,10 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
           const w = field.weight(z, s, d);
           const x = pp.px + pp.rhx * d, zz = pp.pz + pp.rhz * d;
           const h = terrain.heightAt(x, zz);
-          const lift = (z.kind === 'puddle' || z.kind === 'stream' || z.kind === 'rutpool') ? 0.022 + z.dip * 0.55 * w : z.kind === 'mud' ? 0.018 + z.dip * 0.35 * w : 0.012 + z.bumpAmp * 0.4 * w;
+          const lift = z.kind === 'stream' ? 0.022 + z.dip * 0.55 * w : z.kind === 'mud' ? 0.018 + z.dip * 0.35 * w : 0.012 + z.bumpAmp * 0.4 * w;
           Pa.push(x, h + lift, zz);
           const nrm = terrain.normalAt(x, zz, 0.4);
-          if (g.key === 'water') { nrm.lerp(new THREE.Vector3(0, 1, 0), 0.85).normalize(); }
+          if (g.key === 'water') nrm.lerp(up, 0.85).normalize();
           Na.push(nrm.x, nrm.y, nrm.z);
           UVa.push(d / 2.4 + z.seed * 0.1, s / 2.4);
           let a = smoothstep(0.02, 0.45, w);
@@ -171,11 +214,6 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
       }
       for (let i = 0; i < nS - 1; i++) for (let j = 0; j < nD - 1; j++) {
         const a = base + i * nD + j, b = a + 1, d = a + nD, e = d + 1;
-        const P3 = Pa; // winding check via positions
-        const tri = (p, q2, r2) => {
-          const ny = (P3[q2 * 3 + 2] - P3[p * 3 + 2]) * (P3[r2 * 3] - P3[p * 3]) - (P3[q2 * 3] - P3[p * 3]) * (P3[r2 * 3 + 2] - P3[p * 3 + 2]);
-          if (ny >= 0) Ia.push(p, q2, r2); else Ia.push(p, r2, q2);
-        };
         tri(a, b, d); tri(b, e, d);
       }
     }
@@ -185,7 +223,7 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(UVa, 2));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(Ca, 4));
     geo.setIndex(Ia); geo.computeBoundingSphere();
-    const mat = lib.get(g.key, { vertexColors: true, transparent: true, polygonOffset: -2 });
+    const mat = g.key === 'water' ? lib.get('waterPuddle', { vertexColors: true, transparent: true, polygonOffset: -2, direct: true }) : lib.get(g.key, { vertexColors: true, transparent: true, polygonOffset: -2 });
     const mesh = new THREE.Mesh(geo, mat); mesh.renderOrder = 2; mesh.receiveShadow = true; mesh.name = 'decal_' + g.key;
     parent.add(mesh);
     const bs = geo.boundingSphere;
@@ -194,7 +232,7 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
 
   // ---------- far-field cap (24 m cells, sunk 1.6 m under the ribbons) ----------
   {
-    const { GX, GZ, G, gx0, gz0 } = terrain.grid, st = 4;
+    const { GX, GZ, G, gx0, gz0 } = terrain.grid, st = 8;
     const nx = Math.floor((GX - 1) / st) + 1, nz2 = Math.floor((GZ - 1) / st) + 1;
     const P = new Float32Array(nx * nz2 * 3), UV = new Float32Array(nx * nz2 * 2), C = new Float32Array(nx * nz2 * 3);
     for (let j = 0; j < nz2; j++) for (let i = 0; i < nx; i++) {
@@ -212,7 +250,7 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
   }
 
   const landmarks = buildLandmarks({ track, terrain, field, lib, parent, L });
-  return { chunks, decals, landmarks, items: landmarks.items, update: landmarks.update };
+  return { chunks, farItems, decals, landmarks, items: landmarks.items, update: landmarks.update };
 }
 
 // ======================================================================================
@@ -322,7 +360,7 @@ function buildLandmarks({ track, terrain, field, lib, parent, L }) {
       grp.add(bm);
     }
     // spectator hay-bale chicane + crowd behind the bales
-    for (let s = 24, i = 0; s < 96; s += 6.5, i++) {
+    for (let s = 24, i = 0; s < 58; s += 6.5, i++) {
       for (const sg of [-1, 1]) {
         const inner = ((i + (sg > 0 ? 1 : 0)) % 2) ? 1.6 : 2.7;
         const q = P3(s, sg * (track.atS(s, pp).hw + inner));
@@ -332,12 +370,12 @@ function buildLandmarks({ track, terrain, field, lib, parent, L }) {
         if (rnd() < 0.85) { const w = P3(s + rnd() * 3 - 1.5, sg * (track.atS(s, pp).hw + inner + 1.4 + rnd() * 1.8)); figure(b, rnd, w.x, w.y, w.z, w.ry + sg * Math.PI / 2 + (rnd() - 0.5) * 0.8, 0.75 + rnd() * 0.3, true); }
       }
     }
-    grp.add(b.build(lib));
+    grp.add(b.build(lib, { shadow: false }));
     // bunting: poles + pennant strings
     const bPoles = new Batch(), lines = [];
     for (const sg of [-1, 1]) {
       let prev = null;
-      for (let s = -6; s <= 96; s += 17) {
+      for (let s = -6; s <= 62; s += 17) {
         const hw = track.atS(s, pp).hw, q = P3(s, sg * (hw + 3.3));
         bPoles.add('woodWeathered', cylG(0.07, 0.1, 6.4, 6, 2), xf(q.x, q.y + 3.1, q.z), [0.7, 0.62, 0.55]);
         const top = [q.x, q.y + 6.2, q.z];
@@ -346,7 +384,7 @@ function buildLandmarks({ track, terrain, field, lib, parent, L }) {
       }
     }
     for (const s of [-6, 28, 62]) { const hw = track.atS(s, pp).hw, l = P3(s, -(hw + 3.3)), r = P3(s, hw + 3.3); lines.push({ a: [l.x, l.y + 6.2, l.z], b: [r.x, r.y + 6.2, r.z], sag: 1.0 }); }
-    grp.add(bPoles.build(lib)); grp.add(buntingMesh(lines, lib));
+    grp.add(bPoles.build(lib, { shadow: false })); grp.add(buntingMesh(lines, lib));
     addItem(grp, 40);
   }
 
@@ -376,7 +414,7 @@ function buildLandmarks({ track, terrain, field, lib, parent, L }) {
         for (const st of z.stones) { const q = P3(st.s, st.d); stones.push({ x: q.x, z: q.z, y: q.y - st.h, r: st.r, h: st.h }); }
       }
     }
-    if (b.parts.size) grp.add(b.build(lib));
+    if (b.parts.size) grp.add(b.build(lib, { shadow: false }));
     if (stones.length) {
       const geo = new THREE.IcosahedronGeometry(1, 1); geo.computeBoundingSphere();
       const im = new THREE.InstancedMesh(geo, lib.get('rock'), stones.length);
@@ -407,7 +445,7 @@ function buildLandmarks({ track, terrain, field, lib, parent, L }) {
     const lines = [];
     for (const sg of [-1, 1]) {
       let prev = null;
-      for (let s = L - 85; s <= L + 40; s += 17) {
+      for (let s = L - 62; s <= L + 40; s += 17) {
         const h2 = track.atS(s, pp).hw, q = P3(s, sg * (h2 + 3.3));
         b.add('woodWeathered', cylG(0.07, 0.1, 6.4, 6, 2), xf(q.x, q.y + 3.1, q.z), [0.7, 0.62, 0.55]);
         const top = [q.x, q.y + 6.2, q.z];
@@ -415,14 +453,14 @@ function buildLandmarks({ track, terrain, field, lib, parent, L }) {
         prev = top;
       }
     }
-    for (const s of [L - 68, L - 34, L - 17]) { const h2 = track.atS(s, pp).hw, l = P3(s, -(h2 + 3.3)), r = P3(s, h2 + 3.3); lines.push({ a: [l.x, l.y + 6.2, l.z], b: [r.x, r.y + 6.2, r.z], sag: 1.1 }); }
+    for (const s of [L - 51, L - 34, L - 17]) { const h2 = track.atS(s, pp).hw, l = P3(s, -(h2 + 3.3)), r = P3(s, h2 + 3.3); lines.push({ a: [l.x, l.y + 6.2, l.z], b: [r.x, r.y + 6.2, r.z], sag: 1.1 }); }
     {
       const l = P3(L, -half), r = P3(L, half);
       lines.push({ a: [l.x, l.y + 9, l.z], b: [r.x, r.y + 9, r.z], sag: 0.5 }); lines.push({ a: [l.x, l.y + 4.7, l.z], b: [r.x, r.y + 4.7, r.z], sag: 0.9 });
     }
     grp.add(buntingMesh(lines, lib));
     // hay-bale bleachers with cheering crowd on both sides, spanning before and after the line
-    for (let s = L - 40; s < L + 40; s += 3.1) {
+    for (let s = L - 30; s < L + 40; s += 3.4) {
       for (const sg of [-1, 1]) {
         const inner = 2.0 + (rnd() < 0.3 ? 0.4 : 0);
         const q = P3(s, sg * (track.atS(s, pp).hw + inner));
@@ -449,7 +487,7 @@ function buildLandmarks({ track, terrain, field, lib, parent, L }) {
       pole.rotation.y = q.ry; grp.add(pole);
       animated.push((t) => { pole.rotation.z = Math.sin(t * 5) * 0.5 - 0.3; const pos = flag.geometry.attributes.position; flag.rotation.y = Math.sin(t * 8) * 0.25; });
     }
-    grp.add(b.build(lib));
+    grp.add(b.build(lib, { shadow: false }));
     // checkered line draped on the road
     {
       const rows = 6, cols = 24, P = new Float32Array(rows * cols * 3), N = new Float32Array(rows * cols * 3), UV = new Float32Array(rows * cols * 2);

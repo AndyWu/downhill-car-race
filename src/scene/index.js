@@ -42,10 +42,11 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
   progress(1, 'ready');
 
   const camPos = new THREE.Vector3();
-  const RANGE_GROUND = 1100, RANGE_SCENERY = 340, RANGE_GRASS = 190, RANGE_FARM = 420;
+  // view ranges (metres from camera to chunk edge)
+  const R = { lod0: 130, groundFar: 760, near: 70, mid: 200, treesFar: 360, grass: 38, farm: 330, deco: 600 };
   let time = 0;
   const waterMats = [];
-  if (!lib.provided) for (const k of ['water']) { const m = lib.get(k, { vertexColors: true, transparent: true, polygonOffset: -2 }); if (m.map) waterMats.push(m.map); }
+  if (!lib.provided) { const m = lib.get('waterPuddle', { vertexColors: true, transparent: true, polygonOffset: -2, direct: true }); if (m.map) waterMats.push(m.map); }
 
   function surfaceAt(x, z) {
     const i = terrain.roadInfo(x, z);
@@ -86,29 +87,28 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
     return { position: new THREE.Vector3(x, y + 0.6, z), quaternion: new THREE.Quaternion().setFromRotationMatrix(_mat) };
   }
 
-  const vis = (items, range) => {
-    for (const it of items) {
-      const dist = camPos.distanceTo(it.center) - it.radius;
-      const v = dist < range;
-      const o = it.mesh || it.group;
-      if (o.visible !== v) o.visible = v;
-    }
-  };
-  const groundItems = [...ground.chunks, ...ground.decals, ...ground.items];
+  const setVis = (o, v) => { if (o.visible !== v) o.visible = v; };
+  const gd = (it) => camPos.distanceTo(it.center) - it.radius;
+  const decoItems = [...ground.decals, ...ground.items];
   function update(dt, camera) {
     time += dt;
     lib.wind.uTime.value = time;
     for (const t of waterMats) t.offset.y = (time * 0.02) % 1;
     ground.update(time);
-    if (camera) {
-      camera.getWorldPosition(camPos);
-      vis(groundItems, RANGE_GROUND);
-      vis(scenery.chunks, RANGE_SCENERY);
-      vis(scenery.grass, RANGE_GRASS);
-      for (const fo of farmObjs) {
-        fo.group.visible = camPos.distanceTo(fo.center) - fo.radius < RANGE_FARM;
-        if (fo.group.visible) fo.update(time, dt);
-      }
+    if (!camera) return;
+    camera.getWorldPosition(camPos);
+    for (const ch of ground.chunks) { const v = gd(ch) < R.lod0; for (const m of ch.lod0) setVis(m, v); }
+    for (const f of ground.farItems) { const v = f.chunks.some((ch) => { const d = gd(ch); return d >= R.lod0 - 40 && d < R.groundFar; }); for (const m of f.meshes) setVis(m, v); }
+    for (const it of decoItems) setVis(it.mesh || it.group, it.always || gd(it) < R.deco);
+    for (const ch of scenery.chunks) {
+      const d = gd(ch);
+      setVis(ch.near, d < R.near); setVis(ch.mid, d < R.mid); setVis(ch.far, d >= R.near - 10 && d < R.treesFar);
+    }
+    for (const g of scenery.grass) setVis(g.mesh, gd(g) < R.grass);
+    for (const fo of farmObjs) {
+      const v = camPos.distanceTo(fo.center) - fo.radius < R.farm;
+      setVis(fo.group, v);
+      if (v) fo.update(time, dt);
     }
   }
 

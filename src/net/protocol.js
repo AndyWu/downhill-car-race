@@ -3,7 +3,7 @@
 //
 // INPUT (client → host, 60 Hz), type 1:
 //   u8 type, u8 nFrames, u16 pad, then nFrames × INPUT_STRIDE float32 (newest first).
-//   Each frame = [seq, steer, paddleL, paddleR, handbrake, flags]. We resend the last 3 frames
+//   Each frame = [seq, steer, paddleL, paddleR, handbrake, flags]. We resend the last 5 frames
 //   in every packet so a single dropped unreliable packet never loses a paddle stroke.
 //
 // SNAPSHOT (host → clients, 30 Hz), type 2: see snapshot.js (wire version 3, track-relative).
@@ -12,7 +12,7 @@
 
 export const MSG = { INPUT: 1, SNAPSHOT: 2, PING: 3, PONG: 4 };
 export const INPUT_STRIDE = 6;
-export const INPUT_REDUNDANCY = 3;
+export const INPUT_REDUNDANCY = 5;
 export const FLAG_HEADLIGHT = 1;
 export const FLAG_REVERSE = 2;
 export {

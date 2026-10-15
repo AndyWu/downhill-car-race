@@ -30,7 +30,7 @@ function qNorm(q) { const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1; q[0] /= l
 /**
  * @param {{ body, slot:number, maxHistory?:number, smoothHalfLifeMs?:number, snapDistance?:number, softGain?:number }} o
  */
-export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs = 120, snapDistance = 6, softGain = 0.15, deadband = 0.2 } = {}) {
+export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs = 120, snapDistance = 6, softGain = 0.15, deadband = 0.2, maxCorrectionSpeed = 2.5 } = {}) {
   const history = []; // { seq, dt, input }
   const errPos = [0, 0, 0];
   const errQ = [0, 0, 0, 1];
@@ -45,7 +45,10 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
 
   function decay(dt) {
     const k = Math.pow(0.5, (dt * 1000) / smoothHalfLifeMs);
-    errPos[0] *= k; errPos[1] *= k; errPos[2] *= k;
+    // exponential fade, but never faster than maxCorrectionSpeed (big corrections glide, not pop)
+    const e = Math.hypot(errPos[0], errPos[1], errPos[2]);
+    const kp = e > 0 ? Math.max(k, 1 - (maxCorrectionSpeed * dt) / e) : k;
+    errPos[0] *= kp; errPos[1] *= kp; errPos[2] *= kp;
     // nlerp errQ toward identity
     const sgn = errQ[3] < 0 ? -1 : 1;
     errQ[0] *= k; errQ[1] *= k; errQ[2] *= k; errQ[3] = errQ[3] * k + sgn * (1 - k);

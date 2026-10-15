@@ -19,7 +19,7 @@ const open = async (qs, touch = false) => {
   p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   p.on('pageerror', (e) => errors.push('pageerror ' + e.message));
   await p.goto(`${base}/${qs}`);
-  await p.waitForFunction(() => window.__game, null, { timeout: 120000 });
+  await p.waitForFunction(() => window.__game && window.__game.state.mode === 'race', null, { timeout: 120000 });
   return { p, ctx };
 };
 
@@ -33,7 +33,7 @@ const open = async (qs, touch = false) => {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await p.waitForTimeout(300);
     const now = await p.evaluate(() => window.__game.input.read().headlight);
-    check(now === !!(before !== (n === 1)) || now === (n === 0 ? !before : before), `tap ${n + 1} toggles headlight (${before} -> ${now})`);
+    check(now === (n === 0 ? !before : before), `tap ${n + 1} toggles headlight (${before} -> ${now})`);
   }
   await ctx.close();
 }
