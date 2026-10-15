@@ -143,6 +143,12 @@ async function boot() {
   let aiNames = ['Barnaby', 'Clementine', 'Buster', 'Maeve', 'Ace'];
 
   // ---- vehicles ----
+  // each AI profile has a signature truck (profile.truckId); fall back to the caller's index when absent
+  function aiTruckIndex(i, fallback) {
+    const pr = AI_PROFILES.length ? AI_PROFILES[i % AI_PROFILES.length] : null;
+    const k = pr && pr.truckId ? TRUCKS.findIndex((t) => t.id === pr.truckId) : -1;
+    return k >= 0 ? k : fallback;
+  }
   function makeVehicle(specIdx, slot, kind, aiIdx = 0, name = '') {
     const spec = TRUCKS[specIdx % TRUCKS.length];
     let built = null;
@@ -166,7 +172,7 @@ async function boot() {
       headlight = safe(() => gfx.attachHeadlight(built.parts.headlight, local ? {} : { castShadow: false, intensity: 1500 }), 'attachHeadlight');
     }
     return { spec, body, group: built.group, parts: built.parts, flag, ai, kind, slot, name, headlight, lightOn: false,
-      setMudCoat: built.setMudCoat || (built.group.userData && built.group.userData.setMudCoat) || null, isPlayer: local, prevPos: body.state.position.clone(), prevQuat: body.state.quaternion.clone(), spin: 0,
+      setLOD: built.setLOD || (built.group.userData && built.group.userData.setLOD) || null, lod: 'near', setMudCoat: built.setMudCoat || (built.group.userData && built.group.userData.setMudCoat) || null, isPlayer: local, prevPos: body.state.position.clone(), prevQuat: body.state.quaternion.clone(), spin: 0,
       finished: false, finishTime: 0, lastInp: null, wheelLoad: 0 };
   }
 
@@ -250,6 +256,7 @@ async function boot() {
     const cd = o.countdown ?? 3;
     Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });
     mp.goAtLocal = o.goAtLocal || 0; mp.results = []; playerFinishT = null; lastFinishedCount = 0; finishRefresh = 0;
+    if (role === 'client') for (const v of vs) v.body.noRecover = true; // only the host decides rescues
     mp.predictor = role === 'client' && netMod && netMod.createPredictor ? safe(() => netMod.createPredictor({ body: playerV.body, slot: o.localSlot }), 'createPredictor') : null;
     safe(() => post && post.clearSplatter && post.clearSplatter(), 'clearSplatter');
     input.setReverse(false);
@@ -368,7 +375,8 @@ async function boot() {
   function hostLaunch() {
     const trucks = [];
     for (const p of mp.players) trucks[p.slot] = p.slot === 0 ? game.state.truck : (mp.picks.get(p.slot) ?? p.slot);
-    for (let i = 0; i < 6; i++) if (trucks[i] == null) trucks[i] = i + 1;
+    let aiN = 0;
+    for (let i = 0; i < 6; i++) if (trucks[i] == null) trucks[i] = aiTruckIndex(aiN++, i + 1);
     const goAt = mp.sync.startCountdown(3, { players: mp.players, trucks, seed: 1 });
     startRace({ role: 'host', players: mp.players, trucks, localSlot: 0, countdown: 0, goAtLocal: goAt });
     game.state.countdown = Math.max(0, (goAt - performance.now()) / 1000);
@@ -412,7 +420,7 @@ async function boot() {
         const avg = now > 1 ? st.s / now : 0;
         eta = remaining / Math.max(2.5, 0.5 * avg + 0.5 * st.speed);
       }
-      return { name: v.isPlayer ? (v.name || 'You') : v.name || `Car ${v.slot + 1}`, time, status, eta, you: v.isPlayer, s: st.s };
+      return { name: v.isPlayer ? (v.name || 'You') : v.name || `Car ${v.slot + 1}`, time, status, eta, you: v.isPlayer, s: st.s, speed: st.speed, trackLength: TRACK_LENGTH };
     });
     const key = (r) => (r.status === 'finished' ? r.time : r.status === 'running' ? now + r.eta : 1e9);
     rows.sort((a, b) => key(a) - key(b) || b.s - a.s);
@@ -627,7 +635,7 @@ async function boot() {
     const ap = game.state.paused ? 1 : alpha;
     for (const v of game.vehicles) {
       const s = v.body.state;
-      if (v.isPlayer && game.state.role === 'client' && mp.predictor) mp.predictor.applyTo(v.group);
+      if (v.isPlayer && game.state.role === 'client' && mp.predictor) mp.predictor.applyTo(v.group, ap);
       else {
         v.group.position.lerpVectors(v.prevPos, s.position, ap);
         v.group.quaternion.slerpQuaternions(v.prevQuat, s.quaternion, ap);
@@ -671,7 +679,11 @@ async function boot() {
       if (mh + wh > 0.4 && post && post.addSplatter) safe(() => post.addSplatter(mh >= wh ? 'mud' : 'water', Math.min(1, (mh + wh) / 12 + 0.15)), 'splatter');
       ps.mudHit = 0; ps.wetHit = 0; // consume every render: small grazing hits must not pile up and fire later on dry road
     }
-    for (const v of game.vehicles) { v.mudCoat = v.body.state.mudCoat || 0; v.group.userData.mudCoat = v.mudCoat; if (v.setMudCoat) v.setMudCoat(v.mudCoat); }
+    for (const v of game.vehicles) {
+      v.mudCoat = Math.round((v.body.state.mudCoat || 0) * 50) / 50;   // 0.02 steps: each real change rewrites vertex colours
+      v.group.userData.mudCoat = v.mudCoat; if (v.setMudCoat) v.setMudCoat(v.mudCoat);
+      if (v.setLOD && !v.isPlayer) { const d = camera.position.distanceTo(v.group.position); const want = v.lod === 'far' ? (d < 27 ? 'near' : 'far') : (d > 33 ? 'far' : 'near'); if (want !== v.lod) { v.lod = want; v.setLOD(want); } }
+    }
     if (post && post.render) {
       try { post.render(dt, { speed: sp }); }
       catch (e) { console.warn('[main] post.render failed, falling back', e && e.message); post = null; renderer.render(scene, camera); }
