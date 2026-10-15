@@ -118,7 +118,10 @@ export function createUI(root, opts = {}) {
     gNum.textContent = String(gi + 1).padStart(2, '0');
     const ranges = statRanges(); gStats.replaceChildren();
     statDefs.forEach(([label, f], i) => {
-      const [mn, mx] = ranges[i]; const v = f(t); const pct = mx - mn > 1e-9 ? 0.1 + 0.8 * ((v - mn) / (mx - mn)) : 0.5;
+      const [mn, mx] = ranges[i]; const v = f(t);
+      const all = T.map(f), rank = all.filter((x) => x < v - 1e-9).length / Math.max(1, T.length - 1);
+      const lin = mx - mn > 1e-9 ? (v - mn) / (mx - mn) : 0.5;
+      const pct = 0.07 + 0.88 * (0.55 * lin + 0.45 * rank); // blend linear + rank so differences are always visible
       const mark = h('i', { style: `left:${pct * 100}%` }), fill = h('em', { style: `width:${pct * 100}%` });
       gStats.append(h('div', { class: 'sbd-stat' }, h('span', {}, label), h('div', { class: 'sbd-tape' }, fill, mark)));
     });
@@ -172,19 +175,19 @@ export function createUI(root, opts = {}) {
   const placardWrap = h('div');
   mk('finish', 'sbd-center', placardWrap);
 
-  // glyph timing: visible 3 s on race start, again for 3 s after 10 s idle
-  let gTimer = null, idleTimer = null, glyphsOn = false;
-  function glyphFlash() {
+  // Glyph timing (zero-HUD): shown at low opacity during the countdown, fade to 0 over 3 s starting at GO
+  // (ui.raceStarted()) regardless of touches. Only touch-idleness (10 s with NO touch at all) brings them
+  // back, briefly, at <=35% opacity.
+  let gTimer = null, idleTimer = null, safetyTimer = null;
+  const glyphOn = () => { glyphs.classList.add('on'); };
+  const glyphOff = () => { glyphs.classList.remove('on'); };
+  function armIdle() { clearTimeout(idleTimer); idleTimer = setTimeout(idleFlash, 10000); }
+  function idleFlash() {
     if (current !== 'race') return;
-    glyphs.classList.add('on'); glyphsOn = true; clearTimeout(gTimer);
-    gTimer = setTimeout(() => { glyphs.classList.remove('on'); glyphsOn = false; armIdle(); }, 3000);
+    glyphs.classList.add('on', 'faint'); clearTimeout(gTimer);
+    gTimer = setTimeout(() => { glyphOff(); glyphs.classList.remove('faint'); armIdle(); }, 2200);
   }
-  function armIdle() { clearTimeout(idleTimer); idleTimer = setTimeout(glyphFlash, 10000); }
-  function noteInput() {
-    if (current !== 'race') return;
-    if (glyphsOn) { clearTimeout(gTimer); glyphs.classList.remove('on'); glyphsOn = false; }
-    armIdle();
-  }
+  function noteInput() { if (current === 'race') { armIdle(); } } // touches never keep glyphs up
   window.addEventListener('pointerdown', noteInput, { passive: true, capture: true });
   window.addEventListener('keydown', noteInput, { passive: true });
 
@@ -197,14 +200,16 @@ export function createUI(root, opts = {}) {
       for (const [k, s] of Object.entries(screens)) s.classList.toggle('on', k === name || (name === 'pause' && k === 'race'));
       screens.race.classList.toggle('on', name === 'race' || name === 'pause');
       el.style.pointerEvents = 'none';
-      clearTimeout(gTimer); clearTimeout(idleTimer); glyphs.classList.remove('on'); glyphsOn = false;
-      if (name === 'race') { if (leaving !== 'pause') glyphFlash(); else armIdle(); }
-      else if (name === 'pause') { current = 'pause'; }
+      if (name === 'race' && leaving !== 'pause') {
+        clearTimeout(gTimer); clearTimeout(idleTimer); clearTimeout(safetyTimer); glyphs.classList.remove('faint'); glyphOn();
+        safetyTimer = setTimeout(() => { glyphOff(); armIdle(); }, 6000); // if main never calls raceStarted()
+        armIdle();
+      } else if (name !== 'race' && name !== 'pause') { clearTimeout(gTimer); clearTimeout(idleTimer); clearTimeout(safetyTimer); glyphOff(); }
       if (name === 'garage') renderGarage();
       if (name === 'lobby') api.setLobbyRole(lobbyRole.v);
       cb('onScreen', name);
     },
-    hide() { current = null; for (const s of Object.values(screens)) s.classList.remove('on'); clearTimeout(gTimer); clearTimeout(idleTimer); },
+    hide() { current = null; for (const s of Object.values(screens)) s.classList.remove('on'); clearTimeout(gTimer); clearTimeout(idleTimer); clearTimeout(safetyTimer); },
     get screen() { return current; },
     setOrientationBlocked(b) { orientForced = b == null ? null : !!b; refreshOrient(); },
     // ---- lobby slots (for Agent 2 / main) ----
@@ -258,7 +263,9 @@ export function createUI(root, opts = {}) {
     showGyroButton(b) { gyroBtn.style.display = b ? '' : 'none'; },
     setFamilyPass(textOrNode) { passBody.replaceChildren(textOrNode.nodeType ? textOrNode : document.createTextNode(textOrNode)); },
     notifyInput: noteInput,
-    flashGlyphs: glyphFlash,
+    /** Call at GO: glyphs fade out over 3 s from now. */
+    raceStarted() { clearTimeout(safetyTimer); clearTimeout(gTimer); glyphs.classList.remove('faint'); glyphOff(); armIdle(); },
+    glyphOpacity() { return parseFloat(getComputedStyle(glyphs).opacity); },
     toast(text, ms = 2200) { toast.textContent = text; toast.classList.add('on'); setTimeout(() => toast.classList.remove('on'), ms); },
     /** info: {place, total, time (s), standings?: [{name, time, you}], name?} */
     showFinish(info = {}) {
@@ -270,7 +277,10 @@ export function createUI(root, opts = {}) {
         time != null ? h('div', { class: 'time' }, fmtTime(time)) : null,
         standings ? h('ul', { class: 'sbd-standings' }, standings.map((s, i) => h('li', { class: s.you ? 'me' : '' }, h('b', {}, `${i + 1}.`), s.name, h('span', {}, s.time != null ? fmtTime(s.time) : 'DNF')))) : null,
         h('div', { class: 'sbd-row' }, btn('Race again', 'primary', () => cb('onRematch')), btn('Garage', 'small', () => api.show('garage')), btn('Barn', 'small chalk', () => { cb('onQuit'); api.show('title'); })));
-      placardWrap.replaceChildren(card); api.show('finish');
+      const flags = Array.from({ length: 14 }, (_, i) => `<path d="M${20 + i * 70} ${28 + Math.sin(i / 13 * Math.PI) * 18} l30 0 l-15 46z" fill="${['#c63a24', '#f2c230', '#f6f2e4', '#3f7d3a', '#2f7bbf'][i % 5]}" stroke="#2a170a" stroke-width="2"/>`).join('');
+      const bunting = h('div', { class: 'sbd-bunting', html: `<svg viewBox="0 0 1000 110" preserveAspectRatio="none"><path d="M0 14 Q500 74 1000 14" fill="none" stroke="#2a170a" stroke-width="3"/>${flags}</svg>` });
+      card.style.animationDelay = `${info.delay ?? 0.5}s`;
+      placardWrap.replaceChildren(bunting, card); api.show('finish');
     },
     destroy() { el.remove(); orient.remove(); window.removeEventListener('resize', refreshOrient); },
   };
