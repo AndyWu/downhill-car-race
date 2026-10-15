@@ -66,7 +66,7 @@ try {
     const c4 = await browser.newContext(ctxOpts);
     const page = await open('autostart=1&truck=0&ai=5&q=default&debug=input', c4);
     const inputLogs = []; page.on('console', (m) => { if (m.text().startsWith('[input]')) inputLogs.push(m.text()); });
-    const info = await page.evaluate(() => { const g = window.__game; const r = {}; for (const s of [0, 600, 1500, 3150]) { g.teleport(s, 0); g.vehicles.forEach((v, i) => { if (i) { /* keep AI where they are */ } }); g.advance(1 / 60); const i = g.renderer.info.render; r[s] = { calls: i.calls, triangles: i.triangles }; } return r; });
+    const info = await page.evaluate(() => { const g = window.__game; const r = {}; for (const s of [0, 600, 1500, 3150]) { g.teleport(s, 0); g.vehicles.forEach((v, i) => { if (i) { /* keep AI where they are */ } }); const inf = g.renderer.info; inf.autoReset = false; g.advance(1 / 60); inf.reset(); g.advance(1 / 60); const i = inf.render; r[s] = { calls: i.calls, triangles: i.triangles }; inf.autoReset = true; } return r; });
     log('rendererInfo_q_default_ai5', info);
     const det = await page.evaluate(() => { const g = window.__game; const run = (pad) => { g.setDebugInput(pad ? { steer: 0, paddleL: 1, paddleR: 1 } : { steer: 0 }); g.teleport(100, 2); g.advance(0.05); const s0 = g.state.s; g.advance(10); return +(g.state.s - s0).toFixed(2); };
       const r = { coastA: run(false), coastB: run(false), padA: run(true), padB: run(true) };

@@ -1,0 +1,21 @@
+{
+  "rendererInfo_q_default_ai5": {
+    "0": {
+      "calls": 223,
+      "triangles": 366871
+    },
+    "600": {
+      "calls": 103,
+      "triangles": 186606
+    },
+    "1500": {
+      "calls": 95,
+      "triangles": 168732
+    },
+    "3150": {
+      "calls": 78,
+      "triangles": 189500
+    }
+  },
+  "errors": []
+}

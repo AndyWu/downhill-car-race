@@ -1,0 +1,443 @@
+{
+  "glyphOpacitySeries": [
+    [
+      0,
+      0.32
+    ],
+    [
+      5,
+      0
+    ],
+    [
+      10,
+      0
+    ],
+    [
+      15,
+      0.01
+    ],
+    [
+      20,
+      0
+    ],
+    [
+      25,
+      0
+    ],
+    [
+      30,
+      0
+    ],
+    [
+      35,
+      0
+    ],
+    [
+      40,
+      0
+    ],
+    [
+      45,
+      0
+    ],
+    [
+      50,
+      0
+    ],
+    [
+      55,
+      0
+    ],
+    [
+      60,
+      0
+    ]
+  ],
+  "rendererInfo_q_default_ai5": {
+    "0": {
+      "calls": 1,
+      "triangles": 1
+    },
+    "600": {
+      "calls": 1,
+      "triangles": 1
+    },
+    "1500": {
+      "calls": 1,
+      "triangles": 1
+    },
+    "3150": {
+      "calls": 1,
+      "triangles": 1
+    }
+  },
+  "physics": {
+    "coast2s": [
+      12.01,
+      12.59
+    ],
+    "hb2s": [
+      11.92,
+      5.77
+    ],
+    "hbDecel": 3.07,
+    "coast10s": {
+      "ds": 29.2,
+      "v": 3.64
+    },
+    "paddle10s": {
+      "ds": -64.7,
+      "v": 9.4
+    }
+  },
+  "headlightTap": {
+    "before": false,
+    "after": true,
+    "logs": [
+      "[input] down headlight R 861 656 touch",
+      "[input] up headlight held 6789 allowed 9916 moved 0",
+      "[input] headlight -> true"
+    ]
+  },
+  "tilt": {
+    "hasMotionBefore": false,
+    "neutral": {
+      "raw": 0,
+      "steer": 0,
+      "wheelRotZ": 0,
+      "angVelY": -0.003
+    },
+    "upright": {
+      "raw": 0,
+      "steer": 0,
+      "wheelRotZ": 0,
+      "angVelY": -0.122
+    },
+    "tiltA": {
+      "raw": 28.6,
+      "steer": 0.61,
+      "wheelRotZ": -1.274,
+      "angVelY": -0.237
+    },
+    "tiltB": {
+      "raw": -28.6,
+      "steer": -0.61,
+      "wheelRotZ": 1.261,
+      "angVelY": 0.603
+    },
+    "screenAngle": 0,
+    "isTouch": true,
+    "hasMotion": true
+  },
+  "swipe": {
+    "noInput": [
+      2.72,
+      3.46
+    ],
+    "swipes": [
+      3.46,
+      8.15
+    ],
+    "strokePairs": 1
+  },
+  "handbrake": {
+    "before": 8.15,
+    "after1500ms": 5.31,
+    "leverRotX": 0.7
+  },
+  "glyphOpacityAfterControls": 0,
+  "zones": {
+    "headlightBefore": false,
+    "headlightAfterTap": false,
+    "reverseAfterGearDragDown": true
+  },
+  "fps": {
+    "q-low": 1.8,
+    "q-medium": 1.4,
+    "q-default": 0.6,
+    "chase-ai-race": 1
+  },
+  "aiRace": {
+    "rows": [
+      {
+        "t": 10,
+        "s": [
+          65,
+          94,
+          74,
+          91,
+          82,
+          81
+        ],
+        "lat": [
+          -4.7,
+          -0.2,
+          1.1,
+          -0.1,
+          0.7,
+          1.7
+        ],
+        "spd": [
+          6,
+          13.2,
+          8.8,
+          12.9,
+          12.5,
+          12.6
+        ]
+      },
+      {
+        "t": 20,
+        "s": [
+          104,
+          180,
+          189,
+          224,
+          206,
+          160
+        ],
+        "lat": [
+          -4.6,
+          -0.2,
+          2.5,
+          -0.1,
+          1.1,
+          0.3
+        ],
+        "spd": [
+          2.5,
+          10.5,
+          12.5,
+          14.1,
+          13.6,
+          4.9
+        ]
+      },
+      {
+        "t": 30,
+        "s": [
+          122,
+          299,
+          220,
+          367,
+          346,
+          259
+        ],
+        "lat": [
+          -4.6,
+          0,
+          -4.4,
+          -0.1,
+          -1.6,
+          -1.8
+        ],
+        "spd": [
+          1.4,
+          12.2,
+          4.2,
+          14.5,
+          13.8,
+          13.2
+        ]
+      },
+      {
+        "t": 40,
+        "s": [
+          135,
+          409,
+          259,
+          506,
+          487,
+          403
+        ],
+        "lat": [
+          -4.6,
+          0,
+          -2.9,
+          2.4,
+          -2.1,
+          -0.5
+        ],
+        "spd": [
+          1.2,
+          10.7,
+          6.8,
+          12.4,
+          12.9,
+          15.7
+        ]
+      },
+      {
+        "t": 50,
+        "s": [
+          147,
+          501,
+          353,
+          617,
+          590,
+          490
+        ],
+        "lat": [
+          -4.6,
+          -0.6,
+          -2.5,
+          -1.7,
+          -1.6,
+          -2
+        ],
+        "spd": [
+          1.1,
+          8.6,
+          11.6,
+          11.2,
+          9.7,
+          7.4
+        ]
+      },
+      {
+        "t": 60,
+        "s": [
+          157,
+          580,
+          449,
+          753,
+          700,
+          571
+        ],
+        "lat": [
+          -4.6,
+          -0.1,
+          -1.5,
+          -0.2,
+          1,
+          -1.7
+        ],
+        "spd": [
+          1.2,
+          7.6,
+          8.7,
+          14.7,
+          13,
+          7.8
+        ]
+      },
+      {
+        "t": 70,
+        "s": [
+          168,
+          669,
+          530,
+          907,
+          847,
+          666
+        ],
+        "lat": [
+          -4.7,
+          -0.3,
+          -3,
+          -0.2,
+          -2,
+          0.9
+        ],
+        "spd": [
+          1.1,
+          9.8,
+          7.8,
+          15.5,
+          15.5,
+          10.9
+        ]
+      },
+      {
+        "t": 80,
+        "s": [
+          179,
+          773,
+          610,
+          1060,
+          1000,
+          769
+        ],
+        "lat": [
+          -4.7,
+          -0.2,
+          0.4,
+          0,
+          1.6,
+          0.2
+        ],
+        "spd": [
+          1.2,
+          11.4,
+          8.8,
+          14.2,
+          14.8,
+          11.2
+        ]
+      },
+      {
+        "t": 90,
+        "s": [
+          191,
+          852,
+          696,
+          1186,
+          1124,
+          859
+        ],
+        "lat": [
+          -4.7,
+          5.4,
+          0,
+          0.6,
+          1.7,
+          -4.8
+        ],
+        "spd": [
+          1.2,
+          0.2,
+          9.8,
+          11.7,
+          11.1,
+          1.4
+        ]
+      },
+      {
+        "offroadSec": [
+          85,
+          5,
+          16,
+          0,
+          0,
+          13
+        ],
+        "slowSec": [
+          67,
+          1,
+          4,
+          0,
+          0,
+          1
+        ],
+        "aiLeadChanges": 1
+      }
+    ],
+    "names": [
+      "You",
+      "Barnaby",
+      "Clementine",
+      "Buster",
+      "Maeve",
+      "Ace"
+    ]
+  },
+  "finish": {
+    "finished": true,
+    "place": 1,
+    "finishTime": 95.26666666666254,
+    "mode": "finish",
+    "s": 3227.990959934642
+  },
+  "resultsCard": "1st\nout of 6\n1:35.27\n1.\nYou\n1:35.27\n2.\nBuster\nstill rolling… ~145s\n3.\nMaeve\nstill rolling… ~165s\n4.\nAce\nstill rolling… ~227s\n5.\nBarnaby\nstill rolling… ~234s\n6.\nClementine\nstill rolling… ~285s\nRACE AGAIN\nGarage\nBarn",
+  "errors": []
+}
