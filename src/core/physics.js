@@ -4,6 +4,8 @@ import * as THREE from 'three';
 
 const G = 9.81;
 const RHO = 1.2;
+const PADDLE_DV = 0.55; // m/s per full stroke at standstill
+const PADDLE_V0 = 9;   // speed at which a stroke is worth half
 const MUD_ROLL = 0.045;   // extra rolling-resistance coefficient at drag = 1 (mud)
 const MUD_VISC = 0.12;    // speed-proportional deceleration (1/s) per unit drag
 export const STATE_FLOATS = 20;
@@ -48,7 +50,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
   const m = clamp(fin(spec.mass, 95), 20, 2000);
   const r = clamp(fin(spec.wheelRadius, 0.28), 0.1, 1);
   const rf = clamp(fin(spec.wheelRadiusFront, r), 0.1, 1);
-  const travel = clamp(fin(spec.suspension.travel, 0.22), 0.05, 0.6);
+  const travel = clamp(Math.max(fin(spec.suspension.travel, 0.22), 0.1), 0.1, 0.6); // contact reach is never below 10 cm, so tiny-travel trucks don't leave the ground on every bump
   const hx = spec.trackWidth / 2, hz = spec.wheelBase / 2, ay = travel * 0.5;
   const anchors = [
     new THREE.Vector3(-hx, ay, -hz), new THREE.Vector3(hx, ay, -hz),
@@ -74,7 +76,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
     position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), velocity: new THREE.Vector3(),
     angularVelocity: new THREE.Vector3(), speed: 0, forwardSpeed: 0, s: 0, lateral: 0,
     steerAngle: 0, steerNorm: 0, paddleL: 0, paddleR: 0, handbrake: 0, reverse: false,
-    bump: 0, slip: 0, draft: 0, airborne: false, upsideDown: 0, surface: 'dirt',
+    bump: 0, slip: 0, draft: 0, jt: 0, judder: 0, mudCoat: 0, wetHit: 0, mudHit: 0, airborne: false, upsideDown: 0, surface: 'dirt',
     wheelContacts: [0, 1, 2, 3].map(() => ({ contact: false, compression: 0, load: 0, surface: 'dirt', slip: 0, steer: 0 })),
   };
   state.quaternion.identity();
@@ -130,8 +132,8 @@ export function createVehicleBody(specIn, world, opts = {}) {
       if (lastHad[i]) rate = clamp((lastLen[i] - len) / h, -12, 12);
       lastLen[i] = len; lastHad[i] = true;
       let N = kS * comp + cS * rate;
-      if (comp > travel) N += kS * 8 * (comp - travel);
-      N = clamp(N, 0, 20 * m * G);
+      if (comp > travel) N += kS * 3 * (comp - travel);
+      N = clamp(N, 0, 8 * m * G);
       if (N <= 0) { wc.compression = clamp(comp / travel, 0, 1.5); continue; }
       wc.contact = true; wc.compression = clamp(comp / travel, 0, 1.5); wc.load = N; wc.surface = g.surf.type || 'dirt';
       contacts++; _nSum.add(_ws);
@@ -154,14 +156,15 @@ export function createVehicleBody(specIn, world, opts = {}) {
       const surf = g.surf;
       const mu = clamp(fin(surf.friction, 0.8), 0.05, 1.3) * grip;
       const rear = i >= 2;
-      const muLat = rear ? mu * (1 - 0.65 * hb) : mu;
+      const muLat = rear ? mu * (1 - 0.45 * hb) : mu;
       const maxF = mu * N, maxFlat = muLat * N;
       const mEff = m / 4;
       // longitudinal
       let Fx = -crr * N * Math.tanh(vf * 4);
       if (rear && hb > 0.01) {
-        const lockF = clamp(-vf * mEff / h * 0.5, -brakeMax * 0.5 * hb, brakeMax * 0.5 * hb);
-        Fx += clamp(lockF, -maxF * 0.85 * hb, maxF * 0.85 * hb);
+        const lockF = clamp(-vf * mEff / h * 0.5, -brakeMax * 0.75 * hb, brakeMax * 0.75 * hb);
+        const lockCap = 0.97 - clamp((speed - 7) / 22, 0, 0.4); // locking the rears flat-out at speed spins you; slow down first
+        Fx += clamp(lockF, -maxF * lockCap * hb, maxF * lockCap * hb);
       }
       // lateral
       let Fs = clamp(-vs * mEff / h * 0.5, -maxFlat, maxFlat);
@@ -174,8 +177,9 @@ export function createVehicleBody(specIn, world, opts = {}) {
       // surface drag (mud etc.): world drag is dimensionless 0..1 (mud = 1)
       const sd = Math.pow(clamp(fin(surf.drag), 0, 1.5), 1.6);
       if (sd > 0) {
-        _tmp.addScaledVector(_f, -sd * MUD_ROLL * N * Math.tanh(vf * 3) - sd * mEff * MUD_VISC * vf);
-        _tmp.addScaledVector(_s, -sd * mEff * MUD_VISC * 0.5 * vs);
+        // applied at the centre of mass (not the tyre) so a half-in/half-out patch slows the car without yawing it
+        _tmp2.copy(_f).multiplyScalar(-sd * MUD_ROLL * N * Math.tanh(vf * 3) - sd * mEff * MUD_VISC * vf).addScaledVector(_s, -sd * mEff * MUD_VISC * 0.5 * vs);
+        _F.add(_tmp2);
       }
       _tmp.addScaledVector(_ws, N);
       applyForce(_tmp, _cp);
@@ -191,7 +195,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
         _fc.copy(_fwd).addScaledVector(_nSum, -_fwd.dot(_nSum) / Math.max(_nSum.lengthSq(), 1e-6)).normalize();
         const dir = state.reverse ? -1 : 1;
         const vf0 = v.dot(_fc) * dir;
-        const dv = 0.34 * paddleEff * (pL + pR) / (1 + Math.pow(Math.max(vf0, 0) / 5.5, 2));
+        const dv = PADDLE_DV * paddleEff * (pL + pR) * (1 + 0.5 * clamp(1 - vf0 / 12, 0, 1)) / (1 + Math.pow(Math.max(vf0, 0) / PADDLE_V0, 2));
         v.addScaledVector(_fc, dv * dir);
       }
     }
@@ -265,6 +269,8 @@ export function createVehicleBody(specIn, world, opts = {}) {
       const dA = sRate * dt;
       state.steerAngle += clamp(tgt - state.steerAngle, -dA, dA);
       state.steerNorm = state.steerAngle / lock;
+      state.jt = (state.jt + dt * 2 * Math.PI * 12) % (2 * Math.PI * 1000);
+      state.judder = state.handbrake * clamp(state.speed / 3, 0, 1);
       const sub = 2, h = dt / sub;
       for (let k = 0; k < sub; k++) {
         substep(h, k === 0 ? inp : { paddleL: 0, paddleR: 0 });
@@ -279,10 +285,27 @@ export function createVehicleBody(specIn, world, opts = {}) {
       if (state.upsideDown > 2.0) this.recover();
       // stuck (wedged on a rock / facing uphill with no momentum) for 5 s: lift back onto the road, a few metres on
       state.stuck = state.speed < 0.4 && state.handbrake < 0.2 && state.s > 3 ? (state.stuck || 0) + dt : 0;
+      // spun round and rolling backwards down the hill: put the car back on the road after 4 s
+      if (world && world.track && world.track.sampleAt && state.s > 3 && state.speed > 0.5 && !state.reverse) {
+        state._wc = (state._wc || 0) + 1;
+        if (state._wc >= 10) {
+          state._wc = 0;
+          const tg = world.track.sampleAt(Math.min(world.track.length - 2, Math.max(0, state.s))).tangent;
+          const along = tg.x * _fwd.x + tg.y * _fwd.y + tg.z * _fwd.z;
+          state.wrongWay = along < -0.35 ? (state.wrongWay || 0) + 10 * dt : 0;
+          if (state.wrongWay > 4) { state.wrongWay = 0; this.recover(2); }
+        }
+      }
       if (state.stuck > 5) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);
       if (wc0) state.surface = wc0.surface;
+      // wet/mud latches (consumed by the renderer, so dropped frames / advance() never lose a splash) + truck mud coat
+      if (state.speed > 3) {
+        if (state.surface === 'mud') { state.mudHit += dt * state.speed; state.mudCoat = Math.min(1, state.mudCoat + dt * 0.06 * state.speed / 10); }
+        else if (state.surface === 'water') { state.wetHit += dt * state.speed; state.mudCoat = Math.max(0, state.mudCoat - dt * 0.25); }
+      }
+      state.mudCoat = Math.max(0, state.mudCoat - dt * 0.004);
     },
     recover(ahead = 0) {
       const tr = world && world.track;

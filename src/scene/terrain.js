@@ -8,7 +8,7 @@ export const SHOULDER_OUT = 6.5;  // fully blended into terrain at hw + this
 
 const CROWN = 0.12;
 
-export function buildTerrain(track, field, pads, seed = 1) {
+export function buildTerrain(track, field, pads, seed = 1, gaps = []) {
   const nz = new Noise(seed * 77 + 3);
   const nzr = new Noise(seed * 91 + 17);
   const G = 6, margin = 300;
@@ -39,8 +39,21 @@ export function buildTerrain(track, field, pads, seed = 1) {
     }
     if (rm > 0) y += rm * (0.009 * nzr.n2(s * 1.9, d * 2.4) + 0.016 * nzr.n2(s * 0.4 + 5, d * 0.6));
     y += ramp;
-    if (ad < hw + 0.6) { field.query(s, d, zq); y += zq.lift * (1 - smoothstep(hw, hw + 0.6, ad)); }
+    if (ad <= hw + SHOULDER_IN) { field.query(s, d, zq); y += zq.lift * (1 - smoothstep(hw, hw + 0.6, ad)) - zq.cut; }
     return y;
+  }
+
+  // verge ditch + berm: continuous lip beyond the shoulder, with openings at driveways
+  function bermAmp(s, d) {
+    let a = 0.78 + 0.22 * nzr.n1(s / 37 + 5);
+    const sd = d < 0 ? -1 : 1;
+    for (const g of gaps) if (g.side === sd) { const r = g.r === undefined ? 5 : g.r; a *= smoothstep(r, r + 5, Math.abs(s - g.s)); }
+    return a;
+  }
+  function verge(s, d, hw) {
+    const ad = Math.abs(d), a = bermAmp(s, d);
+    const t1 = (ad - (hw + 2.3)) / 0.6, t2 = (ad - (hw + 4.0)) / 0.95;
+    return a * (-0.2 * Math.exp(-t1 * t1) + 0.58 * Math.exp(-t2 * t2));
   }
 
   // ---- terrain grid ----
@@ -108,8 +121,10 @@ export function buildTerrain(track, field, pads, seed = 1) {
     const hw = pp.hw, ad = Math.abs(q.d);
     if (ad > hw + SHOULDER_OUT) return g;
     if (ad <= hw + SHOULDER_IN) return roadY(q.s, q.d, pp);
-    const y0 = roadY(q.s, q.d < 0 ? -(hw + SHOULDER_IN) : hw + SHOULDER_IN, pp);
-    return y0 + (g - y0) * smoothstep(hw + SHOULDER_IN, hw + SHOULDER_OUT, ad);
+    let y0 = roadY(q.s, q.d < 0 ? -(hw + SHOULDER_IN) : hw + SHOULDER_IN, pp);
+    y0 += zq.cut; // roadY subtracted the edge cut; re-applied below at the true position
+    field.query(q.s, q.d, zq);
+    return y0 + (g - y0) * smoothstep(hw + SHOULDER_IN, hw + SHOULDER_OUT, ad) + verge(q.s, q.d, hw) - zq.cut;
   }
   const E = 0.35;
   function normalAt(x, z, e = E) {

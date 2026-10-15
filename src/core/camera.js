@@ -44,7 +44,8 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
     bobVZ += (-kk * bobZ - cc * bobVZ - accL.z * 0.006) * dt; bobZ = clamp(bobZ + bobVZ * dt, -0.05, 0.05);
     shakeT += dt * (18 + state.speed * 1.2);
     const rough = clamp(state.bump * 1.2 + (state.slip > 1.5 ? 0.15 : 0) + state.speed * 0.0025, 0, 1.2);
-    const sx = Math.sin(shakeT * 1.31) * 0.0035 * rough, sy = Math.sin(shakeT * 1.77 + 1.3) * 0.0045 * rough;
+    const jud = state.judder || 0, jt = state.jt || 0; // handbrake judder: 12 Hz buzz in the seat
+    const sx = Math.sin(shakeT * 1.31) * 0.0035 * rough + Math.sin(jt * 0.93) * 0.003 * jud, sy = Math.sin(shakeT * 1.77 + 1.3) * 0.0045 * rough + Math.sin(jt) * 0.006 * jud;
     // look ahead into turns
     const latAcc = clamp(accL.x, -10, 10);
     const yawT = -steerVis * 0.2 + clamp(-latAcc * 0.004, -0.05, 0.05);

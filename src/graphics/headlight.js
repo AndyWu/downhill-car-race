@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { G, tickTime } from './shared.js';
+import { getTier } from './quality.js';
+let shadowCasters = 0;
 
 function radialTexture(size, stops) {
   const d = new Uint8Array(size * size * 4);
@@ -89,7 +91,12 @@ void main() {
  * and call update(dt) yourself for fixed-step control).
  */
 export function attachHeadlight(obj, opts = {}) {
-  const { range = 70, angle = 0.36, intensity = 2600, aimDrop = 0.9, beamLength = 26, autoTick = true, castShadow = true } = opts;
+  const tier = getTier();
+  // `intensity` keeps the round-1 scale (2600 = full); internally rescaled for the clamped near-field falloff
+  const { range = 70, angle = 0.36, intensity = 2600, aimDrop = 0.9, beamLength = 26, autoTick = true } = opts;
+  const castShadow = (opts.castShadow ?? tier.headlightShadow) && shadowCasters < 2;
+  if (castShadow) shadowCasters++;
+  const I0 = intensity * (200 / 2600);
   glowTex ??= radialTexture(64, (r) => Math.pow(Math.max(0, 1 - r), 2.2));
   goboTex ??= radialTexture(128, (r, a) => {
     const hot = Math.pow(Math.max(0, 1 - r * 0.8), 0.7);
@@ -99,12 +106,12 @@ export function attachHeadlight(obj, opts = {}) {
   goboTex.colorSpace = THREE.NoColorSpace;
 
   const group = new THREE.Group(); group.name = 'HeadlightRig';
-  const light = new THREE.SpotLight(0xffd7a0, 0, range, angle, 0.65, 1.7);
+  const light = new THREE.SpotLight(0xffd7a0, 0, range, angle, 0.65, 1.3);
   light.castShadow = castShadow;
   light.shadow.mapSize.set(512, 512);
   light.shadow.camera.near = 0.35; light.shadow.camera.far = range;
   light.shadow.bias = -0.0008; light.shadow.normalBias = 0.03;
-  light.map = goboTex;
+  if (castShadow) light.map = goboTex; // gobo projection needs the shadow matrix
   light.shadow.autoUpdate = false; light.shadow.needsUpdate = true; // allocate the map once; re-render only while lit
   light.target.position.set(0, -aimDrop, -10);
   group.add(light, light.target);
@@ -152,17 +159,17 @@ export function attachHeadlight(obj, opts = {}) {
     if (nextDip < 0) { dipT = 0.07; nextDip = 5 + Math.random() * 9; }
     if (dipT > 0) { dipT -= dt; fl *= 0.8 + 0.2 * Math.abs(Math.sin(dipT * 90)); }
     const b = level * fl;
-    light.intensity = intensity * b;
+    light.intensity = I0 * b;
     tmp.copy(COLD).lerp(HOT, Math.min(1, level * 1.15)); light.color.copy(tmp);
     const night = G.gfxNight.value;
     beamMat.uniforms.uIntensity.value = b;
     beamMat.uniforms.uVis.value = 0.1 + 0.9 * night;
     beamMat.uniforms.uColor.value.copy(tmp).multiplyScalar(0.9);
     beam.visible = level > 0.01;
-    lensMat.color.setRGB(tmp.r * (0.05 + 5 * b), tmp.g * (0.05 + 5 * b), tmp.b * (0.04 + 5 * b));
+    lensMat.color.setRGB(tmp.r * (0.05 + 3 * b), tmp.g * (0.05 + 3 * b), tmp.b * (0.04 + 3 * b));
     glow.material.opacity = Math.min(1, b * 0.9) * (0.5 + 0.5 * night);
     glow.material.color.copy(tmp);
-    light.shadow.autoUpdate = level > 0.003; // no shadow pass while off (never toggle visible/castShadow: that recompiles shaders)
+    if (castShadow) light.shadow.autoUpdate = level > 0.003; // no shadow pass while off (never toggle visible/castShadow: that recompiles shaders)
   }
 
   function loop() {
@@ -179,6 +186,6 @@ export function attachHeadlight(obj, opts = {}) {
   update(0);
   return {
     setOn, get isOn() { return on; }, light, beam, group, update, get level() { return level; },
-    dispose() { cancelAnimationFrame(raf); obj.remove(group); geo.dispose(); beamMat.dispose(); light.dispose(); },
+    dispose() { if (castShadow) shadowCasters--; cancelAnimationFrame(raf); obj.remove(group); geo.dispose(); beamMat.dispose(); light.dispose(); },
   };
 }

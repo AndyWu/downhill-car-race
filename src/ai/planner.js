@@ -167,6 +167,7 @@ export function buildPlan(world, P, rng) {
     rightAt: (s) => [lerpA(rx, s), lerpA(rz, s)],
     speedAt: (s) => lerpA(v, s),
     slopeAt: (s) => lerpA(slope, s),
+    widthAt: (s) => lerpA(wd, s),
     costAt: (s, lat) => {
       const i = Math.min(n - 1, Math.max(0, Math.round(s / DS)));
       const j = Math.min(K - 1, Math.max(0, Math.round(lat / SLOT) + J));

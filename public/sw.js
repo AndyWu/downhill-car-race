@@ -50,8 +50,21 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
+async function precacheStatus() {
+  const m = await getManifest();
+  const cache = await caches.open(cacheNames(m.version).pre);
+  let cached = 0;
+  for (const f of m.files) if (await cache.match(new URL(f.url, SCOPE).href)) cached++;
+  return { version: m.version, total: m.files.length, cached, state: self.serviceWorker?.state ?? (self.registration.active ? 'activated' : 'unknown') };
+}
+
 self.addEventListener('message', (e) => {
   if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
+  if (e.data?.type === 'GET_STATUS') {
+    const port = e.ports && e.ports[0];
+    e.waitUntil(precacheStatus().then((st) => port ? port.postMessage(st) : e.source?.postMessage({ type: 'STATUS', ...st }))
+      .catch((err) => port?.postMessage({ error: String(err) })));
+  }
 });
 
 self.addEventListener('fetch', (event) => {

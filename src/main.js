@@ -152,7 +152,7 @@ async function boot() {
     const body = createVehicleBody(spec, world);
     const st = world.startTransform(slot);
     body.reset(st.position, st.quaternion);
-    const flag = safe(() => createFlag({}), 'createFlag');
+    const flag = safe(() => createFlag({ index: specIdx % TRUCKS.length, number: spec.flagNumber, color: spec.flagColor != null ? (typeof spec.flagColor === 'number' ? '#' + spec.flagColor.toString(16).padStart(6, '0') : spec.flagColor) : undefined }), 'createFlag');
     if (flag) (built.parts.flagMount || built.group).add(flag.mesh);
     let ai = null;
     if (kind === 'ai') {
@@ -467,7 +467,7 @@ async function boot() {
     const cd = game.state.countdown;
     const ct = Math.ceil(cd);
     if (cd > 0 && ct < lastCountdownTick) { lastCountdownTick = ct; audioOnce('countdown'); }
-    else if (cd === 0 && lastCountdownTick > 0) { lastCountdownTick = 0; audioOnce('go'); }
+    else if (cd === 0 && lastCountdownTick > 0) { lastCountdownTick = 0; audioOnce('go'); input.calibrate(); }
     if (cd === 0 && mode === 'race') game.state.raceTime += STEP;
     else if (cd === 0 && mode === 'finish') game.state.raceTime += STEP;
 
@@ -615,9 +615,15 @@ async function boot() {
     if (lighting && lighting.update) safe(() => lighting.update(dt, camera), 'lighting.update');
     const ps = playerV ? playerV.body.state : null;
     const sp = ps ? ps.speed : 0;
-    const wet = ps && ps.speed > 3 && (ps.surface === 'mud' || ps.surface === 'water');
+    if (ps) {
+      // consume the wet/mud hits latched by the fixed update
+      const mh = ps.mudHit || 0, wh = ps.wetHit || 0;
+      if (mh + wh > 0.4 && post && post.addSplatter) safe(() => post.addSplatter(mh >= wh ? 'mud' : 'water', Math.min(1, (mh + wh) / 12 + 0.15)), 'splatter');
+      if (mh + wh > 0.4) { ps.mudHit = 0; ps.wetHit = 0; }
+    }
+    for (const v of game.vehicles) { v.mudCoat = v.body.state.mudCoat || 0; v.group.userData.mudCoat = v.mudCoat; if (v.setMudCoat) v.setMudCoat(v.mudCoat); }
     if (post && post.render) {
-      try { post.render(dt, { speed: sp, splatter: wet ? { type: ps.surface, amount: Math.min(1, ps.speed / 12) } : 0 }); }
+      try { post.render(dt, { speed: sp }); }
       catch (e) { console.warn('[main] post.render failed, falling back', e && e.message); post = null; renderer.render(scene, camera); }
     } else renderer.render(scene, camera);
   }
@@ -658,6 +664,15 @@ async function boot() {
       puddle: (h) => h.kind === 'puddle', water: (h) => h.type === 'water', stream: (h) => h.kind === 'stream',
       mud: (h) => h.type === 'mud', rock: (h) => h.type === 'rock', sand: (h) => h.type === 'sand', gravel: (h) => h.type === 'gravel',
     }[kind];
+    // world.landmarks (array of {kind|type|name, s} or an object keyed by name): barn | finish | bridge
+    const lm = world.landmarks;
+    if (lm && (kind === 'barn' || kind === 'finish' || kind === 'bridge' || kind === 'farm')) {
+      const list = Array.isArray(lm) ? lm : Object.entries(lm).map(([k, v]) => (v && typeof v === 'object' ? { name: k, ...v } : { name: k, s: v }));
+      const want = kind === 'farm' ? 'barn' : kind;
+      const hit = list.find((l) => [l.kind, l.type, l.name].some((x) => typeof x === 'string' && x.toLowerCase().includes(want)));
+      if (hit && Number.isFinite(hit.s)) return Math.max(0, hit.s - (want === 'finish' ? 30 : 25));
+    }
+    if (kind === 'finish') return TRACK_LENGTH - 40;
     if (kind === 'barn' || kind === 'farm') { const f = world.info && world.info.farms && world.info.farms[0]; return f ? f.s - 25 : 400; }
     if (wanted) { const h = (world.hazards || []).find(wanted); return h ? h.s - 28 : 300; }
     return null;

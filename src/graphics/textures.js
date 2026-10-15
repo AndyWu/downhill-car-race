@@ -36,7 +36,7 @@ function bake(name, size, shade, { normalStrength = 3, aniso = 8, needsOrm = tru
       shade(u, v, c);
       const k = j * N + i, p = k * 4;
       alb[p] = c.r * 255; alb[p + 1] = c.g * 255; alb[p + 2] = c.b * 255; alb[p + 3] = c.a * 255;
-      orm[p] = c.ao * 255; orm[p + 1] = c.rough * 255; orm[p + 2] = c.metal * 255; orm[p + 3] = 255;
+      orm[p] = c.ao * 255; orm[p + 1] = c.rough * 255; orm[p + 2] = c.metal * 255; orm[p + 3] = Math.min(255, Math.max(0, c.h * 255)); // height (for parallax)
       hgt[k] = c.h;
     }
   }
@@ -106,19 +106,56 @@ export const RECIPES = {
   // ---------------------------------------------------------------- wet mud
   mud(size, aniso) {
     return bake('mud', size, (u, v, c) => {
+      // two tyre ruts along V (u = .3/.7) with herringbone tread pressed in; rut floors hold standing water
+      const uu = u + (vnoise(v * 5, 0.5, 5, 1, 35) - 0.5) * 0.06;
+      const d1 = wrapd(uu - 0.3) / 0.075, d2 = wrapd(uu - 0.7) / 0.075;
+      const rA = Math.exp(-d1 * d1), rB = Math.exp(-d2 * d2), rut = Math.max(rA, rB);
+      const dd = rA > rB ? d1 : d2;
+      const tread = smoothstep(0.42, 0.58, ((v * 14 + Math.abs(dd) * 2.4) % 1 + 1) % 1) * smoothstep(0.15, 0.6, rut);
       const wet = smoothstep(0.52, 0.64, fbm(u, v, 3, 3, 4, 31));
       const lumps = fbm(u, v, 8, 8, 5, 32);
       const ridges = 1 - Math.abs(2 * fbm(u, v, 5, 5, 3, 33) - 1);
       const grain = vnoise(u * size / 4, v * size / 4, size / 4, size / 4, 34);
-      let h = lumps * 0.5 + ridges * 0.38 + grain * 0.03;
-      h = mix(h, 0.34 + fbm(u, v, 20, 20, 2, 35) * 0.04, wet * 0.85);
+      let h = 0.58 + lumps * 0.26 + ridges * 0.14 + grain * 0.025;
+      h = mix(h, 0.42 + fbm(u, v, 20, 20, 2, 35) * 0.03, wet * 0.8);
+      h -= rut * 0.36 + tread * rut * 0.07;
+      const wetMask = Math.max(wet, smoothstep(0.4, 0.95, rut));
       lerp3(c, 0.27, 0.185, 0.11, 0.38, 0.275, 0.17, lumps);
-      c.r = mix(c.r, 0.16, wet * 0.8); c.g = mix(c.g, 0.115, wet * 0.8); c.b = mix(c.b, 0.075, wet * 0.8);
+      c.r = mix(c.r, 0.16, wetMask * 0.8); c.g = mix(c.g, 0.115, wetMask * 0.8); c.b = mix(c.b, 0.075, wetMask * 0.8);
       worley(u, v, 40, 36, W);
-      let rough = mix(0.82, 0.16, wet) + (grain - 0.5) * 0.18;
-      if (W.id < 0.14 && W.f1 < 0.3) { const d = Math.sqrt(1 - (W.f1 / 0.3) ** 2); h += d * 0.12; c.r = mix(c.r, 0.36, d * 0.7); c.g = mix(c.g, 0.31, d * 0.7); c.b = mix(c.b, 0.26, d * 0.7); rough = 0.6; }
-      c.h = h; c.rough = clamp(rough, 0.08, 1); c.ao = 0.55 + 0.45 * clamp(h * 1.6);
-    }, { normalStrength: 3.5, aniso });
+      let rough = mix(0.84, 0.2, wetMask) + (grain - 0.5) * 0.16;
+      if (W.id < 0.12 && W.f1 < 0.3) { const d = Math.sqrt(1 - (W.f1 / 0.3) ** 2); h += d * 0.12; c.r = mix(c.r, 0.36, d * 0.7); c.g = mix(c.g, 0.31, d * 0.7); c.b = mix(c.b, 0.26, d * 0.7); rough = 0.6; }
+      c.h = clamp(h); c.rough = clamp(rough, 0.08, 1); c.ao = 0.5 + 0.5 * clamp(h * 1.5 + 0.1);
+    }, { normalStrength: 3.2, aniso });
+  },
+
+  // ---------------------------------------------------------------- gravel: grey/brown stones with dark soil in the gaps
+  gravel(size, aniso) {
+    return bake('gravel', size, (u, v, c) => {
+      const soil = fbm(u, v, 6, 6, 3, 161);
+      worley(u, v, 14, 162, W);
+      const id = W.id, rad = 0.36 + 0.3 * hash2(Math.floor(id * 1e4), 5, 6);
+      const q = W.f1 / rad;
+      let h = 0.15 + soil * 0.1, ao = 0.5 + 0.2 * soil;
+      lerp3(c, 0.2, 0.165, 0.125, 0.27, 0.22, 0.16, soil);
+      let rough = 0.95;
+      if (q < 1) {
+        const dome = Math.sqrt(1 - q * q), pick = hash2(Math.floor(id * 1e4), 9, 10);
+        let r, g, b;
+        if (pick < 0.4) { r = 0.4; g = 0.385; b = 0.36; }       // grey
+        else if (pick < 0.7) { r = 0.47; g = 0.4; b = 0.31; }   // tan
+        else if (pick < 0.9) { r = 0.3; g = 0.29; b = 0.28; }   // dark
+        else { r = 0.52; g = 0.5; b = 0.46; }                   // pale quartz (never white)
+        const t = 0.8 + 0.4 * fbm(u, v, 40, 40, 2, 163);
+        const edge = smoothstep(0.0, 0.25, dome);
+        c.r = mix(c.r, r * t, edge); c.g = mix(c.g, g * t, edge); c.b = mix(c.b, b * t, edge);
+        h += dome * 0.7 * (0.6 + 0.4 * pick); ao = mix(ao, 0.75 + 0.25 * dome, edge); rough = mix(0.95, 0.72 + 0.2 * pick, edge);
+      }
+      worley(u, v, 33, 164, W);
+      if (W.f1 < 0.28 && W.id < 0.5) { const d = 1 - W.f1 / 0.28; c.r = mix(c.r, 0.36, d * 0.5); c.g = mix(c.g, 0.34, d * 0.5); c.b = mix(c.b, 0.31, d * 0.5); h += d * 0.12; }
+      mul(c, 0.9 + 0.2 * vnoise(u * 128, v * 128, 128, 128, 165));
+      c.h = clamp(h); c.rough = rough; c.ao = ao;
+    }, { normalStrength: 5, aniso });
   },
 
   // ---------------------------------------------------------------- tileable ripple normal for water
@@ -204,10 +241,14 @@ export const RECIPES = {
       worley(u, v, 5, 84, W);
       let knot = 0;
       if (W.id < 0.35) { knot = Math.exp(-((W.f1 / 0.2) ** 2)); const ring = Math.sin(W.f1 * 55) * 0.5 + 0.5; mul(c, 1 - 0.5 * knot + (ring - 0.5) * 0.18 * knot); }
-      const grime = clamp(gap * 1.0 + crack * 0.8 + (1 - smoothstep(0, 0.25, fv)) * 0.25);
-      mul(c, 1 - grime * 0.55);
+      const grime = clamp(gap * 1.0 + crack * 0.9 + (1 - smoothstep(0, 0.25, fv)) * 0.3);
+      const edgeW = (1 - smoothstep(0.02, 0.12, Math.min(fv, 1 - fv))) * edge; // bare, sun-bleached board edges
+      c.r = mix(c.r, 0.62, edgeW * 0.45); c.g = mix(c.g, 0.58, edgeW * 0.45); c.b = mix(c.b, 0.52, edgeW * 0.45);
+      const mold = smoothstep(0.58, 0.72, fbm(u, v, 4, 4, 4, 85)) * 0.5;
+      c.r = mix(c.r, 0.3, mold * 0.4); c.g = mix(c.g, 0.34, mold * 0.4); c.b = mix(c.b, 0.26, mold * 0.4);
+      mul(c, 1 - grime * 0.7);
       c.h = 0.55 - (1 - lines) * 0.07 + gr * 0.06 - gap * 0.42 - crack * 0.25 - knot * 0.05;
-      c.rough = clamp(0.84 + gr * 0.12 - bleach * 0.05); c.ao = 1 - grime * 0.65;
+      c.rough = clamp(0.84 + gr * 0.12 - bleach * 0.05 + edgeW * 0.08); c.ao = clamp(1 - grime * 0.85 - crack * 0.3);
     }, { normalStrength: 3.2, aniso });
   },
 
@@ -237,10 +278,16 @@ export const RECIPES = {
       const sk = 0.6 + 0.55 * fbm(u, v, 44, 2, 3, 96) * (0.7 + 0.5 * fbm(u, v, 6, 6, 3, 99));
       pr *= sk; pg *= sk; pb *= sk;
       c.r = mix(wr, pr, paint); c.g = mix(wg, pg, paint); c.b = mix(wb, pb, paint);
-      const grime = clamp(gap * 0.9 + (1 - paint) * 0.15 * (1 - fbm(u, v, 6, 6, 2, 97)));
-      mul(c, 1 - grime * 0.6);
+      const grime = clamp(gap * 1.0 + (1 - paint) * 0.2 * (1 - fbm(u, v, 6, 6, 2, 97)) + rim * 0.12);
+      const edgeW = (1 - smoothstep(0.02, 0.1, Math.min(fu, 1 - fu))) * edge * paint; // worn paint on plank edges
+      c.r = mix(c.r, 0.5, edgeW * 0.4); c.g = mix(c.g, 0.34, edgeW * 0.4); c.b = mix(c.b, 0.3, edgeW * 0.4);
+      const rain = smoothstep(0.55, 0.8, fbm(u, v, 30, 2, 3, 100)); // dark rain-run streaks
+      mul(c, 1 - rain * 0.25);
+      const mildew = smoothstep(0.6, 0.75, fbm(u, v, 5, 5, 4, 101)) * 0.4;
+      c.r = mix(c.r, 0.28, mildew * 0.35); c.g = mix(c.g, 0.3, mildew * 0.35); c.b = mix(c.b, 0.24, mildew * 0.35);
+      mul(c, 1 - grime * 0.7);
       c.h = paint * 0.2 + gr * 0.08 + (1 - lines) * 0.04 - gap * 0.5 + 0.45;
-      c.rough = mix(0.93, 0.58 + chalk * 0.22, paint); c.ao = 1 - gap * 0.7;
+      c.rough = mix(0.93, 0.58 + chalk * 0.22, paint); c.ao = clamp(1 - gap * 0.9 - rim * 0.15 - (1 - paint) * 0.1);
     }, { normalStrength: 3.6, aniso });
   },
 

@@ -207,9 +207,18 @@ function atlasTexture() {
   return finish(c, { repeat: false, aniso: 8 });
 }
 
+function rubberTexture() {
+  const W = 128, H = 128, r = mulberry(9);
+  const c = canvas(W, H), g = c.getContext('2d');
+  g.fillStyle = '#d8d8d8'; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 2500; i++) { g.fillStyle = r() < 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.10)'; g.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2); }
+  for (let i = 0; i < 18; i++) { g.strokeStyle = 'rgba(255,255,255,0.18)'; g.beginPath(); const x = r() * W, y = r() * H; g.moveTo(x, y); g.lineTo(x + (r() - 0.5) * 30, y + (r() - 0.5) * 30); g.stroke(); }
+  return finish(c);
+}
+
 export function getTextures() {
   if (cache) return cache;
   if (typeof document === 'undefined') return (cache = {});
-  cache = { wood: woodTexture(), rust: rustTexture(), rope: ropeTexture(), atlas: atlasTexture() };
+  cache = { wood: woodTexture(), rust: rustTexture(), rope: ropeTexture(), atlas: atlasTexture(), rubber: rubberTexture() };
   return cache;
 }

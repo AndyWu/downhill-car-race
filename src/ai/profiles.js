@@ -13,6 +13,7 @@ const BASE = {
   steerNoise: 0.01,     // OU noise amplitude added to steer (normalised units)
   steerNoiseTau: 0.6,
   steerTau: 0.08,       // actuator smoothing (s)
+  yawDamp: 0.2,         // rad of steer per rad/s of yaw-rate error (counter-steer)
   look: { min: 6, time: 0.55 }, // pure-pursuit distance = max(min, time*speed)
   // --- perception ---
   perception: { detect: { default: 1 }, minRockRadius: 0 }, // per-hazard probability the driver "sees" it
@@ -38,14 +39,14 @@ const make = (o) => Object.freeze(merge(BASE, o));
 export const Barnaby = make({
   id: 'barnaby', name: 'Barnaby', tier: 1, title: 'Rookie',
   description: 'Oversteers, weaves, misses rocks, forgets to paddle, brakes late.',
-  reactionTime: 0.24, steerGain: 1.45, steerNoise: 0.09, steerNoiseTau: 0.5, steerTau: 0.1,
+  reactionTime: 0.2, steerGain: 1.2, yawDamp: 0.08, steerNoise: 0.06, steerNoiseTau: 0.5, steerTau: 0.1,
   look: { min: 6, time: 0.5 },
   perception: { detect: { rock: 0.5, mud: 1, water: 1, default: 0.5 } },
   hazardWeight: { rock: 20, mud: 10, water: 8, default: 5 }, hazardMargin: 0.8, hazardStretch: 0.9,
   line: { mode: 'center', edge: 0.1, pull: 0.3, maxStep: 3, smooth: 1 },
   speed: { mu: 0.8, cornerFactor: 1.3, brakeDecel: 10, cap: 14 },
-  paddle: { mode: 'forgetful', cadence: 2.0, strength: 0.75, jitter: 0.3,
-    attentive: 0.55, startDist: 90 },
+  paddle: { mode: 'forgetful', cadence: 2.4, strength: 0.9, jitter: 0.3,
+    attentive: 0.8, startDist: 120 },
   brake: { gain: 0.2, dead: 1.0, max: 0.9 },
 });
 
@@ -57,7 +58,7 @@ export const Clementine = make({
   hazardWeight: { rock: 60, mud: 30, water: 25, default: 25 }, hazardMargin: 3.0, hazardStretch: 2.5,
   surfaceWeight: { sand: 4, gravel: 2, grass: 8, mud: 6, water: 5 },
   line: { mode: 'avoid', edge: 0.5, pull: 0.1, maxStep: 1 },
-  speed: { mu: 0.8, cornerFactor: 0.62, brakeDecel: 2.6, cap: 15, useSurface: true },
+  speed: { mu: 0.8, cornerFactor: 0.55, brakeDecel: 2.6, cap: 13.5, useSurface: true },
   paddle: { mode: 'slow', cadence: 1.9, strength: 0.85, jitter: 0.1 },
   brake: { gain: 0.5, dead: 0.2 },
   carAvoid: 1,
@@ -86,7 +87,7 @@ export const Maeve = make({
   hazardWeight: { rock: 50, mud: 18, water: 15, default: 15 }, hazardMargin: 1.5, hazardStretch: 1.5,
   surfaceWeight: { sand: 2.5, gravel: 1.2, grass: 5, mud: 4, water: 3 },
   line: { mode: 'racing', edge: 0.9, pull: 0.02, maxStep: 1, relaxIters: 400, corridorTol: 0.8 },
-  speed: { mu: 0.8, cornerFactor: 0.97, brakeDecel: 3.6, cap: 22, useSurface: true },
+  speed: { mu: 0.8, cornerFactor: 1.0, brakeDecel: 3.8, cap: 24, useSurface: true },
   paddle: { mode: 'rhythm', cadence: 2.6, strength: 0.95, jitter: 0, slopeMax: 0.07, stamina: { drain: 0.01, regen: 0.08, minFactor: 0.8 } },
   brake: { gain: 0.45, dead: 0.3 },
 });

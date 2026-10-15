@@ -1,5 +1,6 @@
 // Shared truck components: wheels, steering wheels, pedals/paddles, levers, headlight rig, flag pole, seats, driver.
 import * as THREE from 'three';
+import { vnoise } from './kit.js';
 
 const TAU = Math.PI * 2;
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -29,6 +30,7 @@ function bolts(c, n, rad, x, col, size = 0.012) {
 export function buildWheelGeometry(kit, o) {
   const { type, R, W } = o;
   const c = kit.piece(false);
+  c.mud = 'radial'; c.mudR = R;
   const tyreCol = o.tyre ?? 0x1e1e1e, rim = o.rim ?? 0x4a78a8, metal = 0xa3a39c;
   if (type === 'mower') {
     const t = Math.min(W * 0.5, R * 0.34);
@@ -103,90 +105,141 @@ export function makeWheelObject(kit, geo, R, side) {
   return g;
 }
 
+// ------------------------------------------------------------------ shared helpers for hand-worn cockpit parts
+const WOOD_BARE = 0xc9b48a, WOOD_DARK = 0x8e7a58;
+const C = (h) => new THREE.Color(h);
+
+function roundedRect(w, h, r) {
+  const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+/** bevelled board: width w (x), length h (y), thickness t (z), centred */
+function board(w, h, t, r = 0.01) {
+  const g = new THREE.ExtrudeGeometry(roundedRect(w, h, r), { depth: t, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2, curveSegments: 4 });
+  g.translate(0, 0, -t / 2);
+  return g;
+}
+// spiral cloth/tape wrap colouring: u,v from the primitive's own UVs
+function tapeFn(a, b, bare, freq = 46, twist = 1.5, wornAmt = 0.16) {
+  const ca = C(a), cb = C(b), cw = C(bare), out = new THREE.Color();
+  return (i, x, y, z, u, v) => {
+    const ph = (u * freq + v * twist) % 1;
+    out.copy(ph < 0.82 ? ca : cb);
+    const n = vnoise(x * 55, y * 55, z * 55);
+    if (n > 1 - wornAmt) out.lerp(cw, 0.8); // frayed / worn through
+    else out.multiplyScalar(0.85 + n * 0.3);
+    return out;
+  };
+}
+
 // ------------------------------------------------------------------ steering wheels (rotate about local Z)
 export function buildSteeringWheelMesh(kit, type, r, col = 0x1c1c1c, col2 = 0x9a9a92) {
-  const c = kit.piece(false);
-  const tube = type === 'bike' ? 0.01 : 0.016;
+  const c = kit.pieceOf('wood');
+  c.tileDefault = 0.3;
+  const wear = (paint, amt = 0.6) => ({ wear: { paint, bare: WOOD_BARE, amt }, tess: 0.03 });
+  const spoke = (a, b, r0, r1, colr) => c.rod(a, b, r0, { r2: r1, seg: 6, c: colr, v: 0.08 });
   if (type === 'car') {
-    c.tor(r, tube + 0.003, [0, 0, 0], { c: col, seg: 24, rseg: 6 });
-    c.cyl(0.03, 0.04, [0, 0, 0.01], { axis: 'z', seg: 10, c: col2 });
-    for (const a of [Math.PI * 0.5 + 0.0, Math.PI * 1.17, Math.PI * -0.17]) {
-      c.bar([0, 0, 0], [Math.cos(a) * r, Math.sin(a) * r, 0], 0.016, 0.012, { c: col2 });
+    // cloth-taped rim, tapered spokes, domed hub
+    c.add(new THREE.TorusGeometry(r, 0.017, 8, 40), { colorFn: tapeFn(col, 0x2a2a28, WOOD_BARE, 42, 2) });
+    for (const a of [Math.PI * 0.5, Math.PI * 1.17, Math.PI * -0.17]) {
+      spoke([Math.cos(a) * 0.03, Math.sin(a) * 0.03, 0.004], [Math.cos(a) * (r - 0.01), Math.sin(a) * (r - 0.01), 0], 0.014, 0.007, col2);
     }
-    c.sph(0.014, [0, 0, 0.03], { c: 0xc7352b, seg: 6 }); // horn button
+    c.lathe([[0.001, 0.0], [0.026, 0.0], [0.034, 0.01], [0.03, 0.022], [0.016, 0.034], [0.001, 0.038]], [0, 0, 0], { r: [PI2, 0, 0], seg: 12, c: col2, v: 0.1 });
+    c.cyl(0.011, 0.012, [0, 0, 0.038], { axis: 'z', seg: 8, c: 0xb8362b }); // worn horn button
+    c.box([0.05, 0.008, 0.006], [r * 0.5, 0.012, 0.03], { c: 0x9a9a98, r: [0, 0, 0.5] }); // repair tape on a spoke
   } else if (type === 'bike') {
-    c.tor(r, 0.009, [0, 0, 0], { c: 0xc8c8c2, seg: 26, rseg: 4 });
-    c.tor(r + 0.012, 0.011, [0, 0, 0], { c: 0x222222, seg: 26, rseg: 4 }); // old tyre left on
-    c.cyl(0.03, 0.05, [0, 0, 0], { axis: 'z', seg: 8, c: col2 });
+    c.add(new THREE.TorusGeometry(r, 0.0095, 6, 40), { c: 0xb9b9b2, v: 0.08 });
+    c.add(new THREE.TorusGeometry(r + 0.013, 0.012, 6, 40, Math.PI * 1.3), { colorFn: tapeFn(0x1e1e1c, 0x3a3a38, WOOD_DARK, 70, 1), r: [0, 0, 0.9] }); // wrapped half rim
+    c.cyl(0.028, 0.045, [0, 0, 0.005], { axis: 'z', seg: 8, c: col2 });
     for (let i = 0; i < 20; i++) {
       const a = (i / 20) * TAU;
       c.rod([Math.cos(a + 0.2) * 0.03, Math.sin(a + 0.2) * 0.03, i % 2 ? 0.012 : -0.012], [Math.cos(a) * r, Math.sin(a) * r, 0], 0.0028, { seg: 3, c: 0xd2d2ce });
     }
-    for (const sx of [-1, 1]) c.cyl(0.018, 0.1, [sx * r, 0, 0.035], { axis: 'z', seg: 7, c: 0xc7352b }); // taped grips
-  } else if (type === 'disc') { // plywood disc with three cut-out holes, dowel handles
+    for (const sx of [-1, 1]) c.add(new THREE.CylinderGeometry(0.019, 0.017, 0.1, 8).rotateX(PI2), { p: [sx * r, 0, 0.04], colorFn: tapeFn(0xb8362b, 0x8a2a22, WOOD_DARK, 2, 9) });
+  } else if (type === 'disc') {
     const sh = new THREE.Shape(); sh.absarc(0, 0, r, 0, TAU, false);
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * TAU + Math.PI / 2, h = new THREE.Path();
       h.absarc(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55, r * 0.3, 0, TAU, true); sh.holes.push(h);
     }
-    c.add(new THREE.ExtrudeGeometry(sh, { depth: 0.02, bevelEnabled: false, curveSegments: 14 }).translate(0, 0, -0.01), { c: col, v: 0.08 });
-    c.tor(r, 0.008, [0, 0, 0.011], { c: 0x8a6a3a, seg: 22, rseg: 4 });
+    c.add(new THREE.ExtrudeGeometry(sh, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.003, bevelSize: 0.004, bevelSegments: 1, curveSegments: 16 }).translate(0, 0, -0.01), { ...wear(col, 0.7) });
+    c.add(new THREE.TorusGeometry(r, 0.008, 5, 36), { p: [0, 0, 0.011], colorFn: tapeFn(0x2a2a28, 0x44443e, WOOD_BARE, 90, 1, 0.3) }); // taped edge
     c.cyl(0.026, 0.04, [0, 0, 0.025], { axis: 'z', seg: 8, c: col2 });
-    for (const sx of [-1, 1]) c.cyl(0.014, 0.09, [sx * r * 0.88, 0, 0.05], { axis: 'z', seg: 7, c: sx > 0 ? 0xd8352a : 0xe8c030 });
+    for (const sx of [-1, 1]) c.add(new THREE.CylinderGeometry(0.015, 0.013, 0.09, 8).rotateX(PI2), { p: [sx * r * 0.88, 0, 0.05], ...wear(sx > 0 ? 0xc8352a : 0xd8b030, 0.65) });
   } else if (type === 'helm') {
-    c.tor(r * 0.75, 0.016, [0, 0, 0], { c: 0x6b4a2a, seg: 24, rseg: 6 });
-    c.cyl(0.032, 0.05, [0, 0, 0], { axis: 'z', seg: 10, c: 0xb08a38 });
+    c.add(new THREE.TorusGeometry(r * 0.75, 0.016, 8, 36), { colorFn: tapeFn(0x6b4a2a, 0x5a3c22, WOOD_BARE, 24, 0.5, 0.25) });
+    c.lathe([[0.001, 0], [0.03, 0], [0.036, 0.015], [0.02, 0.03], [0.001, 0.034]], [0, 0, 0], { r: [PI2, 0, 0], seg: 10, c: 0xb08a38 });
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * TAU;
-      c.bar([0, 0, 0], [Math.cos(a) * r, Math.sin(a) * r, 0], 0.016, 0.016, { c: 0x6b4a2a });
-      c.sph(0.02, [Math.cos(a) * r, Math.sin(a) * r, 0], { c: 0x8a6034, seg: 6 });
+      spoke([0, 0, 0], [Math.cos(a) * r, Math.sin(a) * r, 0], 0.014, 0.01, 0x6b4a2a);
+      c.sph(0.02, [Math.cos(a) * r, Math.sin(a) * r, 0], { ...wear(0x8a6034, 0.5), s: [1, 1, 1.4], seg: 8 });
     }
   } else if (type === 'bars') {
-    c.cyl(0.015, r * 2.1, [0, 0, 0.03], { axis: 'x', seg: 7, c: col2 });
-    c.cyl(0.028, 0.045, [0, 0, 0.01], { axis: 'z', seg: 8, c: col2 });
+    c.add(new THREE.CylinderGeometry(0.015, 0.015, r * 2.1, 8).rotateZ(PI2), { p: [0, 0, 0.03], c: col2 });
+    c.cyl(0.026, 0.045, [0, 0, 0.01], { axis: 'z', seg: 8, c: col2 });
     for (const sx of [-1, 1]) {
-      c.cyl(0.02, r * 0.5, [sx * r * 0.82, 0, 0.03], { axis: 'x', seg: 7, c: col });
-      c.rod([sx * r * 1.0, 0, 0.03], [sx * r * 1.05, 0.07, 0.1], 0.014, { seg: 6, c: col2 });
+      c.add(new THREE.CylinderGeometry(0.021, 0.019, r * 0.5, 8).rotateZ(PI2), { p: [sx * r * 0.82, 0, 0.03], colorFn: tapeFn(col, 0x2a2a28, WOOD_BARE, 2, 14) });
+      spoke([sx * r * 1.0, 0, 0.03], [sx * r * 1.07, 0.07, 0.11], 0.014, 0.011, col2);
     }
   }
-  const m = new THREE.Mesh(c.merged(), kit.mats.paint);
+  const m = new THREE.Mesh(c.merged(), kit.mats.wood);
   m.castShadow = true; m.name = 'steeringWheelMesh';
   return m;
 }
+const PI2 = Math.PI / 2;
 
 // ------------------------------------------------------------------ paddles & levers (pivot at origin, rotate about X)
 export function buildPaddle(kit, col, L = 0.46, lean = 0.22) {
-  const c = kit.piece(false);
-  c.cyl(0.014, 0.1, [0, 0, 0], { axis: 'x', seg: 8, c: 0x888880 });
-  const dir = [0, Math.cos(lean), Math.sin(lean)];
-  c.bar([0, 0, 0], [0, dir[1] * L, dir[2] * L], 0.03, 0.018, { c: 0x9a7a4a, v: 0.1 });
-  // blade
-  const bc = [0, dir[1] * (L - 0.055), dir[2] * (L - 0.055)];
-  c.box([0.1, 0.15, 0.016], bc, { r: [lean, 0, 0], c: col, v: 0.08 });
-  c.box([0.1, 0.018, 0.022], [0, dir[1] * (L - 0.14), dir[2] * (L - 0.14)], { r: [lean, 0, 0], c: 0x1a1a1a }); // rubber tread strip
-  c.tape([0, dir[1] * (L * 0.5), dir[2] * (L * 0.5)], [0.036, 0.05, 0.026], { r: [lean, 0, 0] });
+  const c = kit.pieceOf('wood');
+  c.tileDefault = 0.35;
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(lean, 0, 0));
+  const at = (d) => [0, Math.cos(lean) * d, Math.sin(lean) * d];
+  c.cyl(0.014, 0.1, [0, 0, 0], { axis: 'x', seg: 8, c: 0x8a8a82, v: 0.1 }); // hinge pin
+  // shaft: bevelled weathered board, mostly bare
+  c.add(board(0.034, L, 0.02, 0.006), { q, p: at(L / 2), tess: 0.035, wear: { paint: col, bare: WOOD_BARE, amt: 0.95 } });
+  // painted blade with a contrasting stripe, wear mask on edges + chips
+  c.add(board(0.115, 0.165, 0.016, 0.012), { q, p: at(L - 0.06), tess: 0.022, wear: { paint: col, bare: WOOD_BARE, amt: 0.6 } });
+  const stripe = new THREE.Color(col).offsetHSL(0.5, 0, -0.05);
+  c.add(board(0.11, 0.018, 0.019, 0.003), { q, p: at(L - 0.085), tess: 0.03, wear: { paint: stripe, bare: WOOD_BARE, amt: 0.5 } });
+  c.add(board(0.1, 0.02, 0.022, 0.004), { q, p: at(L - 0.135), c: 0x1c1c1a, v: 0.1 }); // rubber tread strip
+  for (const dy of [0.02, -0.12]) c.sph(0.006, [0.05, Math.cos(lean) * (L - 0.06 + dy), Math.sin(lean) * (L - 0.06 + dy) + 0.01], { seg: 4, c: 0x6a6a64 }); // screw heads
+  // gaffer-tape grip band on the shaft with frayed end
+  c.add(new THREE.BoxGeometry(0.046, 0.1, 0.03), { q, p: at(L * 0.45), colorFn: tapeFn(0x3a3a38, 0x222220, WOOD_DARK, 1, 8, 0.12) });
+  c.add(new THREE.BoxGeometry(0.048, 0.012, 0.032), { q, p: at(L * 0.45 + 0.058), c: 0xa4a39e, v: 0.15 });
+  c.add(new THREE.BoxGeometry(0.014, 0.025, 0.031), { q, p: [0.03, Math.cos(lean) * (L * 0.45 - 0.065), Math.sin(lean) * (L * 0.45 - 0.065)], c: 0x3a3a38 }); // loose tape tail
   const g = new THREE.Group();
-  const m = new THREE.Mesh(c.merged(), kit.mats.paint);
+  const m = new THREE.Mesh(c.merged(), kit.mats.wood);
   m.castShadow = true; g.add(m);
   return g;
 }
 
 export function buildLever(kit, kind, col) {
-  const c = kit.piece(false);
+  const c = kit.pieceOf('wood');
+  c.tileDefault = 0.3;
   const lean = kind === 'hand' ? 0.2 : 0.12, L = kind === 'hand' ? 0.38 : 0.34;
-  const dir = [0, Math.cos(lean), Math.sin(lean)];
-  c.cyl(0.02, 0.07, [0, 0, 0], { axis: 'x', seg: 8, c: 0x777770 });
-  c.rod([0, 0, 0], [0, dir[1] * L, dir[2] * L], kind === 'hand' ? 0.011 : 0.008, { seg: 6, c: 0xb4b4ae });
+  const dir = new THREE.Vector3(0, Math.cos(lean), Math.sin(lean));
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(lean, 0, 0));
+  const at = (d) => [dir.x * d, dir.y * d, dir.z * d];
+  c.cyl(0.02, 0.07, [0, 0, 0], { axis: 'x', seg: 8, c: 0x6e6e68 });
+  c.rod([0, 0, 0], at(L), kind === 'hand' ? 0.011 : 0.008, { seg: 6, c: 0x9a988e, v: 0.1 });
   if (kind === 'hand') {
-    c.cyl(0.013, 0.11, [0, dir[1] * (L - 0.03), dir[2] * (L - 0.03)], { r: [lean, 0, 0], seg: 8, c: 0x141414 }); // grip
-    c.tape([0, dir[1] * (L - 0.09), dir[2] * (L - 0.09)], [0.03, 0.016, 0.03], { r: [lean, 0, 0] });
-    c.sph(0.011, [0, dir[1] * (L + 0.03), dir[2] * (L + 0.03)], { c: 0xd2352a, seg: 6 }); // release button
+    // long worn grip: turned wooden handle with a spiral of black tape and bare patches
+    const prof = [[0.001, -0.07], [0.016, -0.07], [0.019, -0.055], [0.017, -0.03], [0.02, 0.0], [0.017, 0.03], [0.019, 0.055], [0.016, 0.068], [0.001, 0.07]];
+    c.lathe(prof, at(L - 0.02), { q, seg: 10, colorFn: tapeFn(0x181816, 0x2c2c2a, 0x7a5a38, 6, 7, 0.2) });
+    c.add(new THREE.BoxGeometry(0.034, 0.012, 0.034), { q, p: at(L - 0.095), c: 0xa4a39e, v: 0.15 }); // tape ring
+    c.lathe([[0.001, 0], [0.012, 0.0], [0.014, 0.012], [0.01, 0.022], [0.001, 0.026]], at(L + 0.05), { q, seg: 8, wear: { paint: 0xc8352a, bare: WOOD_BARE, amt: 0.7 } }); // release button cap
   } else {
-    c.sph(0.022, [0, dir[1] * L, dir[2] * L], { c: col || 0xe8e0c8, seg: 8 }); // shifter knob
-    c.cyl(0.02, 0.05, [0, dir[1] * 0.06, dir[2] * 0.06], { r: [lean, 0, 0], seg: 8, c: 0x222222, r2: 0.014 }); // boot
+    // gear lever: turned wooden ball knob, painted per truck, rubbed bare where the hand goes
+    const prof = [[0.001, -0.03], [0.012, -0.028], [0.019, -0.012], [0.023, 0.006], [0.02, 0.022], [0.011, 0.032], [0.001, 0.034]];
+    c.lathe(prof, at(L + 0.015), { q, seg: 12, tess: 0.02, wear: { paint: col || 0xe8e0c8, bare: WOOD_BARE, amt: 0.75 } });
+    c.add(new THREE.CylinderGeometry(0.014, 0.022, 0.06, 8), { q, p: at(0.065), colorFn: tapeFn(0x2a2a28, 0x1c1c1a, WOOD_DARK, 3, 5, 0.25) }); // taped boot
   }
   const g = new THREE.Group();
-  const m = new THREE.Mesh(c.merged(), kit.mats.paint);
+  const m = new THREE.Mesh(c.merged(), kit.mats.wood);
   m.castShadow = true; g.add(m);
   return g;
 }

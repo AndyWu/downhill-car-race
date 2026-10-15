@@ -93,7 +93,12 @@ export function assemble(def, materials) {
 
   // headlight + flag pole
   const headlight = addHeadlight(k, L.hl.p, L.hl.style);
-  const flagMount = addFlagPole(k, L.flag.p, L.flag.h ?? 0.5, L.flag.col);
+  // flag pole sits on an outrigger ~0.3 m to one side of the nose so it is not dead centre in the sightline
+  const fs = L.flag.side ?? 1, fy = L.flag.p[1] - 0.02, fz = L.flag.p[2];
+  k.wood.bar([fs * 0.02, fy - 0.03, fz], [fs * 0.3, fy - 0.03, fz], 0.035, 0.03, { c: 0xa68c62 });
+  k.wood.bar([fs * 0.16, fy - 0.16, fz], [fs * 0.3, fy - 0.03, fz], 0.025, 0.025, { c: 0xa68c62 });
+  k.rope.lash([fs * 0.22, fy - 0.03, fz], 'x', 0.025, 0.05, 3);
+  const flagMount = addFlagPole(k, [fs * 0.3, fy, fz], L.flag.h ?? 0.4, L.flag.col);
 
   // ---- meshes
   for (const m of k.staticMeshes()) group.add(m);
@@ -127,10 +132,32 @@ export function assemble(def, materials) {
   driverEye.position.set(0, eyeY, eyeZ);
   group.add(driverEye);
 
+  // ---- mud coat: vertex-colour blend rising from the ground / tyres (setMudCoat 0..1)
+  const mudGeos = new Set();
+  group.traverse((o) => { if (o.isMesh && o.geometry.attributes.mud && o.geometry.attributes.color) mudGeos.add(o.geometry); });
+  const mudBase = new Map();
+  mudGeos.forEach((g) => mudBase.set(g, g.attributes.color.array.slice()));
+  const MUD = new THREE.Color(0x2c1d10);
+  let mudNow = 0;
+  const setMudCoat = (t) => {
+    t = Math.min(1, Math.max(0, t));
+    if (Math.abs(t - mudNow) < 0.01) return;
+    mudNow = t;
+    mudGeos.forEach((g) => {
+      const c0 = mudBase.get(g), col = g.attributes.color, w = g.attributes.mud;
+      for (let i = 0; i < w.count; i++) {
+        const a = Math.min(1, w.getX(i) * t * 1.7) * 0.92;
+        col.array[i * 3] = c0[i * 3] + (MUD.r - c0[i * 3]) * a;
+        col.array[i * 3 + 1] = c0[i * 3 + 1] + (MUD.g - c0[i * 3 + 1]) * a;
+        col.array[i * 3 + 2] = c0[i * 3 + 2] + (MUD.b - c0[i * 3 + 2]) * a;
+      }
+      col.needsUpdate = true;
+    });
+  };
   const parts = { steeringWheel, paddleL, paddleR, handbrakeLever, gearLever, headlight, flagMount, wheels, driverEye, driver };
-  group.userData = { id: def.id, parts, wheelRadii: [L.Rf, L.Rf, L.R, L.R] };
+  group.userData = { id: def.id, parts, setMudCoat, wheelRadii: [L.Rf, L.Rf, L.R, L.R] };
   let calls = 0;
   group.traverse((o) => { if (o.isMesh) calls++; });
   group.userData.drawCalls = calls;
-  return { group, parts };
+  return { group, parts, setMudCoat };
 }

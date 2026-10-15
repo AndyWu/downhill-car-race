@@ -1,10 +1,10 @@
-// 60 Hz star-topology sync over pre-negotiated DataChannels.
+// Star-topology sync over pre-negotiated DataChannels: inputs at 60 Hz, snapshots at 30 Hz.
 //   fast (unordered, maxRetransmits 0): client inputs → host, host snapshots → clients, ping/pong
 //   ctrl (reliable, ordered): JSON lobby/control messages (countdown, truck choices, seed)
 
 import {
   MSG, INPUT_REDUNDANCY, INPUT_STRIDE, packInputPacket, unpackInputPacket,
-  packSnapshot, unpackSnapshot, packPing, packPong, msgType,
+  createSnapshotEncoder, createSnapshotDecoder, packPing, packPong, msgType, SNAP_HEADER, SNAP_STRIDE,
 } from './protocol.js';
 
 const now = () => performance.now();
@@ -20,7 +20,7 @@ function listPeers(peers) {
 /**
  * @param {{role:'host'|'client', peers: Peer[]|Map|()=>Peer[], worldSnapshotSize?: number}} o
  */
-export function createSync({ role, peers, worldSnapshotSize = 0 } = {}) {
+export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30, tickRate = 60, keyframeEvery = 10 } = {}) {
   const isHost = role === 'host';
   const inputCbs = new Set(), snapCbs = new Set(), ctrlCbs = new Set();
   const lastSeq = new Map();      // host: peerId → last delivered input seq
@@ -28,6 +28,11 @@ export function createSync({ role, peers, worldSnapshotSize = 0 } = {}) {
   const history = [];             // client: last input frames, newest first
   const attached = new WeakSet();
   const unsubs = [];
+  const encoder = createSnapshotEncoder({ keyframeEvery });
+  const decoder = createSnapshotDecoder();
+  const sendEvery = Math.max(1, Math.round(tickRate / snapshotHz));
+  let lastSentTick = -Infinity;
+  const pendingEvents = new Map(); // id → event bits from ticks we skipped
   const stats = { sentBytes: 0, recvBytes: 0, inputsRx: 0, snapshotsRx: 0, snapshotsTx: 0, inputsTx: 0 };
 
   // ---- clock sync (client side estimates host clock) ----
@@ -69,11 +74,12 @@ export function createSync({ role, peers, worldSnapshotSize = 0 } = {}) {
       }
       case MSG.SNAPSHOT: {
         if (isHost) return;
-        const s = unpackSnapshot(data);
+        let s;
+        try { s = decoder.decode(data); } catch { return; }
         if (s.tick <= lastTick) return; // stale / reordered
         lastTick = s.tick;
         stats.snapshotsRx++;
-        snapCbs.forEach((cb) => cb(s.data, s.tick, s.hostTimeMs));
+        snapCbs.forEach((cb) => cb(s.data, s.tick));
         break;
       }
       case MSG.PING: {
@@ -126,15 +132,32 @@ export function createSync({ role, peers, worldSnapshotSize = 0 } = {}) {
     },
     /** HOST: cb(peerId, Float32Array frame) once per new seq, in order. */
     onInput(cb) { inputCbs.add(cb); return () => inputCbs.delete(cb); },
-    /** HOST: Float32Array [tick, count, (id,px,py,pz,qx,qy,qz,qw,vx,vy,vz,s,events)×count]. */
+    /**
+     * HOST: call every physics tick with Float32Array
+     *   [tick, count, (id,px,py,pz,qx,qy,qz,qw,vx,vy,vz,s,events,ack)×count]  (SNAP_STRIDE = 14; ack is filled here).
+     * Only every (tickRate/snapshotHz)-th tick is sent (30 Hz by default); event bits from skipped
+     * ticks are OR-ed into the next sent snapshot. Returns bytes sent per peer (0 when skipped).
+     */
     broadcastSnapshot(snap) {
-      const pkt = packSnapshot(snap, now());
-      let n = 0;
-      all().forEach((p) => { if (send(p, pkt)) n++; });
-      if (n) stats.snapshotsTx++;
+      const tick = snap[0];
+      const n = snap[1] | 0;
+      if (tick - lastSentTick < sendEvery) {
+        for (let i = 0; i < n; i++) { const b = SNAP_HEADER + i * SNAP_STRIDE; const ev = snap[b + 12] | 0; if (ev) pendingEvents.set(snap[b], (pendingEvents.get(snap[b]) | 0) | ev); }
+        return 0;
+      }
+      lastSentTick = tick;
+      if (pendingEvents.size) {
+        snap = snap.slice();
+        for (let i = 0; i < n; i++) { const b = SNAP_HEADER + i * SNAP_STRIDE; snap[b + 12] = (snap[b + 12] | 0) | (pendingEvents.get(snap[b]) | 0); }
+        pendingEvents.clear();
+      }
+      const pkt = encoder.encode(snap, lastSeq);
+      let sent = 0;
+      all().forEach((p) => { if (send(p, pkt)) sent++; });
+      if (sent) { stats.snapshotsTx++; stats.snapshotBytes = pkt.byteLength; }
       return pkt.byteLength;
     },
-    /** CLIENT: cb(Float32Array snapshot, tick, hostTimeMs). Feed it into createInterpolator().push(). */
+    /** CLIENT: cb(Float32Array snapshot, tick). Feed it into createInterpolator().push() and createPredictor().onSnapshot(). */
     onSnapshot(cb) { snapCbs.add(cb); return () => snapCbs.delete(cb); },
     /** Reliable control message. Host: to all (or one peerId). Client: to host. */
     sendControl(msg, peerId) {

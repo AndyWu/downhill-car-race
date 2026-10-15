@@ -5,3 +5,5 @@ export { createMaterials } from './materials.js';
 export { setupLighting } from './lighting.js';
 export { attachHeadlight } from './headlight.js';
 export { createPostFX } from './postfx.js';
+export { applyMudCoat } from './mudcoat.js';
+export { getTier, setTier } from './quality.js';

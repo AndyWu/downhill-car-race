@@ -3,13 +3,19 @@ import * as THREE from 'three';
 import { RECIPES, bakeFoliage } from './textures.js';
 import { applyWorldUV } from './worldUV.js';
 import { G, injectGlobals, installFog, tickTime } from './shared.js';
+import { getTier, setTier } from './quality.js';
+import { applyWetMud } from './wetmud.js';
+import { applyMacro } from './macro.js';
+import { applyMudCoat } from './mudcoat.js';
 
 export function createMaterials(renderer, opts = {}) {
   installFog();
+  if (opts.quality) setTier(opts.quality);
+  const tier = getTier();
   const maxA = renderer?.capabilities?.getMaxAnisotropy?.() ?? 4;
   const aniso = Math.min(opts.anisotropy ?? 8, maxA);
-  const big = opts.quality === 'low' ? 256 : (opts.bigTextureSize ?? (opts.quality === 'high' ? 512 : 384));
-  const small = opts.quality === 'low' ? 256 : (opts.textureSize ?? 256);
+  const big = opts.bigTextureSize ?? tier.tex;
+  const small = opts.textureSize ?? Math.min(256, tier.tex);
   const T = {};
   const M = {};
 
@@ -25,6 +31,10 @@ export function createMaterials(renderer, opts = {}) {
 
   T.mud = RECIPES.mud(big, aniso);
   M.mud = pbr(T.mud, { name: 'mud', normalScale: new THREE.Vector2(1.4, 1.4) });
+  // wet mud: `mats.mud.userData.wet.value` (0..1, default .85) is a global wetness uniform shared by all clones.
+  // UV expectation for parallax depth: 1 UV unit = 2.4 m (userData.parallax.uvMetres), 5 cm deep.
+  applyWetMud(M.mud, { steps: tier.parallax, uvMetres: 2.4, depth: 0.05 });
+  M.setWetness = (v) => { M.mud.userData.wet.value = v; };
 
   T.rock = RECIPES.rock(small, aniso);
   M.rock = pbr(T.rock, { name: 'rock', normalScale: new THREE.Vector2(1.5, 1.5) });
@@ -47,11 +57,21 @@ export function createMaterials(renderer, opts = {}) {
   T.rope = RECIPES.rope(small, aniso);
   M.rope = pbr(T.rope, { name: 'rope' });
 
+  T.gravel = RECIPES.gravel(small, aniso);
+  M.gravel = pbr(T.gravel, { name: 'gravel', normalScale: new THREE.Vector2(1.3, 1.3) });
+
   T.hay = RECIPES.hay(small, aniso);
   M.hay = pbr(T.hay, { name: 'hay' });
 
   T.rubber = RECIPES.rubber(small, aniso);
   M.rubber = pbr(T.rubber, { name: 'rubber' });
+
+  // anti-tiling macro variation on ground-type materials (UV-space, no world coords needed)
+  applyMacro(M.dirtRoad, { scale: 0.07, strength: 0.5, tint: 0.55 });
+  applyMacro(M.grass, { scale: 0.08, strength: 0.5, tint: 0.5 });
+  applyMacro(M.sand, { scale: 0.08, strength: 0.4, tint: 0.4 });
+  applyMacro(M.gravel, { scale: 0.09, strength: 0.4, tint: 0.4 });
+  applyMacro(M.rock, { scale: 0.1, strength: 0.35, tint: 0.3 });
 
   // ---- paintChipped: map.a = paint coverage. material.color tints the painted area only; chips show raw primer/rust.
   T.paintChipped = RECIPES.paintChipped(small, aniso);
@@ -75,14 +95,22 @@ export function createMaterials(renderer, opts = {}) {
   // UVs expected in metres (1 UV unit = 1 ripple tile).
   T.water = RECIPES.waterNormal(256, aniso);
   M.water = timed(new THREE.MeshStandardMaterial({
-    name: 'water', color: new THREE.Color(0x1e180e), roughness: 0.05, metalness: 0.0,
+    name: 'water', color: new THREE.Color(0x232619), roughness: 0.04, metalness: 0.0,
     normalMap: T.water.normalMap, normalScale: new THREE.Vector2(0.22, 0.22),
-    transparent: true, opacity: 0.96, depthWrite: false, envMapIntensity: 0.5,
+    transparent: true, opacity: 0.97, depthWrite: false, envMapIntensity: 0.9,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, // decal-like: sits on terrain without z-fighting
   }));
   M.water.onBeforeCompile = (shader) => {
     injectGlobals(shader);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nuniform float gfxTime; uniform sampler2D gfxReflTex; uniform mat4 gfxReflVP; uniform float gfxReflOn;').replace('#include <lights_fragment_end>', /* glsl */`#include <lights_fragment_end>
+    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nuniform float gfxTime; uniform sampler2D gfxReflTex; uniform mat4 gfxReflVP; uniform float gfxReflOn;').replace('#include <color_fragment>', /* glsl */`#include <color_fragment>
+	#ifdef USE_COLOR_ALPHA
+	{
+		float gRim = vColor.a;
+		float gBody = smoothstep( 0.3, 0.85, gRim );
+		diffuseColor.rgb = mix( vec3( 0.014, 0.011, 0.007 ), diffuseColor.rgb, gBody );
+		diffuseColor.a = opacity * mix( smoothstep( 0.02, 0.3, gRim ), 1.0, gBody );
+	}
+	#endif`).replace('#include <lights_fragment_end>', /* glsl */`#include <lights_fragment_end>
 	if ( gfxReflOn > 0.5 ) {
 		vec3 gwp = cameraPosition + transpose( mat3( viewMatrix ) ) * ( - vViewPosition );
 		vec4 grc = gfxReflVP * vec4( gwp, 1.0 );
@@ -204,6 +232,9 @@ export function createMaterials(renderer, opts = {}) {
   M.applyWorldUV = applyWorldUV;
   M.textures = T;
   M.uniforms = G;
+  M.applyMudCoat = applyMudCoat;
+  M.applyWetMud = applyWetMud;
+  M.applyMacro = applyMacro;
   M.setWind = (v) => { wind.value = v; };
   M.dispose = () => {
     for (const k in M) if (M[k]?.isMaterial) M[k].dispose();

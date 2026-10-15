@@ -31,7 +31,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
   let side = rng() < 0.5, nextStroke = 0.2, stamina = 1;
   let attentive = false, nextToggle = 0;
   // stuck recovery
-  let stuckT = 0, reverseUntil = 0;
+  let stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0;
 
   function think(dt, self, others = []) {
     t += dt;
@@ -78,7 +78,10 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
     const dist = Math.max(1, Math.hypot(dx, dz));
     const err = Math.atan2(yl, Math.max(xl, 0.01));
     const curv = (2 * Math.sin(clamp(err, -1.5, 1.5))) / dist;
-    const delta = Math.atan(WB * curv);
+    // yaw-rate damping (Y-up: +yaw = turning left, so a right-hand path wants negative yaw)
+    const yaw = self.angularVelocity ? self.angularVelocity.y : 0;
+    const yawDes = -speed * curv;
+    const delta = Math.atan(WB * curv) + P.yawDamp * clamp(yaw - yawDes, -1.5, 1.5);
     noise += (-noise / P.steerNoiseTau) * dt + P.steerNoise * Math.sqrt((2 * dt) / P.steerNoiseTau) * normal(rng);
     const lockScale = 0.35 + 0.65 / (1 + 0.7 * (speed / 16) ** 2); // physics reduces effective lock with speed
     const rawSteer = clamp((P.steerGain * delta) / (LOCK * lockScale) + noise, -1, 1);
@@ -123,6 +126,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
         break;
       }
     }
+    const offRoad = Math.abs(self.lateral) > plan.widthAt(s) / 2 + 0.3;
+    if (offRoad) want = 1; // always dig in when on the verge
     if (hbOut > 0.05) want = 0;
     const fat = PD.stamina.minFactor + (1 - PD.stamina.minFactor) * stamina;
     // physics gives dv ~ 1/(1+(v/5.5)^2) per stroke, so the pro bursts hardest when slowest
@@ -140,12 +145,21 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
       stamina = Math.min(1, stamina + PD.stamina.regen * dt);
     }
 
-    // ---- stuck recovery ----
+    // ---- stuck recovery: speed < 1.5 for 2 s beyond s>20 -> reverse 0.8 s with opposite steer, then kick forward ----
     let reverse = false;
-    if (t > 4 && speed < 0.4 && t > reverseUntil) stuckT += dt; else if (speed >= 0.4) stuckT = 0;
-    if (stuckT > 2.5) { reverseUntil = t + 1.2; stuckT = 0; }
+    if (s > 20 && t > 3 && speed < 1.5 && t > kickUntil) stuckT += dt; else if (speed >= 1.5 || t <= kickUntil) stuckT = 0;
+    if (stuckT > 2) { reverseUntil = t + 0.8; kickUntil = t + 0.8 + 2.0; stuckT = 0; recoveries++; revSteer = rawSteer >= 0 ? -1 : 1; }
     let steer = steerOut;
-    if (t < reverseUntil) { reverse = true; steer = -steerOut; }
+    let rpv = pv, rhb = hbOut;
+    if (t < reverseUntil) { // reversing is done with paddle strokes in the physics
+      reverse = true; steer = revSteer * Math.min(1, Math.abs(rawSteer) + 0.5) * -1; rhb = 0;
+      rpv = 0;
+      if (t >= revNext) { revNext = t + 0.2; side = !side; rpv = 1; }
+    } else if (t < kickUntil) { // forward kick to get going again
+      rhb = 0; rpv = 0;
+      if (t >= revNext) { revNext = t + 0.22; side = !side; rpv = 1; }
+    }
+    pv = rpv;
 
     let hl = false;
     if (typeof headlight === 'function') hl = !!headlight();
@@ -156,10 +170,10 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 0, head
       steer: clamp(steer * STEER_SIGN, -1, 1),
       paddleL: side ? 0 : pv,
       paddleR: side ? pv : 0,
-      handbrake: clamp(hbOut, 0, 1),
+      handbrake: clamp(rhb, 0, 1),
       headlight: hl,
       reverse,
     };
   }
-  return { think, profile: P, plan };
+  return { think, profile: P, plan, get recoveries() { return recoveries; } };
 }

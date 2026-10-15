@@ -69,6 +69,9 @@ export function installFog() {
 	gl_FragColor.rgb = mix( gl_FragColor.rgb, gfxFc, fogFactor );
 #endif`;
 
+  // clamp near-field spot/point attenuation (headlight hot-spot would otherwise explode within ~2 m of the lamp)
+  C.lights_pars_begin = C.lights_pars_begin.replace('max( pow( lightDistance, decayExponent ), 0.01 )', 'max( pow( lightDistance, decayExponent ), 8.0 )');
+
   // every material (unless it overrides onBeforeCompile and calls injectGlobals) gets the globals
   THREE.Material.prototype.onBeforeCompile = function (shader) { injectGlobals(shader); };
 }

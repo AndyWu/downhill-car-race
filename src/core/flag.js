@@ -3,19 +3,19 @@
 import * as THREE from 'three';
 
 const NX = 16, NY = 10;
-const L = 0.5, Hh = 0.2, POLE = 0.4;
+const L = 0.38, Hh = 0.158, POLE = 0;   // ~60% of the old cloth area; the truck's own pole ends at the mount
 
-function makeTexture() {
+function makeTexture(num = 7, col = '#b8553f') {
   const c = document.createElement('canvas'); c.width = 256; c.height = 128;
   const g = c.getContext('2d');
   const n = 4, cw = 256 / 8, ch = 128 / n;
   for (let y = 0; y < n; y++) for (let x = 0; x < 8; x++) {
-    g.fillStyle = (x + y) % 2 ? '#b8553f' : '#e6d9b5';
+    g.fillStyle = (x + y) % 2 ? col : '#e6d9b5';
     g.fillRect(x * cw, y * ch, cw, ch);
   }
   g.fillStyle = 'rgba(40,30,20,0.0)';
   g.font = 'bold 84px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillStyle = 'rgba(30,40,70,0.82)'; g.fillText('7', 128, 70);
+  g.fillStyle = 'rgba(30,40,70,0.82)'; g.fillText(String(num), 128, 70);
   // fade / wear
   const img = g.getImageData(0, 0, 256, 128);
   for (let i = 0; i < img.data.length; i += 4) {
@@ -28,15 +28,15 @@ function makeTexture() {
   return t;
 }
 
-export function createFlag({ material } = {}) {
+const COLORS = ['#b8553f', '#3f6aa0', '#5a8a3a', '#c9a02e', '#7a4a8a', '#d9781f', '#2f8a8a', '#a8344f', '#556070', '#8a6a3a'];
+export function createFlag({ material, number, color, index = 0, pole = false } = {}) {
   const group = new THREE.Group(); group.name = 'speedFlag';
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.011, POLE, 8), new THREE.MeshStandardMaterial({ color: 0x6b5a45, roughness: 0.8 }));
-  pole.position.y = POLE / 2; group.add(pole);
+  if (pole) { const pm = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.011, 0.4, 8), new THREE.MeshStandardMaterial({ color: 0x6b5a45, roughness: 0.8 })); pm.position.y = 0.2; group.add(pm); group.userData.poleHeight = 0.4; }
   const geo = new THREE.PlaneGeometry(1, 1, NX, NY);
   const uv = geo.attributes.uv; const pos = geo.attributes.position;
   const base = new Float32Array(pos.count * 2); // u (0 at pole..1 tip), v (0 top..1 bottom)
   for (let i = 0; i < pos.count; i++) { base[i * 2] = uv.getX(i); base[i * 2 + 1] = 1 - uv.getY(i); }
-  const mat = material || new THREE.MeshStandardMaterial({ map: makeTexture(), side: THREE.DoubleSide, roughness: 0.95, metalness: 0 });
+  const mat = material || new THREE.MeshStandardMaterial({ map: makeTexture(number ?? index + 1, color || COLORS[index % COLORS.length]), color: 0xd8d8d8, emissive: 0x000000, emissiveIntensity: 0, side: THREE.DoubleSide, roughness: 0.95, metalness: 0 });
   const cloth = new THREE.Mesh(geo, mat); cloth.frustumCulled = false;
   group.add(cloth);
   group.rotation.y = 0.85; // sweep the tail sideways so a cockpit viewer sees the cloth, not just its edge

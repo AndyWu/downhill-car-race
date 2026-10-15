@@ -5,6 +5,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { TRUCKS, buildTruck } from '/src/vehicles/index.js';
+import { createMaterials } from '/src/graphics/index.js';
 
 const q = new URLSearchParams(location.search);
 const W = +(q.get('w') || 1280), H = +(q.get('h') || 720);
@@ -39,12 +40,13 @@ for (let i = 0; i < 60; i++) {
   s.position.set((Math.random() - 0.5) * 20, 0.02, -2 - Math.random() * 16); scene.add(s);
 }
 
+const materials = q.get('lib') === '0' ? undefined : createMaterials(renderer, { quality: 'low' });
 const cam = new THREE.PerspectiveCamera(50, W / H, 0.05, 100);
 let current = null;
 function show(i, view) {
   if (current) scene.remove(current.group);
   const spec = TRUCKS[i];
-  current = buildTruck(spec);
+  current = buildTruck(spec, { materials });
   const { group, parts } = current;
   group.position.y = spec.wheelRadius; // wheels rest on the ground
   scene.add(group);
@@ -58,7 +60,11 @@ function show(i, view) {
     parts.handbrakeLever.rotation.x = -0.5; parts.gearLever.rotation.x = -0.5;
     parts.headlight.userData.setOn(true);
   }
-  if (view === 'fp') {
+  if (view === 'mud') current.setMudCoat(1);
+  if (view === 'chase') {
+    cam.fov = 40; cam.aspect = W / H; cam.updateProjectionMatrix();
+    cam.position.set(0, 1.9, 25); cam.lookAt(0, 0.4, 0);
+  } else if (view === 'fp') {
     cam.fov = +(q.get('fov') || 65); cam.aspect = W / H; cam.updateProjectionMatrix();
     const p = new THREE.Vector3(); parts.driverEye.getWorldPosition(p);
     cam.position.copy(p); cam.lookAt(p.x, p.y - 0.05, p.z - 5);

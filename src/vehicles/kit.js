@@ -2,6 +2,7 @@
 // decal cells) into a handful of merged meshes per truck.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { TessellateModifier } from 'three/addons/modifiers/TessellateModifier.js';
 import { getTextures, CELL } from './textures.js';
 
 export function rng(seed) {
@@ -36,6 +37,7 @@ export function getMaterials(provided) {
       metal: new THREE.MeshStandardMaterial({ name: 'truckMetal', map: t.rust || null, vertexColors: true, roughness: 0.72, metalness: 0.3 }),
       paint: new THREE.MeshStandardMaterial({ name: 'truckPaint', map: t.atlas || null, vertexColors: true, roughness: 0.78, metalness: 0.05, alphaTest: 0.45, side: THREE.DoubleSide }),
       rope: new THREE.MeshStandardMaterial({ name: 'truckRope', map: t.rope || null, vertexColors: true, roughness: 1, metalness: 0 }),
+      rubber: new THREE.MeshStandardMaterial({ name: 'truckRubber', map: t.rubber || null, vertexColors: true, roughness: 0.92, metalness: 0 }),
       lens: new THREE.MeshStandardMaterial({ name: 'truckLens', color: 0xf3ecc8, emissive: 0xffe9a0, emissiveIntensity: 0.15, roughness: 0.2, metalness: 0, side: THREE.DoubleSide }),
     };
   }
@@ -44,6 +46,7 @@ export function getMaterials(provided) {
     m.wood = vcClone(provided.woodWeathered) || m.wood;
     m.metal = vcClone(provided.metalRusted) || m.metal;
     m.rope = vcClone(provided.rope) || m.rope;
+    m.rubber = vcClone(provided.rubber) || m.rubber;
   }
   return m;
 }
@@ -90,19 +93,66 @@ function plainUV(g, off) {
   }
 }
 
+
+function hash3(x, y, z) {
+  let h = Math.imul(Math.floor(x) * 374761393 + Math.floor(y) * 668265263 + Math.floor(z) * 2147483647, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1103515245);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+/** smooth value noise in [0,1] */
+export function vnoise(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const fx = x - xi, fy = y - yi, fz = z - zi;
+  const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = fz * fz * (3 - 2 * fz);
+  const l = (a, b, t) => a + (b - a) * t;
+  return l(
+    l(l(hash3(xi, yi, zi), hash3(xi + 1, yi, zi), u), l(hash3(xi, yi + 1, zi), hash3(xi + 1, yi + 1, zi), u), v),
+    l(l(hash3(xi, yi, zi + 1), hash3(xi + 1, yi, zi + 1), u), l(hash3(xi, yi + 1, zi + 1), hash3(xi + 1, yi + 1, zi + 1), u), v), w);
+}
+
+/** cylindrical UV projection around a local axis (seam-safe per triangle). u runs around, v along the axis. */
+function cylUV(g, axis, tile, off, swap) {
+  const p = g.attributes.position, uv = g.attributes.uv;
+  g.computeBoundingBox();
+  const bb = g.boundingBox, ext = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
+  const ia = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
+  const rad = Math.max(0.02, 0.5 * Math.max(...ext.filter((_, i) => i !== ia)));
+  const k = (rad / tile);
+  const a = new Float32Array(p.count), v = new Float32Array(p.count);
+  for (let i = 0; i < p.count; i++) {
+    const c = [p.getX(i), p.getY(i), p.getZ(i)];
+    const o = [0, 1, 2].filter((q) => q !== ia);
+    a[i] = Math.atan2(c[o[0]], c[o[1]]);
+    v[i] = c[ia] / tile;
+  }
+  for (let t = 0; t < p.count; t += 3) {
+    for (let j = 1; j < 3; j++) {
+      while (a[t + j] - a[t] > Math.PI) a[t + j] -= Math.PI * 2;
+      while (a[t + j] - a[t] < -Math.PI) a[t + j] += Math.PI * 2;
+    }
+  }
+  for (let i = 0; i < p.count; i++) {
+    const u = a[i] * k + off[0], vv = v[i] + off[1];
+    if (swap) uv.setXY(i, vv, u); else uv.setXY(i, u, vv);
+  }
+}
+
 export class Collector {
   constructor(kind, kit, grime = true) {
     this.kind = kind; this.kit = kit; this.grime = grime; this.list = [];
+    this.mud = grime ? 'height' : 'none'; this.mudR = 0.25; this.tileDefault = 0;
   }
 
   /** Bake a geometry. o: p[x,y,z], r[x,y,z] euler, q quaternion, s scale (num|array), c colour, v variation,
    *  grime 0..1, cell (decal cell index), tile (uv metres per texture repeat) */
   add(geo, o = {}) {
     const rand = this.kit.rand;
-    const g = geo.index ? geo.toNonIndexed() : geo.clone();
+    let g = geo.index ? geo.toNonIndexed() : geo.clone();
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
     if (!g.attributes.normal) g.computeVertexNormals();
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    if (o.tess) g = new TessellateModifier(o.tess, 6).modify(g);
+    const uv0 = g.attributes.uv.array.slice();
     if (o.s !== undefined) {
       const s = typeof o.s === 'number' ? [o.s, o.s, o.s] : o.s;
       g.applyMatrix4(_m4.makeScale(s[0], s[1], s[2]));
@@ -111,8 +161,11 @@ export class Collector {
       const [u0, v0, sz] = cellRect(o.cell);
       const uv = g.attributes.uv;
       for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * sz, v0 + uv.getY(i) * sz);
-    } else if (this.kind === 'wood') planarUV(g, o.tile || 0.7, [rand() * 4, rand() * 4]);
+    } else if (o.uvAxis && (this.kind === 'wood' || this.kind === 'metal' || this.kind === 'rubber')) {
+      cylUV(g, o.uvAxis, o.tile || this.tileDefault || (this.kind === 'metal' ? 0.9 : 0.7), [rand() * 4, rand() * 4], this.kind === 'wood');
+    } else if (this.kind === 'wood') planarUV(g, o.tile || this.tileDefault || 0.7, [rand() * 4, rand() * 4]);
     else if (this.kind === 'metal') planarUV(g, o.tile || 0.9, [rand() * 4, rand() * 4]);
+    else if (this.kind === 'rubber') planarUV(g, o.tile || 0.3, [rand() * 4, rand() * 4]);
     else if (this.kind === 'paint') plainUV(g, [rand(), rand()]);
     // transform
     if (o.q) _q.copy(o.q); else { const r = o.r || [0, 0, 0]; _q.setFromEuler(_e.set(r[0], r[1], r[2], 'XYZ')); }
@@ -128,16 +181,41 @@ export class Collector {
     const col = new Float32Array(pos.count * 3);
     const gs = this.grime ? (o.grime === undefined ? 1 : o.grime) : 0;
     const tmp = new THREE.Color();
+    const nrm = g.attributes.normal;
+    const wear = o.wear ? { paint: new THREE.Color(o.wear.paint), bare: new THREE.Color(o.wear.bare), amt: o.wear.amt ?? 0.5 } : null;
+    const mud = new Float32Array(pos.count);
+    const seedOff = rand() * 50;
     for (let i = 0; i < pos.count; i++) {
-      const y = pos.getY(i);
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
       let t = Math.min(1, Math.max(0, (y - this.kit.groundY) / 0.45));
       t = t * t * (3 - 2 * t);
-      tmp.copy(base);
-      const n = 1 + (rand() - 0.5) * 0.08;
-      tmp.multiplyScalar(n * (1 - gs * 0.28 * (1 - t)));
+      if (wear) {
+        // wear mask: bevel/edge (normal off the dominant axis) + noise chips + lower-edge rub
+        const ax = Math.abs(nrm.getX(i)), ay = Math.abs(nrm.getY(i)), az = Math.abs(nrm.getZ(i));
+        const edge = 1 - Math.max(ax, ay, az);
+        const n = vnoise(x * 38 + seedOff, y * 38, z * 38) * 0.6 + vnoise(x * 9 + seedOff, y * 9, z * 9) * 0.4;
+        const m = Math.min(1, Math.max(0, edge * 2.6 + (n - 0.5) * 1.8 * wear.amt + (wear.amt - 0.35)));
+        const ms = m * m * (3 - 2 * m);
+        tmp.copy(wear.paint).lerp(wear.bare, ms);
+        tmp.multiplyScalar(1 + (rand() - 0.5) * 0.08);
+      } else {
+        tmp.copy(base);
+        tmp.multiplyScalar(1 + (rand() - 0.5) * 0.08);
+      }
+      if (o.colorFn) { const cc = o.colorFn(i, x, y, z, uv0[i * 2], uv0[i * 2 + 1]); if (cc) tmp.copy(cc); }
+      tmp.multiplyScalar(1 - gs * 0.28 * (1 - t));
       if (gs) tmp.lerp(DIRT, gs * (1 - t) * 0.45);
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+      // mud mask for setMudCoat(): rises from the ground, or from the tyre tread on wheels
+      let w = 0;
+      if (this.mud === 'height') w = (1 - t) * (0.55 + 0.45 * vnoise(x * 14, y * 14, z * 14));
+      else if (this.mud === 'radial') {
+        const r = Math.hypot(y, z) / (this.mudR || 0.25);
+        w = Math.min(1, Math.max(0, (r - 0.45) * 2)) * (0.45 + 0.55 * vnoise(x * 20, y * 20, z * 20));
+      }
+      mud[i] = w;
     }
+    g.setAttribute('mud', new THREE.BufferAttribute(mud, 1));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     if (!Number.isFinite(pos.getX(0) + pos.getY(0) + pos.getZ(0) + pos.getX(pos.count - 1))) {
       console.warn('[vehicles] dropped NaN geometry', geo.type, this.kind, new Error().stack.split('\n')[3]);
@@ -153,7 +231,7 @@ export class Collector {
   cyl(r, h, p, o = {}) {
     const g = new THREE.CylinderGeometry(r, o.r2 === undefined ? r : o.r2, h, o.seg || 10, 1, !!o.open);
     if (o.axis === 'x') g.rotateZ(Math.PI / 2); else if (o.axis === 'z') g.rotateX(Math.PI / 2);
-    return this.add(g, { ...o, p });
+    return this.add(g, { uvAxis: o.axis === 'x' ? 'x' : o.axis === 'z' ? 'z' : 'y', ...o, p });
   }
 
   sph(r, p, o = {}) { return this.add(new THREE.SphereGeometry(r, o.seg || 8, o.seg ? Math.ceil(o.seg / 2) : 6), { ...o, p }); }
@@ -173,7 +251,7 @@ export class Collector {
     const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A), len = d.length();
     const q = new THREE.Quaternion().setFromUnitVectors(Y, d.clone().normalize());
     const m = A.clone().add(B).multiplyScalar(0.5);
-    return this.add(new THREE.CylinderGeometry(r, r, len, o.seg || 6, 1), { ...o, p: [m.x, m.y, m.z], q });
+    return this.add(new THREE.CylinderGeometry(r, o.r2 ?? r, len, o.seg || 6, 1), { uvAxis: 'y', ...o, p: [m.x, m.y, m.z], q });
   }
 
   tube(points, r, o = {}) {
@@ -191,7 +269,7 @@ export class Collector {
   }
 
   lathe(pts, p, o = {}) {
-    return this.add(new THREE.LatheGeometry(pts.map((q) => new THREE.Vector2(q[0], q[1])), o.seg || 20), { ...o, p });
+    return this.add(new THREE.LatheGeometry(pts.map((q) => new THREE.Vector2(q[0], q[1])), o.seg || 20), { uvAxis: 'y', ...o, p });
   }
 
   /** corrugated sheet: width w across X, length d along Z, ridges run along Z */
@@ -258,6 +336,9 @@ export class Kit {
     this.rope = new Collector('rope', this);
   }
 
+  /** un-grimed collector of any kind for moving parts */
+  pieceOf(kind, mud = 'none') { const c = new Collector(kind, this, false); c.mud = mud; return c; }
+
   /** run fn with every baked primitive transformed by (pos, euler rot) — for tilted sub-assemblies */
   withXf(pos, rot, fn) {
     const prev = this.xf;
@@ -268,7 +349,7 @@ export class Kit {
   }
 
   /** new un-grimed paint collector for moving parts / wheels */
-  piece(grime = false) { return new Collector('paint', this, grime); }
+  piece(grime = false) { const c = new Collector('paint', this, grime); c.mud = 'none'; return c; }
 
   meshOf(collector, material, name) {
     const g = collector.merged();

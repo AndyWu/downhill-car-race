@@ -2,6 +2,7 @@
 // refractive lens splatter, radial speed blur, bloom add, ACES, grading, vignette, grain, sRGB.
 import * as THREE from 'three';
 import { tickTime, G } from './shared.js';
+import { getTier } from './quality.js';
 
 const MAXD = 32;
 const VS = /* glsl */`varying vec2 vUv; void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4( position.xy, 0.0, 1.0 ); }`;
@@ -11,7 +12,7 @@ precision highp float; varying vec2 vUv; uniform sampler2D tSrc; uniform vec2 uT
 void main() {
 	vec3 c = texture2D( tSrc, vUv + uTexel * vec2( -1.0, -1.0 ) ).rgb + texture2D( tSrc, vUv + uTexel * vec2( 1.0, -1.0 ) ).rgb
 		+ texture2D( tSrc, vUv + uTexel * vec2( -1.0, 1.0 ) ).rgb + texture2D( tSrc, vUv + uTexel * vec2( 1.0, 1.0 ) ).rgb;
-	c = min( c * 0.25, vec3( 24.0 ) );
+	c = min( c * 0.25, vec3( 10.0 ) );
 	float br = max( c.r, max( c.g, c.b ) );
 	float knee = uThreshold * 0.5;
 	float soft = clamp( br - uThreshold + knee, 0.0, 2.0 * knee ); soft = soft * soft / ( 4.0 * knee + 1e-4 );
@@ -63,12 +64,16 @@ void main() {
 			float dist = length( d );
 			float m = ( 1.0 - smoothstep( r * 0.9, r, dist ) ) * A.w;
 			if ( m > 0.001 ) {
+				#ifdef REFRACT
 				duv -= duvRaw * 2.6 * m;
+				#endif
 				vec2 q = d / r;
 				rim += m * smoothstep( 0.65, 1.0, dist / r ) * 0.55;
 				spec += m * ( smoothstep( 0.4, 0.0, length( q - vec2( -0.35, 0.4 ) ) ) * 1.2 + smoothstep( 0.35, 0.0, length( q - vec2( 0.3, -0.5 ) ) ) * 0.25 );
 			}
+			#ifdef REFRACT
 			duv -= vec2( d.x / uAspect, 0.0 ) * 0.5 * trailM; // trail: mild streak refraction
+			#endif
 			rim += trailM * 0.12; spec += trailM * 0.05;
 		} else {
 			float ang = atan( d.y, d.x );
@@ -121,8 +126,9 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
   const ext = renderer.extensions;
   const hdr = ext.has('EXT_color_buffer_float') || ext.has('EXT_color_buffer_half_float');
   const type = hdr ? THREE.HalfFloatType : THREE.UnsignedByteType;
-  const samples = opts.msaa ?? 4;
-  const P = { bloom: opts.bloom ?? 0.55, bloomThreshold: opts.bloomThreshold ?? 1.0, vignette: opts.vignette ?? 0.55, grain: opts.grain ?? 0.04, grade: opts.grade ?? 1, motion: opts.motionBlur ?? 1 };
+  const tier = getTier();
+  const samples = opts.msaa ?? tier.msaa;
+  const P = { bloom: opts.bloom ?? (tier.bloom ? 0.5 : 0), bloomThreshold: opts.bloomThreshold ?? 1.4, vignette: opts.vignette ?? 0.55, grain: opts.grain ?? 0.04, grade: opts.grade ?? tier.grade, motion: opts.motionBlur ?? (tier.motionBlur ? 1 : 0) };
   const mk = (w, h, s = 0, depth = false) => new THREE.WebGLRenderTarget(w, h, { type, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: depth, samples: s, generateMipmaps: false });
   let rtScene = null, rtBright, rtA1, rtB1, rtA2, rtB2;
   const size = new THREE.Vector2();
@@ -142,6 +148,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     uVig: { value: 0.5 }, uGrain: { value: 0.04 }, uExposure: { value: 1 }, uAspect: { value: 1 }, uGrade: { value: 1 },
     uDropN: { value: 0 }, uDA: { value: dA }, uDB: { value: dB },
   });
+  if (tier.refraction) finalM.defines.REFRACT = 1;
 
   function allocate() {
     renderer.getDrawingBufferSize(size);
@@ -149,9 +156,11 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     const W = Math.max(8, Math.round(size.x * s)), H = Math.max(8, Math.round(size.y * s));
     for (const t of [rtScene, rtBright, rtA1, rtB1, rtA2, rtB2]) t?.dispose();
     rtScene = mk(W, H, samples, true);
-    rtBright = mk(Math.max(2, W >> 1), Math.max(2, H >> 1));
-    rtA1 = mk(Math.max(2, W >> 2), Math.max(2, H >> 2)); rtB1 = mk(rtA1.width, rtA1.height);
-    rtA2 = mk(Math.max(2, W >> 3), Math.max(2, H >> 3)); rtB2 = mk(rtA2.width, rtA2.height);
+    const bs = P.bloom > 0.001 ? 1 : 0; // bloom disabled (low tier): keep 2x2 stubs
+    const sz = (d) => (bs ? Math.max(2, d) : 2);
+    rtBright = mk(sz(W >> 1), sz(H >> 1));
+    rtA1 = mk(sz(W >> 2), sz(H >> 2)); rtB1 = mk(rtA1.width, rtA1.height);
+    rtA2 = mk(sz(W >> 3), sz(H >> 3)); rtB2 = mk(rtA2.width, rtA2.height);
     finalM.uniforms.uAspect.value = size.x / size.y;
   }
   gfx.onScale?.(() => { allocate(); if (refl.rt) allocRefl(); });
@@ -175,7 +184,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
       const life = mud ? 9 + R() * 8 : 6 + R() * 6;
       drops.push({ x: 0.08 + R() * 0.84, y: 0.15 + R() * 0.8, r, age: 0, life, kind: mud ? 1 : 0, seed: R(), trail: 0, delay: 0.4 + R() * 2.5 * (mud ? 2 : 1), vy: (mud ? 0.004 : 0.012) + R() * 0.02 * (r / 0.03) });
     }
-    while (drops.length > MAXD) drops.shift();
+    while (drops.length > Math.min(MAXD, tier.maxDrops)) drops.shift();
   }
   function stepDrops(dt) {
     for (let i = drops.length - 1; i >= 0; i--) {
@@ -200,7 +209,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
   }
 
   // ---------------- optional planar reflection for water (one extra low-res scene pass) ----------------
-  const refl = { on: false, y: 0, scale: 0.4, rt: null, cam: new THREE.PerspectiveCamera(), hide: [], plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0) };
+  const refl = { on: false, y: 0, scale: tier.reflScale ?? 0.4, rt: null, cam: new THREE.PerspectiveCamera(), hide: [], plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0) };
   const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _u = new THREE.Vector3();
   function allocRefl() {
     refl.rt?.dispose();
@@ -235,6 +244,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
   /** Mirror the scene about the horizontal plane y at ~0.4x res and feed it to the water materials.
    *  Costs one extra scene render: enable only while a puddle is on screen; call again each frame to track y. */
   function setPlanarReflection({ enabled = true, y, scale, materials = [] } = {}) {
+    if (!tier.reflection) { refl.on = false; G.gfxReflOn.value = 0; return; } // low tier: PMREM sky reflection only
     if (scale && scale !== refl.scale) { refl.scale = scale; if (refl.rt) allocRefl(); }
     if (y !== undefined) refl.y = y;
     if (materials.length) refl.hide = materials;

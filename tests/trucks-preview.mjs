@@ -30,7 +30,7 @@ try {
   const report = [];
   for (const i of ids) {
     if (only.length && !only.includes(i)) continue;
-    for (const view of ['ext', 'fp', 'mech']) {
+    for (const view of (process.env.VIEWS ? process.env.VIEWS.split(',') :  ['ext', 'fp', 'mech', 'chase', 'mud'])) {
       await page.waitForFunction(() => typeof window.__show === 'function', null, { timeout: 60000 });
       const info = await page.evaluate(([i, v]) => window.__show(i, v), [i, view]);
       const file = `/tmp/claude-0/truck-${String(i).padStart(2, '0')}-${info.id}-${view}.png`;

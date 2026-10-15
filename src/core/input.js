@@ -64,9 +64,15 @@ export function createInput(dom) {
     // clockwise rotation of the device (as the user sees it) about the screen normal
     const theta = Math.atan2(-sg * S.gx, sg * S.gy);
     S.relAngle = wrapPi(theta + screenAngle());
+    if (S.calLeft > 0) {
+      S.calS += Math.sin(S.relAngle); S.calC += Math.cos(S.relAngle);
+      if (--S.calLeft === 0) S.zero = Math.atan2(S.calS, S.calC);
+    }
   }
   win && win.addEventListener('devicemotion', onMotion);
-  function calibrate() { S.zero = S.relAngle; }
+  // Calibrate: take the circular mean of the next ~10 motion samples as "wheel straight" (so a noisy sample
+  // never sets the zero); falls back to the current angle immediately so steer is sane in the meantime.
+  function calibrate() { S.zero = S.relAngle; S.calLeft = 10; S.calS = 0; S.calC = 0; S.steerMotion = 0; }
   function motionSteer(dt) {
     if (!S.hasMotion || !isTouch || S.flat) return null;
     let a = wrapPi(S.relAngle - S.zero);
@@ -84,7 +90,7 @@ export function createInput(dom) {
     if (!S.enabled || e.pointerType === 'mouse' && !S.mouseTouch) return;
     if (ignoreTarget(e.target)) return;
     const nx = e.clientX / W(), ny = e.clientY / H();
-    const p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientY * 0 + e.clientX, y: e.clientY, t0: performance.now(), tl: performance.now(), role: 'swipe', side: nx < 0.5 ? 'L' : 'R', accum: 0, dir: 0, moved: 0 };
+    const p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientY * 0 + e.clientX, y: e.clientY, t0: e.timeStamp, tl: e.timeStamp, role: 'swipe', side: nx < 0.5 ? 'L' : 'R', accum: 0, dir: 0, moved: 0 };
     if (nx < 0.5 && inZone(ZONES.handbrake, nx, ny)) p.role = 'handbrake';
     else if (nx >= 0.5 && inZone(ZONES.gear, nx, ny)) p.role = 'gear';
     else if (nx >= 0.5 && inZone(ZONES.headlight, nx, ny)) p.role = 'headlight';
@@ -100,7 +106,7 @@ export function createInput(dom) {
   function move(e) {
     const p = ptrs.get(e.pointerId);
     if (!p) return;
-    const now = performance.now();
+    const now = e.timeStamp;
     const dy = e.clientY - p.y, dx = e.clientX - p.x, dtms = Math.max(1, now - p.tl);
     p.x = e.clientX; p.y = e.clientY; p.tl = now; p.moved += Math.abs(dx) + Math.abs(dy);
     if (p.role === 'handbrake') {
@@ -126,7 +132,7 @@ export function createInput(dom) {
     if (!p) return;
     ptrs.delete(e.pointerId);
     if (p.role === 'handbrake') S.touchHB = 0;
-    else if (p.role === 'headlight') { if (performance.now() - p.t0 < 350 && p.moved < 24) S.headlight = !S.headlight; }
+    else if (p.role === 'headlight') { if (e.timeStamp - p.t0 < 450 && p.moved < 24) S.headlight = !S.headlight; }
     else if (p.role === 'swipe') { if (Math.abs(p.accum) > H() * 0.035) emitStroke(p, p.accum, 0.6); }
   }
   if (dom) {
@@ -157,6 +163,7 @@ export function createInput(dom) {
     } catch { /* unsupported */ }
     const res = jobs.length ? await Promise.all(jobs) : [true];
     S.motionOK = res.every(Boolean);
+    calibrate(); // the player is now holding the wheel: whatever pose they hold is straight ahead
     return { motion: S.motionOK, landscape: isLandscape() };
   }
 

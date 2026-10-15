@@ -61,11 +61,12 @@ void main() {
 		col = mix( col, mix( cc, uHaze, exp( - h * 5.0 ) * 0.5 ), cl * 0.92 );
 	}
 	// stars
-	if ( uStars > 0.01 && h > 0.0 ) {
+	float stA = smoothstep( 0.55, 1.0, uStars );
+	if ( stA > 0.01 && h > 0.0 ) {
 		vec3 q = d * 140.0; vec3 id = floor( q ); vec3 f = fract( q ) - 0.5;
 		float r = h31( id );
 		float star = step( 0.972, r ) * smoothstep( 0.35, 0.0, length( f ) ) * ( 0.4 + 0.6 * h31( id + 7.0 ) );
-		col += vec3( 0.85, 0.9, 1.0 ) * star * uStars * 2.5 * ( 1.0 - cl ) * smoothstep( 0.0, 0.2, h );
+		col += vec3( 0.85, 0.9, 1.0 ) * star * stA * 2.5 * ( 1.0 - cl ) * smoothstep( 0.0, 0.2, h );
 	}
 	// disc
 	float disc = smoothstep( uDiscSize, uDiscSize + 0.00012, sd );

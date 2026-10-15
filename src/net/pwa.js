@@ -35,6 +35,56 @@ export function isStandalone() {
   return !!(globalThis.navigator?.standalone || globalThis.matchMedia?.('(display-mode: standalone)').matches);
 }
 
+// ---------------- offline readiness ----------------
+// Resolves only when the service worker controlling scope is in state 'activated' AND every
+// file in the precache manifest is present in the versioned cache (asked from the SW itself).
+let offlineState = { ready: false, cached: 0, total: 0, version: null, state: 'none' };
+const offlineCbs = new Set();
+let resolveOffline;
+/** Promise<{ready:true, cached, total, version}> — pending until the game can launch fully offline. */
+export const offlineReady = new Promise((r) => { resolveOffline = r; });
+/** cb(status) once offline-ready (immediately if already). Also dispatched as window event 'sbd:offline-ready'. */
+export function onOfflineReady(cb) { if (offlineState.ready) cb(offlineState); else offlineCbs.add(cb); return () => offlineCbs.delete(cb); }
+/** Synchronous snapshot { ready, cached, total, version, state } for a title-screen badge / progress. */
+export function getOfflineStatus() { return { ...offlineState }; }
+
+function askWorker(worker) {
+  return new Promise((res) => {
+    const ch = new MessageChannel();
+    const t = setTimeout(() => res(null), 4000);
+    ch.port1.onmessage = (e) => { clearTimeout(t); res(e.data); };
+    worker.postMessage({ type: 'GET_STATUS' }, [ch.port2]);
+  });
+}
+function waitActivated(worker) {
+  if (!worker) return Promise.resolve(false);
+  if (worker.state === 'activated') return Promise.resolve(true);
+  return new Promise((res) => worker.addEventListener('statechange', function h() {
+    if (worker.state === 'activated') { worker.removeEventListener('statechange', h); res(true); }
+    else if (worker.state === 'redundant') { worker.removeEventListener('statechange', h); res(false); }
+  }));
+}
+async function checkOffline(reg) {
+  for (let attempt = 0; attempt < 20 && !offlineState.ready; attempt++) {
+    const w = reg.active || reg.waiting || reg.installing;
+    offlineState.state = w?.state ?? 'none';
+    if (await waitActivated(reg.active || w)) {
+      const st = await askWorker(reg.active);
+      if (st && !st.error) {
+        offlineState = { ready: st.total > 0 && st.cached === st.total, cached: st.cached, total: st.total, version: st.version, state: 'activated' };
+        if (offlineState.ready) {
+          offlineCbs.forEach((cb) => { try { cb(offlineState); } catch (e) { console.error(e); } });
+          offlineCbs.clear();
+          resolveOffline(offlineState);
+          window.dispatchEvent(new CustomEvent('sbd:offline-ready', { detail: offlineState }));
+          return;
+        }
+      }
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
+
 /**
  * Registers ./sw.js (built output). Skipped in Vite dev unless URL has ?sw=1.
  * Dispatches window 'sbd:sw-update' when a new version is waiting; call applyUpdate() to swap.
@@ -49,6 +99,7 @@ export async function registerServiceWorker({ url = './sw.js', force = false } =
     const reg = await navigator.serviceWorker.register(url, { scope: './' });
     const announce = (w) => window.dispatchEvent(new CustomEvent('sbd:sw-update', { detail: { worker: w, registration: reg } }));
     if (reg.waiting && navigator.serviceWorker.controller) announce(reg.waiting);
+    checkOffline(reg);
     reg.addEventListener('updatefound', () => {
       const w = reg.installing;
       w?.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) announce(w); });

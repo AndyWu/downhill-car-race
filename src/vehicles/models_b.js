@@ -34,14 +34,15 @@ function screenDoor(k, cx, cy, cz, w, d, o = {}) {
 // ============================================================ 6. DOOR DASHER
 const doorDasher = {
   id: 'door-dasher', name: 'Door Dasher', seed: 606,
-  description: 'Two old screen doors and a prayer: light as a feather and plenty quick, but she flexes like a diving board and the little wheels skate on loose ground.',
-  stats: { mass: 72, dragCoef: 0.6, frontalArea: 0.55, rollingResist: 0.02, gripMul: 0.9, steerLock: 0.55, steerRate: 3.6, paddleEfficiency: 1.05, brakeForce: 420, suspension: { stiffness: 7500, damping: 650, travel: 0.07 } },
+  description: 'Two old screen doors and a prayer: easiest rig on the hill to paddle and quick to get rolling, but light and skittery with weak grip and brakes.',
+  stats: { mass: 70, dragCoef: 0.62, frontalArea: 0.55, rollingResist: 0.02, gripMul: 0.74, steerLock: 0.55, steerRate: 3.5, paddleEfficiency: 1.3, brakeForce: 330, suspension: { stiffness: 7500, damping: 650, travel: 0.07 } },
+  flagColor: 0x8fd14f, number: 13,
   layout: {
     R: 0.18, Rf: 0.18, WB: 1.7, T: 0.7, eyeY: 0.72, eyeZ: 0.3, floorY: -0.04,
     wheel: { type: 'cart', W: 0.08, rim: 0x5a8a5a, tyre: 0x1a1a1a }, axleF: 'wood',
     steer: { type: 'disc', r: 0.17, col: 0x2a2a2a, col2: 0xa0a09a },
     seat: { kind: 'seatback', color: 0x6a3a2a }, paddleCol: 0xe8e0c8, gearCol: 0xe0b020, px: 0.27, lx: 0.26,
-    hl: { p: [0, 0.18, -1.15], style: 'bike' }, flag: { p: [0.2, 0.225, -0.72], h: 0.5 },
+    hl: { p: [0, 0.18, -1.15], style: 'bike' }, flag: { p: [0.2, 0.225, -0.72], side: -1, h: 0.42 },
     driver: { shirt: 0x8a3a2a, helmet: 0x5a8a5a },
   },
   body(k) {
@@ -53,10 +54,10 @@ const doorDasher = {
     for (const x of [-0.24, 0.24]) k.wood.bar([x, -0.09, -0.8], [x, -0.09, 1.1], 0.045, 0.045, { c: 0xa88e62 });
     for (const x of [-0.24, 0.24]) k.wood.bar([x, -0.08, -0.55], [x, 0.17, -0.7], 0.035, 0.035, { c: 0xa88e62 });
     // tail fin: a door stood on end and braced
-    screenDoor(k, 0, 0.42, 1.14, 0.5, 0.74, { rx: -PI / 2 + 0.12, tone: 0xd6d0b8 });
+    screenDoor(k, 0, 0.55, 1.14, 0.52, 1.0, { rx: -PI / 2 + 0.12, tone: 0x7ccf5a });
     for (const x of [-0.18, 0.18]) k.wood.bar([x, -0.04, 0.9], [x, 0.3, 1.1], 0.03, 0.03, { c: 0xa88e62 });
-    k.paint.decal(DECAL.n13, [0, 0.45, 1.158], 0.28, 0.28, { r: [0, 0, 0] });
-    k.paint.decal(DECAL.n13, [0, 0.45, 1.11], 0.28, 0.28, { r: [0, PI, 0] });
+    k.paint.decal(DECAL.n13, [0, 0.62, 1.188], 0.3, 0.3, { r: [0.12, 0, 0] });
+    k.paint.decal(DECAL.n13, [0, 0.62, 1.1], 0.3, 0.3, { r: [-0.12, PI, 0] });
     // rope lashings joining the doors, bungee across the seat
     k.rope.lash([0, -0.06, -0.58], 'x', 0.04, 0.6, 12, { r: 0.007 });
     for (const x of [-0.3, 0.3]) k.rope.lash([x, -0.06, 0.0], 'z', 0.04, 0.1, 4);
@@ -71,14 +72,15 @@ const doorDasher = {
 // ============================================================ 7. CRATE COMET
 const crateComet = {
   id: 'crate-comet', name: 'Crate Comet', seed: 707,
-  description: 'Apple crates nailed to a rocket-nose and ten-dollar wheels: light and quick off the line, but those little wheels hate every bump on the hill.',
-  stats: { mass: 80, dragCoef: 0.58, frontalArea: 0.5, rollingResist: 0.03, gripMul: 0.95, steerLock: 0.6, steerRate: 3.8, paddleEfficiency: 1.1, brakeForce: 380, suspension: { stiffness: 5500, damping: 420, travel: 0.05 } },
+  description: 'Apple crates behind a rocket nose: quickest to turn in and a rocket off the line, but the little wheels have no travel and the brakes are a joke.',
+  stats: { mass: 80, dragCoef: 0.6, frontalArea: 0.5, rollingResist: 0.03, gripMul: 1.0, steerLock: 0.62, steerRate: 3.9, paddleEfficiency: 1.1, brakeForce: 260, suspension: { stiffness: 5500, damping: 420, travel: 0.04 } },
+  flagColor: 0x2f6fb5, number: 21,
   layout: {
     R: 0.17, Rf: 0.17, WB: 1.25, T: 0.68, eyeY: 0.73, eyeZ: 0.18, floorY: -0.07,
     wheel: { type: 'cart', W: 0.08, rim: 0xc1272d, tyre: 0x1a1a1a }, axleF: 'wood',
     steer: { type: 'car', r: 0.15, col: 0x1a1a1a, col2: 0xc8c8c0 },
     seat: { kind: 'crate', color: 0xd83a2a }, paddleCol: 0x2f6fb5, gearCol: 0x2f6fb5, px: 0.22, lx: 0.25,
-    hl: { p: [-0.17, 0.2, -0.92], style: 'can' }, flag: { p: [0.18, 0.1, -0.88], h: 0.5 },
+    hl: { p: [-0.17, 0.2, -0.92], style: 'can' }, flag: { p: [0.18, 0.1, -0.88], side: 1, h: 0.42 },
     driver: { shirt: 0xf0ebe0, helmet: 0xc1272d },
   },
   body(k) {
@@ -101,7 +103,7 @@ const crateComet = {
     k.wood.bar([0, 0.0, -0.45], [0, 0.17, -0.7], 0.035, 0.035, { c: 0xa68c62 }); // strut under the cone
     k.rope.lash([0, 0.19, -0.72], 'z', 0.145, 0.05, 5, { r: 0.008 });
     // fins and rocket cans at the tail
-    const fin = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.4, 0), new THREE.Vector2(0.4, 0.38), new THREE.Vector2(0.22, 0.42)]);
+    const fin = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.4, 0), new THREE.Vector2(0.4, 0.7), new THREE.Vector2(0.2, 0.78)]);
     for (const sx of [-1, 1]) {
       k.paint.add(new THREE.ExtrudeGeometry(fin, { depth: 0.015, bevelEnabled: false }).rotateY(-PI / 2).translate(0, 0, 0), { p: [sx * 0.24, 0.07, 0.62], c: 0xc1272d, r: [0, 0, sx * 0.0] });
     }
@@ -139,14 +141,15 @@ function ringRivets(k, z, r, n = 20) {
 }
 const tinLizzie = {
   id: 'tin-lizzie', name: 'Tin Lizzie', seed: 808,
-  description: 'A riveted sheet-metal torpedo on skinny bicycle wheels: slipperiest thing on the hill and light as a feather, but she washes out when the road turns loose.',
-  stats: { mass: 74, dragCoef: 0.45, frontalArea: 0.5, rollingResist: 0.011, gripMul: 0.8, steerLock: 0.38, steerRate: 2.4, paddleEfficiency: 1.0, brakeForce: 300, suspension: { stiffness: 5200, damping: 380, travel: 0.06 } },
+  description: 'A riveted sheet-metal torpedo on skinny bicycle wheels: the fastest thing on the hill, but she skates in the corners and rattles your teeth on rough ground.',
+  stats: { mass: 72, dragCoef: 0.42, frontalArea: 0.48, rollingResist: 0.011, gripMul: 0.7, steerLock: 0.34, steerRate: 2.2, paddleEfficiency: 1.0, brakeForce: 300, suspension: { stiffness: 5200, damping: 380, travel: 0.045 } },
+  flagColor: 0x2ec4c4, number: 88,
   layout: {
     R: 0.3, Rf: 0.3, WB: 1.4, T: 0.68, eyeY: 0.6, eyeZ: 0.32, floorY: -0.2, noRopes: true,
     wheel: { type: 'bike', W: 0.045, spokes: 32, tyre: 0x161616 }, axleF: 'metal',
     steer: { type: 'car', r: 0.15, col: 0x2a1c12, col2: 0xb09a58 },
     seat: { kind: 'seatback', color: 0x6a3a22 }, paddleCol: 0xb09a58, gearCol: 0x2a1c12, px: 0.19, lx: 0.2, ldz: -0.3,
-    hl: { p: [0, 0.37, -0.6], style: 'can' }, flag: { p: [0, 0.245, -0.95], h: 0.5, col: 0xb09a58 },
+    hl: { p: [0, 0.37, -0.6], style: 'can' }, flag: { p: [0, 0.245, -0.95], side: -1, h: 0.42, col: 0xb09a58 },
     driver: { shirt: 0xe0d8c0, helmet: 0x5a8a96 },
   },
   body(k) {
@@ -173,9 +176,11 @@ const tinLizzie = {
     hullSection(k, 'metal', tailR, 1.2, 0.7, 0xffffff, { n: 6 });
     for (const z of [0.7, 1.2]) ringRivets(k, z, tailR(z));
     // fin
-    const fin = new THREE.Shape([new THREE.Vector2(0.9, 0), new THREE.Vector2(1.7, 0.0), new THREE.Vector2(1.72, 0.2), new THREE.Vector2(1.42, 0.5), new THREE.Vector2(1.1, 0.52)]);
-    k.metal.add(new THREE.ExtrudeGeometry(fin, { depth: 0.014, bevelEnabled: false }).translate(0, 0, -0.007).rotateY(-PI / 2), { p: [0, LZ.cy + 0.19, 0], c: 0xe8d8c8 });
-    k.metal.rivets([0, LZ.cy + 0.26, 1.15], [0, LZ.cy + 0.52, 1.45], 5, 0.008);
+    const fin = new THREE.Shape([new THREE.Vector2(0.9, 0), new THREE.Vector2(1.7, 0.0), new THREE.Vector2(1.72, 0.2), new THREE.Vector2(1.5, 0.85), new THREE.Vector2(1.1, 0.88)]);
+    k.paint.add(new THREE.ExtrudeGeometry(fin, { depth: 0.014, bevelEnabled: false }).translate(0, 0, -0.007).rotateY(-PI / 2), { p: [0, LZ.cy + 0.19, 0], c: 0x2fc2c4, v: 0.03 });
+    k.paint.decal(DECAL.n88, [0.009, LZ.cy + 0.6, 1.35], 0.3, 0.3, { r: [0, PI / 2, 0] });
+    k.paint.decal(DECAL.n88, [-0.009, LZ.cy + 0.6, 1.35], 0.3, 0.3, { r: [0, -PI / 2, 0] });
+    k.metal.rivets([0, LZ.cy + 0.26, 1.15], [0, LZ.cy + 0.7, 1.45], 6, 0.008);
     // tub interior: floor boards and seat box
     k.wood.box([0.34, 0.025, 1.0], [0, -0.2, 0.1], { c: 0xb59c70 });
     k.wood.box([0.34, 0.3, 0.3], [0, -0.06, 0.44], { c: 0xa68c62 });
@@ -189,14 +194,15 @@ const tinLizzie = {
 // ============================================================ 9. LADDER LARRY
 const ladderLarry = {
   id: 'ladder-larry', name: 'Ladder Larry', seed: 909,
-  description: 'An old aluminium ladder on two bicycle wheels and a stepladder nose: those wheels roll forever, but she flexes like a diving board and catches wind like a barn door.',
-  stats: { mass: 78, dragCoef: 1.05, frontalArea: 0.95, rollingResist: 0.01, gripMul: 0.78, steerLock: 0.5, steerRate: 3.0, paddleEfficiency: 1.0, brakeForce: 280, suspension: { stiffness: 4200, damping: 260, travel: 0.1 } },
+  description: 'An aluminium ladder on bicycle wheels: nimble, with long springy travel, but she catches wind like a barn door and the brakes barely exist.',
+  stats: { mass: 78, dragCoef: 1.05, frontalArea: 0.92, rollingResist: 0.01, gripMul: 0.8, steerLock: 0.55, steerRate: 3.4, paddleEfficiency: 1.0, brakeForce: 220, suspension: { stiffness: 4200, damping: 260, travel: 0.12 } },
+  flagColor: 0xf5f5f5, number: 4,
   layout: {
     R: 0.33, Rf: 0.28, WB: 1.55, T: 0.86, eyeY: 0.57, eyeZ: 0.25, floorY: -0.04,
     wheel: { type: 'bike', W: 0.04, spokes: 32, tyre: 0x1a1a1a }, axleF: 'wood',
     steer: { type: 'bike', r: 0.2, col: 0x222222, col2: 0xa0a09a },
     seat: { kind: 'bucket' }, paddleCol: 0xe0b020, gearCol: 0xd2352a, px: 0.2, lx: 0.24,
-    hl: { p: [0, 0.38, -1.04], style: 'flash' }, flag: { p: [0.2, 0.285, -0.96], h: 0.5 },
+    hl: { p: [0, 0.38, -1.04], style: 'flash' }, flag: { p: [0.2, 0.285, -0.96], side: 1, h: 0.42 },
     driver: { shirt: 0xe0b020, helmet: 0xe0b020 },
   },
   body(k) {
@@ -244,8 +250,10 @@ const ladderLarry = {
     // seat: paint bucket rides on the rungs; tail with a red rag and reflector tape
     k.rope.lash([0, -0.04, 0.37], 'z', 0.19, 0.06, 5);
     k.paint.box([0.04, 0.003, 0.2], [0.0, -0.1, 1.38], { c: 0xc83a2a });
-    k.wood.bar([0, -0.07, 1.3], [0, 0.35, 1.3], 0.02, 0.02, { c: 0xb09468 });
-    k.paint.box([0.2, 0.12, 0.004], [0.1, 0.3, 1.3], { c: 0xd8352a, r: [0, 0.2, 0.1] });
+    for (const sx of [-1, 1]) k.paint.bar([sx * 0.2, -0.07, 1.3], [sx * 0.2, 1.1, 1.42], 0.035, 0.03, { c: 0xb4b9bd });
+    for (let i = 0; i < 6; i++) k.paint.cyl(0.011, 0.4, [0, 0.1 + i * 0.19, 1.31 + i * 0.019], { axis: 'x', seg: 6, c: 0xc8ccd0 });
+    k.paint.box([0.5, 0.3, 0.01], [0.08, 1.05, 1.44], { c: 0xe8352a, r: [0, 0, 0.05] });
+    k.paint.box([0.5, 0.1, 0.012], [0.08, 1.0, 1.44], { c: 0xf2c200, r: [0, 0, 0.05] });
     k.paint.decal(DECAL.checker, [0.0, -0.1, 1.5], 0.0001, 0.0001);
     // paddle/lever mount planks
     k.wood.box([0.6, 0.03, 0.12], [0, -0.065, -0.4], { c: 0xb59c70 });
@@ -257,14 +265,15 @@ const bedY = (z) => (z > -0.5 ? -0.02 : -0.02 + 0.36 * Math.pow((-z - 0.5) / 0.7
 const bedSlope = (z) => (z > -0.5 ? 0 : -(2 * 0.36 / 0.75) * ((-z - 0.5) / 0.75));
 const sledDog = {
   id: 'sled-dog', name: 'Sled Dog', seed: 1010,
-  description: 'A toboggan on fat knobby tractor tyres: grips like a bulldog on rough ground and shrugs off bumps, but she\'s a heavy hauler and slow to get her paws moving.',
-  stats: { mass: 108, dragCoef: 0.7, frontalArea: 0.6, rollingResist: 0.028, gripMul: 1.3, steerLock: 0.5, steerRate: 3.2, paddleEfficiency: 0.9, brakeForce: 640, suspension: { stiffness: 9500, damping: 850, travel: 0.1 } },
+  description: 'A toboggan on fat tractor tyres: the grippiest rig on the hill and tough as a boot, but heavy and not built to go fast.',
+  stats: { mass: 118, dragCoef: 0.85, frontalArea: 0.7, rollingResist: 0.028, gripMul: 1.4, steerLock: 0.5, steerRate: 3.2, paddleEfficiency: 0.9, brakeForce: 650, suspension: { stiffness: 9500, damping: 850, travel: 0.1 } },
+  flagColor: 0x7a3fb5, number: 10,
   layout: {
     R: 0.22, Rf: 0.22, WB: 1.5, T: 0.86, eyeY: 0.68, eyeZ: 0.22, floorY: -0.04,
     wheel: { type: 'tractor', W: 0.13, rim: 0x8a3a2a, tyre: 0x1c1c1c }, axleF: 'wood',
     steer: { type: 'bars', r: 0.2, col: 0x141414, col2: 0xa0a09a },
     seat: { kind: 'plank' }, paddleCol: 0x3a6a8a, gearCol: 0xe8e0c8, px: 0.3, lx: 0.26, pdz: -0.6,
-    hl: { p: [0, 0.4, -1.22], style: 'lantern' }, flag: { p: [0.2, 0.28, -1.0], h: 0.5 },
+    hl: { p: [0, 0.4, -1.22], style: 'lantern' }, flag: { p: [0.2, 0.28, -1.0], side: -1, h: 0.42 },
     driver: { shirt: 0x3a6a8a, helmet: 0xe8e0c8 },
   },
   body(k) {
@@ -315,6 +324,12 @@ const sledDog = {
     k.paint.box([0.42, 0.04, 0.36], [0, 0.05, 0.36], { c: 0xe4dccc, v: 0.04 });
     k.wood.box([0.5, 0.32, 0.03], [0, 0.26, 0.74], { c: wd(0.9), r: [-0.25, 0, 0] });
     k.rope.lash([0, 0.1, 0.72], 'x', 0.03, 0.5, 6, { r: 0.007 });
+    // tall blue push-handle and number panel (bold silhouette from behind)
+    for (const sx of [-1, 1]) k.paint.bar([sx * 0.28, 0.05, 0.9], [sx * 0.26, 0.95, 1.1], 0.045, 0.04, { c: 0x2f6fb5 });
+    k.paint.box([0.64, 0.05, 0.05], [0, 0.95, 1.1], { c: 0x2f6fb5 });
+    k.paint.box([0.5, 0.42, 0.02], [0, 0.72, 1.08], { c: 0x2f6fb5, r: [-0.12, 0, 0] });
+    k.paint.decal(DECAL.n13, [0, 0.72, 1.093], 0.34, 0.34, { r: [-0.12, 0, 0] });
+    k.rope.lash([0, 0.95, 1.1], 'x', 0.03, 0.4, 8);
     // lamp mount
     k.wood.box([0.14, 0.06, 0.26], [0, bedY(-1.15) + 0.1, -1.13], { c: 0xa68c62, r: [Math.atan(-bedSlope(-1.15)), 0, 0] });
     k.rope.lash([0, bedY(-1.15) + 0.08, -1.1], 'x', 0.05, 0.14, 3);

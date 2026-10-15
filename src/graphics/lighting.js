@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createSky } from './sky.js';
 import { G, installFog, tickTime } from './shared.js';
+import { getTier } from './quality.js';
 
 const C = (h) => new THREE.Color(h);
 const deg = Math.PI / 180;
@@ -26,7 +27,7 @@ export const TIME_PRESETS = {
     hemiSky: C(0x4d5d8e), hemiGround: C(0x2c2530), hemiInt: 0.45,
     zenith: C(0x1c2a58), horizon: C(0xd6805f), ground: C(0x38303a), haze: C(0xc8688a),
     fog: C(0x8a6a78), fogDensity: 0.0052, fogSun: C(0xd05a30), exposure: 1.15, env: 0.3,
-    cover: 0.35, cloudLit: C(0xff8a68), cloudShade: C(0x3a3e66), glow: 0.9, disc: 30, stars: 0.25, night: 0.55,
+    cover: 0.35, cloudLit: C(0xff8a68), cloudShade: C(0x3a3e66), glow: 0.9, disc: 30, stars: 0, night: 0.55,
   },
   night: {
     elev: 36, azim: 205, sunColor: C(0x9db6ff), sunInt: 1.15,
@@ -46,8 +47,9 @@ const clonePreset = (p) => { const o = {}; for (const k of NUM_KEYS) o[k] = p[k]
  */
 export function setupLighting(scene, renderer, opts = {}) {
   installFog();
-  const shadowSize = opts.shadowMapSize ?? 2048;
-  let shadowExtent = opts.shadowExtent ?? 42;
+  const tier = getTier();
+  const shadowSize = opts.shadowMapSize ?? tier.shadowMap;
+  let shadowExtent = opts.shadowExtent ?? tier.shadowExtent;
 
   const sky = createSky();
   sky.mesh.scale.setScalar(1);

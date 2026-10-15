@@ -179,6 +179,62 @@ async function race(seed, { rubberBand = 0, profiles = AI_PROFILES, maxT = 900, 
   return cars.map((c, i) => ({ name: profiles[i].name, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.s }));
 }
 
+// ---------------- real physics mode (src/core/physics.js + src/scene world) ----------------
+const worldCache = new Map();
+async function getRealPhysicsWorld(seed) {
+  if (!worldCache.has(seed)) {
+    const { createWorld } = await import('../src/scene/index.js');
+    worldCache.set(seed, await createWorld(new THREE.Scene(), { seed }));
+  }
+  return worldCache.get(seed);
+}
+async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = 0, trucks = null, rubberBand = 0, trace = false } = {}) {
+  const { createVehicleBody, collideBodies, draftFactor } = await import('../src/core/physics.js');
+  const { TRUCKS } = await import('../src/vehicles/index.js');
+  const world = await getRealPhysicsWorld(seed);
+  const order = profiles.map((_, i) => (i + seed) % 6); // rotate grid slots per seed
+  const cars = profiles.map((p, i) => {
+    const spec = TRUCKS[(trucks ? trucks[i] : truck) % TRUCKS.length];
+    const body = createVehicleBody(spec, world);
+    const st = world.startTransform(order[i]);
+    body.reset(st.position, st.quaternion);
+    const driver = createAIDriver(p, { world, rng: createRng(1000 + seed * 31 + i), spec, rubberBand });
+    return { body, driver, finished: null, offroad: 0, hits: { mud: 0, water: 0, rock: 0 }, inHaz: new Set(), stall: 0, maxStall: 0, stallS: 0, resets: 0, name: p.name, log: [] };
+  });
+  const bodies = cars.map((c) => c.body);
+  const dt = 1 / 60, CD = 3;
+  let t = 0;
+  const idle = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 1, headlight: false, reverse: false };
+  while (t < maxT + CD && cars.some((c) => c.finished == null)) {
+    const racing = t >= CD;
+    const states = cars.map((c) => c.body.state);
+    for (const c of cars) {
+      let inp;
+      if (!racing) inp = idle;
+      else if (c.finished != null) inp = { ...idle, handbrake: 0.7 };
+      else inp = c.driver.think(dt, c.body.state, states.filter((o) => o !== c.body.state));
+      inp.draft = draftFactor(c.body, bodies);
+      c.body.step(dt, inp);
+      if (racing && c.finished == null) {
+        const st = c.body.state, w = world.track.sampleAt(Math.max(0, st.s)).width;
+        if (Math.abs(st.lateral) > w / 2) c.offroad += dt;
+        for (const h of world.hazards) {
+          if (Math.abs(h.s - st.s) > 20 || !(h.type === 'mud' || h.type === 'water' || h.type === 'rock')) continue;
+          const ra = (h.halfLength ?? h.radius) + 0.4, rb = (h.halfWidth ?? h.radius) + 0.4;
+          const hit = ((h.s - st.s) / ra) ** 2 + ((h.lateral - st.lateral) / rb) ** 2 < 1;
+          if (hit && !c.inHaz.has(h)) { c.inHaz.add(h); c.hits[h.type]++; } else if (!hit) c.inHaz.delete(h);
+        }
+        if (st.s > 20 && st.speed < 1.5) { c.stall += dt; if (process.env.DBG && c.stall > 3 && Math.abs(c.stall % 4) < dt) console.log('STALL', c.name, 's', st.s.toFixed(0), 'lat', st.lateral.toFixed(2), 'v', st.speed.toFixed(2), 'surf', st.surface, 'up', st.upsideDown, 'air', st.airborne, 'contacts', st.wheelContacts.map((w) => w.contact ? 1 : 0).join(''), 'hb', st.handbrake.toFixed(2), 'steer', st.steerNorm.toFixed(2), 'inp', JSON.stringify({ ...inp, headlight: 0 }), 'pos y', st.position.y.toFixed(2), 'ground', world.heightAt(st.position.x, st.position.z).toFixed(2)); if (c.stall > c.maxStall) { c.maxStall = c.stall; c.stallS = st.s; } } else c.stall = 0;
+        if (st.s >= world.track.length - 3) c.finished = t - CD;
+      }
+    }
+    for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) collideBodies(cars[i].body, cars[j].body);
+    if (trace && Math.abs((t % 10) - 0) < dt / 2) console.log(t.toFixed(0), cars.map((c) => `${c.name[0]}:${c.body.state.s.toFixed(0)}@${c.body.state.speed.toFixed(1)}`).join(' '));
+    t += dt;
+  }
+  return cars.map((c) => ({ name: c.name, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, maxStall: c.maxStall, stallS: c.stallS }));
+}
+
 // ---------------- run ----------------
 const forwardCheck = (() => { // AI's forwardXZ must agree with THREE
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.1, 1.234, 0.05));
@@ -186,12 +242,17 @@ const forwardCheck = (() => { // AI's forwardXZ must agree with THREE
   return Math.abs(fx - f.x / l) < 1e-9 && Math.abs(fz - f.z / l) < 1e-9;
 })();
 const REAL = process.argv.includes('--real');
+const MOCK = process.argv.includes('--mock') || REAL;
+const PHYS = !MOCK; // default: real physics + real world
+const TRACE = process.argv.includes('--trace');
+const TRUCK = Number((process.argv.find((a) => a.startsWith('--truck=')) || '--truck=0').split('=')[1]);
+const runRace = (sd, o = {}) => (PHYS ? racePhysics(sd, { truck: TRUCK, trace: TRACE, ...o }) : race(sd, { real: REAL, ...o }));
 const seeds = Array.from({ length: Number(process.argv.find((a) => /^\d+$/.test(a)) || 3) }, (_, i) => i + 1);
 const agg = AI_PROFILES.map((p) => ({ name: p.name, time: 0, mud: 0, water: 0, rock: 0, off: 0, dnf: 0 }));
 const t0 = Date.now();
 for (const sd of seeds) {
-  const res = await race(sd, { real: REAL });
-  console.log(`seed ${sd}: ` + res.map((r) => `${r.name} ${r.time === Infinity ? 'DNF@' + r.s.toFixed(0) : r.time.toFixed(1) + 's'} (m${r.hits.mud} w${r.hits.water} r${r.hits.rock} off${r.offroad.toFixed(1)}s)`).join(' | '));
+  const res = await runRace(sd);
+  console.log(`seed ${sd}: ` + res.map((r) => `${r.name} ${r.time === Infinity ? 'DNF@' + r.s.toFixed(0) : r.time.toFixed(1) + 's'} (m${r.hits.mud} w${r.hits.water} r${r.hits.rock} off${r.offroad.toFixed(1)}s${r.maxStall > 2 ? ' STALL' + r.maxStall.toFixed(0) + 's@' + r.stallS.toFixed(0) : ''})`).join(' | '));
   res.forEach((r, i) => { const a = agg[i]; if (r.time === Infinity) a.dnf++; a.time += Math.min(r.time, 900); a.mud += r.hits.mud; a.water += r.hits.water; a.rock += r.hits.rock; a.off += r.offroad; });
 }
 const n = seeds.length;
@@ -213,7 +274,7 @@ const mw = agg.map((a) => (a.mud + a.water) / n);
 ok(mw[2] === Math.max(...mw), 'Buster should have most mud/water hits');
 ok(agg.every((a) => a.dnf === 0), 'all should finish');
 // determinism
-const r1 = await race(1, { profiles: [AI_PROFILES[4], AI_PROFILES[0]], real: REAL }), r2 = await race(1, { profiles: [AI_PROFILES[4], AI_PROFILES[0]], real: REAL });
+const r1 = await runRace(1, { profiles: [AI_PROFILES[4], AI_PROFILES[0]] }), r2 = await runRace(1, { profiles: [AI_PROFILES[4], AI_PROFILES[0]] });
 ok(r1[0].time === r2[0].time && r1[1].time === r2[1].time, 'not deterministic');
 console.log(fails.length ? '\nFAIL:\n - ' + fails.join('\n - ') : '\nALL ASSERTIONS PASSED');
 process.exit(fails.length ? 1 : 0);

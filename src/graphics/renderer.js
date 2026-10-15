@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { installFog } from './shared.js';
-
-const STEPS = [1, 0.9, 0.8, 0.7, 0.6];
+import { getTier } from './quality.js';
 
 /**
  * WebGL2 renderer: ACES filmic, sRGB, PCF shadows, DPR capped at 2 and a dynamic resolution scaler.
@@ -14,7 +13,9 @@ export function createRenderer(canvas, opts = {}) {
     canvas, antialias: false, alpha: false, stencil: false, depth: true,
     powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.preserveDrawingBuffer,
   });
-  const dprCap = opts.maxPixelRatio ?? 2;
+  const tier = getTier();
+  const STEPS = tier.steps;
+  const dprCap = opts.maxPixelRatio ?? tier.dpr;
   const base = Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, dprCap);
   renderer.setPixelRatio(base);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -25,7 +26,7 @@ export function createRenderer(canvas, opts = {}) {
   renderer.setClearColor(0x0b0f14, 1);
 
   const gfx = {
-    basePixelRatio: base, scale: 1, enabled: opts.dynamicResolution !== false,
+    basePixelRatio: base, scale: STEPS[0], tier, enabled: opts.dynamicResolution !== false,
     targetMs: opts.targetMs ?? 18.5, cb: null, ema: 16, over: 0, under: 0, warm: 2.0, idx: 0,
     onScale(cb) { gfx.cb = cb; },
     setScale(s) {
