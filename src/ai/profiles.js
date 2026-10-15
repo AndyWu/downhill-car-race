@@ -46,7 +46,7 @@ export const Barnaby = make({
   line: { mode: 'center', edge: 0.1, pull: 0.3, maxStep: 3, smooth: 1 },
   speed: { mu: 0.8, cornerFactor: 1.3, brakeDecel: 10, cap: 15 },
   paddle: { mode: 'forgetful', cadence: 2.4, strength: 0.9, jitter: 0.3,
-    attentive: 0.8, startDist: 120 },
+    attentive: 0.9, startDist: 120 },
   brake: { gain: 0.2, dead: 1.0, max: 0.9 },
 });
 
@@ -59,7 +59,7 @@ export const Clementine = make({
   surfaceWeight: { sand: 4, gravel: 2, grass: 8, mud: 6, water: 5 },
   line: { mode: 'avoid', edge: 0.5, pull: 0.1, maxStep: 1 },
   speed: { mu: 0.8, cornerFactor: 0.5, brakeDecel: 2.6, cap: 13.5, useSurface: true },
-  paddle: { mode: 'slow', cadence: 1.9, strength: 0.85, jitter: 0.1 },
+  paddle: { mode: 'slow', cadence: 2.2, strength: 0.85, jitter: 0.1 },
   brake: { gain: 0.5, dead: 0.2 },
   carAvoid: 1,
 });
@@ -74,7 +74,7 @@ export const Buster = make({
   line: { mode: 'racing', edge: 0.3, pull: 0.02, maxStep: 3, relaxIters: 70 },
   speed: { mu: 0.85, cornerFactor: 1.05, brakeDecel: 6.5, cap: 24, scale: 1.0 },
   paddle: { mode: 'furious', cadence: 3.4, strength: 1.0, jitter: 0.04,
-    stamina: { drain: 0.04, regen: 0.1, minFactor: 0.55 } },
+    stamina: { drain: 0.02, regen: 0.1, minFactor: 0.75 } },
   brake: { gain: 0.5, dead: 1.5 },
   aggression: 0.8,
 });
@@ -88,7 +88,7 @@ export const Maeve = make({
   surfaceWeight: { sand: 2.5, gravel: 1.2, grass: 5, mud: 4, water: 3 },
   line: { mode: 'racing', edge: 0.9, pull: 0.02, maxStep: 1, relaxIters: 400, corridorTol: 0.8 },
   speed: { mu: 0.8, cornerFactor: 1.0, brakeDecel: 3.8, cap: 16, useSurface: true },
-  paddle: { mode: 'rhythm', cadence: 3.1, strength: 1.0, jitter: 0, slopeMax: 0.12, stamina: { drain: 0.01, regen: 0.08, minFactor: 0.8 } },
+  paddle: { mode: 'rhythm', cadence: 3.0, strength: 1.0, jitter: 0, slopeMax: 0.12, stamina: { drain: 0.01, regen: 0.08, minFactor: 0.8 } },
   brake: { gain: 0.45, dead: 0.3 },
 });
 
@@ -100,8 +100,8 @@ export const Ace = make({
   hazardWeight: { rock: 60, mud: 25, water: 22, default: 20 }, hazardMargin: 1.5, hazardStretch: 1.8,
   surfaceWeight: { sand: 4, gravel: 2.5, grass: 6, mud: 5, water: 4 },
   line: { mode: 'racing', edge: 0.8, pull: 0.02, maxStep: 1, relaxIters: 500, corridorTol: 1.0 },
-  speed: { mu: 0.85, cornerFactor: 1.0, brakeDecel: 3.8, cap: 16, useSurface: true, forward: true },
-  paddle: { mode: 'optimal', cadence: 3.0, strength: 1.0, jitter: 0, slopeMax: 0.08, stamina: { drain: 0.005, regen: 0.1, minFactor: 0.9 } },
+  speed: { mu: 0.85, cornerFactor: 1.0, brakeDecel: 3.8, cap: 24, useSurface: true, forward: true },
+  paddle: { mode: 'optimal', cadence: 2.5, strength: 1.0, jitter: 0, slopeMax: 0.08, stamina: { drain: 0.005, regen: 0.1, minFactor: 0.9 } },
   brake: { gain: 0.5, dead: 0.2, tap: true },
   draft: { range: 8, strength: 0.9, overtake: true },
 });

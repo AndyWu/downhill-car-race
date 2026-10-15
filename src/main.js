@@ -56,8 +56,6 @@ async function boot() {
   const [gfx, sceneMod, vehMod, audioMod, uiMod, netMod, aiMod] = await Promise.all(['graphics', 'scene', 'vehicles', 'audio', 'ui', 'net', 'ai'].map(tryImport));
   if (netMod) { safe(() => netMod.injectPWAHead(), 'injectPWAHead'); safe(() => netMod.registerServiceWorker(), 'registerServiceWorker'); }
 
-  if (netMod && netMod.onOfflineReady) safe(() => netMod.onOfflineReady((st) => { game.state.offlineReady = true; if (game.ui && game.ui.toast && game.state.mode === 'title') game.ui.toast('Ready to play offline', 2600); }), 'onOfflineReady');
-
   // ---- renderer / scene ----
   let renderer = gfx && safe(() => gfx.createRenderer(canvas), 'createRenderer');
   if (!renderer) {
@@ -133,6 +131,7 @@ async function boot() {
     advance: (sec) => advance(sec),
     startRace: (o) => startRace(o),
   };
+  if (netMod && netMod.onOfflineReady) safe(() => netMod.onOfflineReady(() => { game.state.offlineReady = true; if (game.ui && game.ui.toast && game.state.mode === 'title') game.ui.toast('Ready to play offline', 2600); }), 'onOfflineReady');
   let resolveReady; game.screenshotReady = new Promise((r) => { resolveReady = r; });
   window.__game = game;
   let readyFrames = 0;
