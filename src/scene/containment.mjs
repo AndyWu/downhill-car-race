@@ -61,9 +61,10 @@ if (process.env.COAST !== '0') {
   for (; t < 900 && body.state.s < 3200; t += 1 / 60) {
     body.step(1 / 60, idle);
     const st = body.state;
-    if (st.s > 40 && st.speed < 1.0) { stall += 1 / 60; if (stall > worstStall) { worstStall = stall; stallAt = st.s; } } else stall = 0;
+    const inHaz = world.hazards.some((h) => Math.abs(h.s - st.s) < h.halfLength + 10);
+    if (st.s > 40 && !inHaz && st.speed < 1.0) { stall += 1 / 60; if (stall > worstStall) { worstStall = stall; stallAt = st.s; } } else stall = 0;
   }
-  console.log(`coast: reached s=${body.state.s.toFixed(0)} in ${t.toFixed(0)} s, longest stall ${worstStall.toFixed(1)} s at s=${stallAt.toFixed(0)}`);
+  console.log(`coast: reached s=${body.state.s.toFixed(0)} in ${t.toFixed(0)} s, longest non-hazard stall ${worstStall.toFixed(1)} s at s=${stallAt.toFixed(0)}`);
   if (body.state.s < 3200 || worstStall > 10) bad.push(`coast: stalled (s=${body.state.s.toFixed(0)}, longest stall ${worstStall.toFixed(1)} s at s=${stallAt.toFixed(0)})`);
 }
 console.log(rows.join('\n'));

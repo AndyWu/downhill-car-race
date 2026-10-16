@@ -3,8 +3,8 @@
 //
 // INPUT (client → host), type 1: 60 Hz frames sent in packets at 30 Hz.
 //   u8 type, u8 nFrames, u16 newest seq, then nFrames × u32 packed frames (newest first).
-//   Each packet carries its 2 new frames + the previous packet's 2 (2-frame redundancy):
-//   20 B × 30 Hz = 600 B/s. Decoded frame = [seq, steer, paddleL, paddleR, handbrake, flags].
+//   Each packet carries its 2 new frames + the previous packet's 2 (2-frame redundancy) and
+//   cumulative per-paddle stroke counters: 22 B × 30 Hz = 660 B/s. Decoded frame = [seq, steer, paddleL, paddleR, handbrake, flags].
 //
 // SNAPSHOT (host → clients, 30 Hz), type 2: see snapshot.js (wire version 3, track-relative).
 //
@@ -54,37 +54,50 @@ export function decodeInputFrame(f) {
   const flags = f[5] | 0;
   return { seq: f[0], steer: f[1], paddleL: f[2], paddleR: f[3], handbrake: f[4], headlight: !!(flags & FLAG_HEADLIGHT), reverse: !!(flags & FLAG_REVERSE) };
 }
-export const strokeCount = (f, side) => ((f[5] | 0) >> (side ? 5 : 2)) & 7;
+/** Cumulative (mod 256) stroke count of a paddle as of this frame; stored in flags bits 2-9 (L) / 10-17 (R). */
+export const strokeCount = (f, side) => ((f[5] | 0) >> (side ? 10 : 2)) & 255;
+export const withStrokeCounts = (f, cL, cR) => { f[5] = ((f[5] | 0) & 3) | ((cL & 255) << 2) | ((cR & 255) << 10); return f; };
 
-/** One frame → u32: steer int8 | pL<<8 | pR<<12 | hb<<16 | flags(8 bit: light, reverse, cntL×3, cntR×3)<<20 */
+/** One frame → u32: steer int8 | pL<<8 | pR<<12 | hb<<16 | light<<20 | reverse<<21 */
 function frameToU32(f) {
-  return ((q8(f[1]) & 255) | (q4(f[2]) << 8) | (q4(f[3]) << 12) | (q4(f[4]) << 16) | (((f[5] | 0) & 255) << 20)) >>> 0;
+  return ((q8(f[1]) & 255) | (q4(f[2]) << 8) | (q4(f[3]) << 12) | (q4(f[4]) << 16) | (((f[5] | 0) & 3) << 20)) >>> 0;
 }
 function u32ToFrame(u, seq) {
   let st = u & 255; if (st > 127) st -= 256;
-  return Float32Array.of(seq, st / 127, ((u >>> 8) & 15) / 15, ((u >>> 12) & 15) / 15, ((u >>> 16) & 15) / 15, (u >>> 20) & 255);
+  return Float32Array.of(seq, st / 127, ((u >>> 8) & 15) / 15, ((u >>> 12) & 15) / 15, ((u >>> 16) & 15) / 15, (u >>> 20) & 3);
 }
 
 /**
- * INPUT packet v2: u8 type, u8 n, u16 newest seq (low 16 bits), then n × u32 frames for
- * consecutive seqs, newest first → 4 + 4n bytes.
+ * INPUT packet v3: u8 type, u8 n, u16 newest seq (low 16 bits),
+ *   u8 cumulative L strokes, u8 cumulative R strokes (as of the newest frame),
+ *   then n × u32 frames for consecutive seqs, newest first → 6 + 4n bytes.
+ * A stroke = a frame whose paddle impulse is > 0. Older frames' counts are derived by walking
+ * back through the packet, so every decoded frame carries its exact cumulative counts and the
+ * host can replay any stroke whose frames were lost, merged or dropped.
  */
 export function packInputPacket(frames /* newest first, consecutive seqs */) {
   const n = Math.min(frames.length, 255);
-  const buf = new ArrayBuffer(4 + n * 4);
+  const buf = new ArrayBuffer(6 + n * 4);
   const dv = new DataView(buf);
   dv.setUint8(0, MSG.INPUT); dv.setUint8(1, n); dv.setUint16(2, (frames[0]?.[0] ?? 0) & 0xffff, true);
-  for (let i = 0; i < n; i++) dv.setUint32(4 + i * 4, frameToU32(frames[i]), true);
+  dv.setUint8(4, frames[0] ? strokeCount(frames[0], 0) : 0); dv.setUint8(5, frames[0] ? strokeCount(frames[0], 1) : 0);
+  for (let i = 0; i < n; i++) dv.setUint32(6 + i * 4, frameToU32(frames[i]), true);
   return buf;
 }
 /** @param refSeq a recent full seq used to unwrap the 16-bit seq (−1 if none) */
 export function unpackInputPacket(buf, refSeq = -1) {
   const dv = new DataView(buf);
   const n = dv.getUint8(1), s16 = dv.getUint16(2, true);
+  let cL = dv.getUint8(4), cR = dv.getUint8(5);
   let seq = s16;
   if (refSeq >= 0) { let d = (s16 - (refSeq & 0xffff)) & 0xffff; if (d >= 32768) d -= 65536; seq = refSeq + d; }
   const out = [];
-  for (let i = 0; i < n; i++) out.push(u32ToFrame(dv.getUint32(4 + i * 4, true), seq - i));
+  for (let i = 0; i < n; i++) {
+    const f = withStrokeCounts(u32ToFrame(dv.getUint32(6 + i * 4, true), seq - i), cL, cR);
+    out.push(f);
+    if (f[2] > 0) cL = (cL - 1) & 255;
+    if (f[3] > 0) cR = (cR - 1) & 255;
+  }
   return out;
 }
 

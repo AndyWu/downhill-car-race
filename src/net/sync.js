@@ -3,7 +3,7 @@
 //   ctrl (reliable, ordered): JSON lobby/control messages (countdown, truck choices, seed)
 
 import {
-  MSG, INPUT_REDUNDANCY, INPUT_STRIDE, INPUT_HZ, packInputPacket, unpackInputPacket, strokeCount,
+  MSG, INPUT_REDUNDANCY, INPUT_STRIDE, INPUT_HZ, packInputPacket, unpackInputPacket, strokeCount, withStrokeCounts,
   createSnapshotEncoder, createSnapshotDecoder, packPing, packPong, msgType, SNAP_HEADER, SNAP_STRIDE,
 } from './protocol.js';
 
@@ -26,7 +26,9 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
   const lastSeq = new Map();      // host: peerId → last delivered input seq
   let lastTick = -1;              // client: newest snapshot tick delivered
   const history = [];             // client: last input frames, newest first
-  const strokes = [0, 0];         // client: paddle stroke counters (mod 8)
+  const strokes = [0, 0];         // client: cumulative paddle stroke counters (mod 256)
+  const applied = new Map();      // host: peerId → [strokes applied L, R] (mod 256)
+  const lastImpulse = new Map();  // host: peerId → [last non-zero impulse L, R]
   const inputEvery = Math.max(1, Math.round(tickRate / inputHz));
   let unsent = 0;
   const attached = new WeakSet();
@@ -145,10 +147,10 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
       const f = frame.slice(0, INPUT_STRIDE);
       const prev = history[0];
       if (prev && f[0] !== prev[0] + 1) { history.length = 0; unsent = 0; } // seq restarted
-      // 3-bit stroke counters (rising edges) so the host can recover a stroke lost in a gap
-      if (f[2] > 0 && !(prev && prev[2] > 0)) strokes[0] = (strokes[0] + 1) & 7;
-      if (f[3] > 0 && !(prev && prev[3] > 0)) strokes[1] = (strokes[1] + 1) & 7;
-      f[5] = ((f[5] | 0) & 3) | (strokes[0] << 2) | (strokes[1] << 5);
+      // cumulative stroke counters: every frame with a paddle impulse is one stroke
+      if (f[2] > 0) strokes[0] = (strokes[0] + 1) & 255;
+      if (f[3] > 0) strokes[1] = (strokes[1] + 1) & 255;
+      withStrokeCounts(f, strokes[0], strokes[1]);
       history.unshift(f);
       if (history.length > INPUT_REDUNDANCY) history.length = INPUT_REDUNDANCY;
       if (++unsent < inputEvery) return;
@@ -183,22 +185,39 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
         if (w.n >= 60) { if (w.min >= 2 && q.length >= 2) { merge(2); stats.inputsTrimmed = (stats.inputsTrimmed || 0) + 1; } w.n = 0; w.min = Infinity; }
         depthWin.set(id, w);
       }
+      // Strokes are applied from the cumulative counters, not from the frame's own impulse:
+      // every stroke the client made is applied exactly once, even if its frame was lost,
+      // merged or trimmed (one per tick; a backlog drains over the following ticks).
+      const applyStrokes = (f, src) => {
+        let ap = applied.get(id);
+        const li = lastImpulse.get(id) || [1, 1];
+        if (!ap) { ap = [(strokeCount(src, 0) - (src[2] > 0 ? 1 : 0)) & 255, (strokeCount(src, 1) - (src[3] > 0 ? 1 : 0)) & 255]; applied.set(id, ap); }
+        for (const side of [0, 1]) {
+          if (src[2 + side] > 0) li[side] = src[2 + side];
+          const due = (strokeCount(src, side) - ap[side]) & 255;
+          if (due > 0 && due < 128) {
+            if (!(src[2 + side] > 0)) stats.strokesRecovered = (stats.strokesRecovered || 0) + 1;
+            f[2 + side] = src[2 + side] > 0 ? src[2 + side] : li[side];
+            ap[side] = (ap[side] + 1) & 255;
+          } else f[2 + side] = 0;
+        }
+        lastImpulse.set(id, li);
+        return f;
+      };
       if (q && q.length) {
         const f = q.shift();
         const prevF = lastTaken.get(id);
-        if (prevF && f[0] > prevF[0] + 1) { // frames lost for good: re-apply strokes we can prove were missed
-          for (const side of [0, 1]) {
-            const missed = (strokeCount(f, side) - strokeCount(prevF, side) - (f[2 + side] > 0 ? 1 : 0)) & 7;
-            if (missed > 0 && missed < 4) { f[2 + side] = Math.max(f[2 + side], 1); stats.strokesRecovered = (stats.strokesRecovered || 0) + 1; }
-          }
-          stats.inputsLost = (stats.inputsLost || 0) + (f[0] - prevF[0] - 1);
-        }
-        consumed.set(id, f[0]); lastTaken.set(id, f);
+        if (prevF && f[0] > prevF[0] + 1) stats.inputsLost = (stats.inputsLost || 0) + (f[0] - prevF[0] - 1);
+        lastTaken.set(id, f.slice());
+        consumed.set(id, f[0]);
+        applyStrokes(f, lastTaken.get(id));
         return { frame: f, seq: f[0], repeated: false };
       }
       const last = lastTaken.get(id);
       if (!last) { consumed.set(id, consumed.get(id) ?? -1); return null; }
-      const rep = last.slice(); rep[2] = 0; rep[3] = 0;
+      const rep = last.slice();
+      const src = last.slice(); src[2] = 0; src[3] = 0; // the repeated frame's own stroke was already applied
+      applyStrokes(rep, src);                             // …but a backlog of missed strokes still drains
       stats.inputsRepeated = (stats.inputsRepeated || 0) + 1;
       return { frame: rep, seq: last[0], repeated: true };
     },
