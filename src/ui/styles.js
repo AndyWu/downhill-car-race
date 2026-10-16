@@ -95,7 +95,10 @@ export const CSS = `
 .sbd-rank { position:absolute; pointer-events:none; opacity:0; transition: opacity .3s; top: calc(var(--sat) + 1.6*var(--u)); left: calc(var(--sal) + 2*var(--u)); padding: calc(.6*var(--u)) calc(1.8*var(--u)) calc(.8*var(--u)); border-radius: calc(1.2*var(--u));
   background: rgba(40,20,8,.4); border: .25vmin dashed rgba(246,242,228,.45); color: var(--chalk); font-family: var(--hand); font-size: calc(4.2*var(--u)); line-height:1; text-shadow: 0 0 .5vmin rgba(255,255,255,.35), .15vmin .15vmin 0 rgba(0,0,0,.5); transform: rotate(-2deg); filter: url(#sbd-rough); }
 .sbd-rank.on { opacity: 1; }
-.sbd-horn { position:absolute; top: calc(var(--sat) + 1.4*var(--u)); left: 50%; transform: translateX(-50%); width: calc(7*var(--u)); height: calc(4.6*var(--u)); padding: calc(.6*var(--u)); border: none; border-radius: calc(1.2*var(--u)); background: rgba(20,14,8,.32); color: rgba(255,244,220,.72); cursor: pointer; touch-action: none; }
+.sbd-horn { position:absolute; pointer-events:auto; top: calc(var(--sat) + 1.4*var(--u)); left: 50%; transform: translateX(-50%); width: calc(7*var(--u)); height: calc(4.6*var(--u)); padding: calc(.6*var(--u)); border: none; border-radius: calc(1.2*var(--u)); background: rgba(20,14,8,.32); color: rgba(255,244,220,.72); cursor: pointer; touch-action: none; }
+.sbd-view { position:absolute; pointer-events:auto; top: calc(var(--sat) + 1.4*var(--u)); left: calc(50% + 4.6*var(--u)); width: calc(6*var(--u)); height: calc(4.6*var(--u)); padding: calc(.6*var(--u)); border: none; border-radius: calc(1.2*var(--u)); background: rgba(20,14,8,.32); color: rgba(255,244,220,.72); cursor: pointer; touch-action: none; }
+.sbd-view-lbl { position:absolute; top: 105%; left: 50%; transform: translateX(-50%); white-space: nowrap; font-family: var(--hand); font-size: calc(1.8*var(--u)); color: var(--chalk); opacity: 0; transition: opacity .3s; text-shadow: 0 1px 2px #000; }
+.sbd-view.show .sbd-view-lbl { opacity: .9; }
 .sbd-horn.hit { background: rgba(240,200,90,.45); color: #fff; }
 .sbd-rank b { font-size: 1.35em; font-family: var(--stencil); letter-spacing:.04em; }
 .sbd-rank span { font-size: .75em; opacity:.85; margin-left:.1em; }

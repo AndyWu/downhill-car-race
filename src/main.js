@@ -130,7 +130,7 @@ async function boot() {
   // ---- game state ----
   const game = {
     state: { mode: 'title', raceTime: 0, countdown: 0, finished: false, finishTime: 0, place: 0, speed: 0, s: 0, truck: P.truck % TRUCKS.length, role: 'solo', paused: false, trial: true, quality: P.q },
-    world, vehicles: [], input, scene, camera, renderer, ui: null, lobby: null, sync: null,
+    world, vehicles: [], input, audio, scene, camera, renderer, ui: null, lobby: null, sync: null,
     setDebugInput: (i) => input.setDebugInput(i),
     teleport: (s, speed = 0) => teleport(s, speed),
     advance: (sec) => advance(sec),
@@ -286,6 +286,7 @@ async function boot() {
     }
     chaseT = null; lastRespawns = 0;
     cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam });
+    setView(params.get('cam') || savedView());
     const cd = o.countdown ?? 3;
     Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });
     mp.goAtLocal = o.goAtLocal || 0; mp.results = []; playerFinishT = null; lastFinishedCount = 0; finishRefresh = 0;
@@ -503,6 +504,7 @@ async function boot() {
       onFamilyPass: onFamilyPass,
       onFamilyPassAction: onFamilyPass,
       onHonk: () => { if (input && input.honk) input.honk(); },
+      onView: () => cycleView(),
       onPause: () => { if (game.state.role === 'solo') game.state.paused = true; },
       onResume: () => { game.state.paused = false; },
       onQuit: () => goTitle(),
@@ -551,6 +553,20 @@ async function boot() {
 
   // horns: audio.honk(truckId, null) for the player's own car, (truckId, group) for everyone else (spatialised)
   const HONK_BIT = (netMod && netMod.SNAP_EVENTS && netMod.SNAP_EVENTS.HONK) || 0;
+  // camera views (cockpit / hood / chase / far / side): V key or the camera button; remembered between races
+  function savedView() { try { return localStorage.getItem('sbd-view') || 'cockpit'; } catch (e) { return 'cockpit'; } }
+  function setView(name) {
+    if (!cockpit) return;
+    cockpit.setMode(name);
+    if (playerV && playerV.parts && playerV.parts.driver) playerV.parts.driver.visible = cockpit.mode !== 'cockpit';
+    try { localStorage.setItem('sbd-view', cockpit.mode); } catch (e) {}
+    if (ui && ui.setView) safe(() => ui.setView(cockpit.mode), 'ui.setView');
+  }
+  function cycleView() {
+    if (!cockpit || !cockpit.views) return;
+    const vw = cockpit.views, i = vw.indexOf(cockpit.mode);
+    setView(vw[(i + 1) % vw.length]);
+  }
   function honkCar(v) {
     v.honkTick = true;
     if (audio && audio.honk) safe(() => audio.honk(v.spec.id, v.isPlayer ? null : v.group), 'audio.honk');
@@ -575,6 +591,7 @@ async function boot() {
       const inp = input.read(STEP);
       if (cd > 0) { inp.paddleL = inp.paddleR = 0; }
       if (inp.honk) honkCar(playerV);
+      if (inp.view) cycleView();
       frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
       playerV.lastInp = inp;
       inp.draft = 0;
@@ -595,6 +612,7 @@ async function boot() {
         if (cd > 0) { inp.handbrake = 1; inp.paddleL = inp.paddleR = 0; }
         if (v.finished) { inp = { ...inp, handbrake: 0.7, paddleL: 0, paddleR: 0 }; }
         if (inp.honk) honkCar(v);
+        if (inp.view) cycleView();
         frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
       } else if (v.kind === 'remote') {
         inp = remoteInput(v.slot);
@@ -732,7 +750,7 @@ async function boot() {
     }
     if (playerV && cockpit) {
       const s = playerV.body.state;
-      if (cockpit.mode === 'chase') {
+      if (cockpit.mode === 'chase' && P.cam === 'chase') {
         // debug chase view: follow the player; while the player sits still and the pack is well ahead, follow the leader instead
         let lead = null;
         for (const v of game.vehicles) if (!lead || v.body.state.s > lead.body.state.s) lead = v;

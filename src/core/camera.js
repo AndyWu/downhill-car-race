@@ -1,4 +1,4 @@
-// First-person cockpit camera + cockpit part animation (no HUD). Also an optional chase camera for debugging.
+// First-person cockpit camera + cockpit part animation (no HUD). Plus outside views: hood, chase, far chase and side (cycled with V / the camera button).
 import * as THREE from 'three';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -30,7 +30,7 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
     gear += ((state.reverse ? 1 : 0) - gear) * Math.min(1, dt * 12);
     if (parts.gearLever) parts.gearLever.rotation.x = base.gearLever.x + gear * 0.55 - 0.15;
 
-    if (camMode === 'chase') return chase(dt, state);
+    if (camMode !== 'cockpit') return outside(dt, state);
 
     // ---- head motion: spring driven by vertical / lateral accelerations ----
     vel.copy(state.velocity);
@@ -62,26 +62,39 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
     camera.quaternion.copy(_gq).multiply(_lq);
   }
 
+  // outside views. back/up = offset behind/above the cart, side = offset to the right, look = point looked at
+  // (metres ahead of the cart / above it), stiff = follow stiffness. 'hood' sits on the nose, low and fast.
+  const VIEWS = {
+    hood:  { back: -1.25, up: 0.62, side: 0, aheadLook: 12, lookUp: 0.3, stiff: 40 },
+    chase: { back: 5.2, up: 2.3, side: 0, aheadLook: 0, lookUp: 0.7, stiff: 6 },
+    far:   { back: 10.5, up: 4.6, side: 0, aheadLook: 4, lookUp: 0.5, stiff: 4 },
+    side:  { back: 1.2, up: 1.1, side: 4.2, aheadLook: 1.5, lookUp: 0.5, stiff: 5 },
+  };
   // chase target: the player's group by default; main may point it at the pack leader while the player sits still
   let chaseTarget = group;
-  const _cf = new THREE.Vector3(), _cw = new THREE.Vector3(), _lookP = new THREE.Vector3();
-  function chase(dt, state) {
+  const _cf = new THREE.Vector3(), _cr = new THREE.Vector3(), _cw = new THREE.Vector3(), _lookP = new THREE.Vector3();
+  const _lookS = new THREE.Vector3(), lookInit = { v: false };
+  function outside(dt, state) {
+    const V = VIEWS[camMode] || VIEWS.chase;
     const tg = chaseTarget || group;
     tg.updateMatrixWorld(true);
     _cf.set(0, 0, -1).applyQuaternion(tg.quaternion); _cf.y = 0;
     if (_cf.lengthSq() < 1e-4) _cf.set(0, 0, -1); else _cf.normalize();
-    _cw.copy(tg.position).addScaledVector(_cf, -5.2); _cw.y += 2.3;
-    if (!chaseInit.v) { chasePos.copy(_cw); chaseInit.v = true; }
-    // critically damped-ish exponential follow; a big jump (teleport / target switch / long advance() step) snaps instead of crawling
-    if (chasePos.distanceToSquared(_cw) > 400 || dt >= 0.09) chasePos.copy(_cw); else chasePos.lerp(_cw, 1 - Math.exp(-dt * 6));
+    _cr.set(-_cf.z, 0, _cf.x); // right of travel
+    _cw.copy(tg.position).addScaledVector(_cf, -V.back).addScaledVector(_cr, V.side); _cw.y += V.up;
+    _lookP.copy(tg.position).addScaledVector(_cf, V.aheadLook); _lookP.y += V.lookUp;
+    if (!chaseInit.v) { chasePos.copy(_cw); _lookS.copy(_lookP); chaseInit.v = true; }
+    // exponential follow; a big jump (teleport / target switch / long advance() step) snaps instead of crawling
+    if (chasePos.distanceToSquared(_cw) > 400 || dt >= 0.09) { chasePos.copy(_cw); _lookS.copy(_lookP); }
+    else { const a = 1 - Math.exp(-dt * V.stiff); chasePos.lerp(_cw, a); _lookS.lerp(_lookP, Math.min(1, a * 2)); }
     camera.position.copy(chasePos);
-    _lookP.set(tg.position.x, tg.position.y + 0.7, tg.position.z);
-    camera.lookAt(_lookP);
+    camera.lookAt(_lookS);
   }
 
   return {
     update,
-    setMode(mm) { camMode = mm; chaseInit.v = false; },
+    setMode(mm) { camMode = mm === 'cockpit' || VIEWS[mm] ? mm : 'cockpit'; chaseInit.v = false; },
+    views: ['cockpit', 'hood', 'chase', 'far', 'side'],
     setChaseTarget(g) { chaseTarget = g || group; },
     get mode() { return camMode; },
     dispose() {

@@ -40,6 +40,7 @@ export function createInput(dom) {
       else if (k === 'r') S.reverse = !S.reverse;
       else if (k === 'c') calibrate();
       else if (k === 'h') S.honkPend = true;
+      else if (k === 'v') S.viewPend = true;
     }
     S.keys.add(k);
     if (' arrowleft arrowright arrowup arrowdown'.split(' ').includes(k) || k === ' ') e.preventDefault();
@@ -218,6 +219,7 @@ export function createInput(dom) {
     let hbTarget = Math.max(S.touchHB, S.keyHB);
     out.headlight = S.headlight; out.reverse = S.reverse;
     out.honk = !!S.honkPend; S.honkPend = false;
+    out.view = !!S.viewPend; S.viewPend = false;
     if (S.debug) {
       const d = S.debug;
       if (d.steer != null) out.steer = d.steer;
@@ -242,6 +244,7 @@ export function createInput(dom) {
     setEnabled(v) { S.enabled = !!v; if (!v) { ptrs.clear(); S.touchHB = 0; } },
     setDebugInput(i) { S.debug = i ? { ...i } : null; S.dbgL = S.dbgR = 0; },
     honk() { S.honkPend = true; },
+    nextView() { S.viewPend = true; },
     setHeadlight(v) { S.headlight = !!v; }, setReverse(v) { S.reverse = !!v; },
     enableMouseAsTouch(v = true) { S.mouseTouch = v; },
     onOrientationChange(cb) { S.orientCbs.push(cb); },

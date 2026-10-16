@@ -192,7 +192,12 @@ export function createUI(root, opts = {}) {
   // horn: a visible, translucent bulb-horn button at the top-centre (also the H key)
   const hornBtn = h('button', { class: 'sbd-horn', 'aria-label': 'Honk', html: '<svg viewBox="0 0 64 40" width="100%" height="100%"><path d="M6 14h10l26-10v32L16 26H6z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><circle cx="52" cy="20" r="3" fill="currentColor"/><path d="M56 9q6 11 0 22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>' });
   hornBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); hornBtn.classList.add('hit'); setTimeout(() => hornBtn.classList.remove('hit'), 160); cb('onHonk'); });
-  mk('race', '', glyphs, pegBtn, toast, rankEl, hornBtn);
+  // camera view button (cycles cockpit / hood / chase / far / side; also the V key)
+  const viewBtn = h('button', { class: 'sbd-view', 'aria-label': 'Change view', html: '<svg viewBox="0 0 64 40" width="100%" height="100%"><rect x="6" y="10" width="36" height="24" rx="4" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M42 18l14-8v24l-14-8z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><circle cx="24" cy="22" r="5" fill="currentColor"/></svg>' });
+  const viewLbl = h('span', { class: 'sbd-view-lbl' });
+  viewBtn.appendChild(viewLbl);
+  viewBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); cb('onView'); });
+  mk('race', '', glyphs, pegBtn, toast, rankEl, hornBtn, viewBtn);
   paintWx();
 
   const pauseScr = mk('pause', 'sbd-center', h('div', { class: 'sbd-ply sbd-pause' }, h('h2', {}, 'Paused'),
@@ -327,6 +332,12 @@ export function createUI(root, opts = {}) {
     showGyroButton(b) { gyroBtn.style.display = b ? '' : 'none'; },
     setFamilyPass(textOrNode) { passBody.replaceChildren(textOrNode.nodeType ? textOrNode : document.createTextNode(textOrNode)); },
     /** Top-left chalk rank during the race, e.g. setRank(3, 10) -> "3/10". Hidden until first call and outside races. */
+    /** Shows the current camera view name briefly under the camera button. */
+    setView(name) {
+      const names = { cockpit: 'Cockpit', hood: 'Hood', chase: 'Chase', far: 'Far', side: 'Side' };
+      viewLbl.textContent = names[name] || name; viewBtn.classList.add('show'); clearTimeout(viewBtn._t);
+      viewBtn._t = setTimeout(() => viewBtn.classList.remove('show'), 1400);
+    },
     setRank(place, total) {
       if (!place) { rankEl.classList.remove('on'); return; }
       rankEl.firstChild.textContent = String(place); rankEl.lastChild.textContent = `/${total || ''}`;
