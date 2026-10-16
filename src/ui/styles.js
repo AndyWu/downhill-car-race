@@ -53,6 +53,8 @@ export const CSS = `
 
 /* title screen */
 .sbd-title-screen { align-items: center; justify-content: center; gap: calc(5*var(--u)); }
+.sbd-leftcol { width: min(52%, calc(62*var(--u))); display:flex; flex-direction:column; gap: calc(2*var(--u)); }
+.sbd-leftcol .sbd-sign { width:100%; }
 .sbd-sign { padding: calc(3.2*var(--u)) calc(4.5*var(--u)); text-align: center; transform: rotate(-2deg); width: min(52%, 62*var(--u)); }
 .sbd-sign h1 { font-size: calc(8.6*var(--u)); }
 .sbd-sign h1 span { display:block; font-size: calc(5.2*var(--u)); color: var(--ink); letter-spacing: .3em; text-shadow: none; }
@@ -71,13 +73,30 @@ export const CSS = `
 .sbd-btn.green { background: ${TEX.barn}, linear-gradient(180deg, #4f9448, #2f6a2b); }
 .sbd-btn[disabled] { opacity: .45; filter: grayscale(.6); pointer-events: none; }
 .sbd-btn.small { font-size: calc(2.4*var(--u)); padding: calc(1*var(--u)) calc(2*var(--u)); }
-.sbd-gyro { position: absolute; left: 50%; bottom: calc(var(--sab) + 2*var(--u)); transform: translateX(-50%); font-size: calc(2.6*var(--u)); text-align: center; }
+.sbd-gyro { position: absolute; right: calc(var(--sar) + 3*var(--u)); bottom: calc(var(--sab) + 6*var(--u)); width: min(36%, calc(42*var(--u))); font-size: calc(2.1*var(--u)); text-align: center; min-height:44px; padding: calc(.7*var(--u)); }
 .sbd-gyro.ok { opacity: .8; border-color: var(--paint-green); }
 
 .sbd-actions { flex:0 0 auto; display:flex; gap: calc(1*var(--u)); flex-wrap:wrap; justify-content:center; max-height: calc(12*var(--u)); overflow:auto; }
 .sbd-actions:empty { display:none; }
 .sbd-offline { position:absolute; right: calc(var(--sar) + 3*var(--u)); bottom: calc(var(--sab) + 2.4*var(--u)); font-size: calc(2.3*var(--u)); color: var(--chalk); opacity:0; transform: rotate(-2deg); text-shadow: 0 0 .5vmin rgba(255,255,255,.35); transition: opacity .5s; pointer-events:none; }
 .sbd-offline.on { opacity:.85; }
+/* weather chooser */
+.sbd-weather { padding: calc(1.4*var(--u)) calc(2.4*var(--u)); display:flex; flex-direction:column; gap: calc(.9*var(--u)); transform: rotate(.6deg); }
+.sbd-weather::before, .sbd-weather::after { display:none; }
+.sbd-wrow { display:flex; align-items:center; gap: calc(.6*var(--u)); flex-wrap:nowrap; }
+.sbd-wlab { font-family: var(--stencil); text-transform:uppercase; letter-spacing:.1em; font-size: calc(1.55*var(--u)); letter-spacing:.06em; flex:none; width: calc(8.6*var(--u)); color:#5a3a1c; }
+.sbd-chip { appearance:none; font: inherit; cursor:pointer; min-height:44px; flex:1 1 auto; min-width:0; white-space:nowrap; padding: 0 calc(.6*var(--u)); font-size: calc(1.75*var(--u)); color: var(--ink); background: rgba(255,248,225,.35); border: calc(.3*var(--u)) dashed rgba(42,26,14,.55); border-radius: calc(.8*var(--u)); touch-action: manipulation; }
+.sbd-chip.on { background: var(--paint-red); color: var(--chalk); border-style: solid; border-color: #2a170a; text-shadow: .12vmin .12vmin 0 rgba(0,0,0,.5); }
+.sbd-weather.compact { padding: calc(.7*var(--u)) calc(1.4*var(--u)); gap: calc(.4*var(--u)); transform:none; }
+.sbd-weather.compact .sbd-wlab { display:none; }
+.sbd-weather.compact .sbd-chip { min-height:40px; padding: 0 calc(.8*var(--u)); font-size: calc(1.7*var(--u)); }
+.sbd-foot .sbd-btn { white-space:nowrap; }
+/* rank (race, top-left) */
+.sbd-rank { position:absolute; pointer-events:none; opacity:0; transition: opacity .3s; top: calc(var(--sat) + 1.6*var(--u)); left: calc(var(--sal) + 2*var(--u)); padding: calc(.6*var(--u)) calc(1.8*var(--u)) calc(.8*var(--u)); border-radius: calc(1.2*var(--u));
+  background: rgba(40,20,8,.4); border: .25vmin dashed rgba(246,242,228,.45); color: var(--chalk); font-family: var(--hand); font-size: calc(4.2*var(--u)); line-height:1; text-shadow: 0 0 .5vmin rgba(255,255,255,.35), .15vmin .15vmin 0 rgba(0,0,0,.5); transform: rotate(-2deg); filter: url(#sbd-rough); }
+.sbd-rank.on { opacity: 1; }
+.sbd-rank b { font-size: 1.35em; font-family: var(--stencil); letter-spacing:.04em; }
+.sbd-rank span { font-size: .75em; opacity:.85; margin-left:.1em; }
 /* garage */
 .sbd-garage { flex-direction: column; gap: calc(1.6*var(--u)); }
 .sbd-head { display:flex; align-items:center; justify-content:space-between; gap: calc(2*var(--u)); }

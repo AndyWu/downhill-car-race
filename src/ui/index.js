@@ -72,12 +72,31 @@ export function createUI(root, opts = {}) {
     const r = await cb('onGyro'); api.setGyroState(r === false ? 'denied' : 'granted');
   } }, 'Tap to hold the wheel');
   const btn = (label, cls, fn, sub) => h('button', { class: `sbd-btn ${cls || ''}`, onClick: (e) => { tryLock(); fn(e); } }, label, sub ? h('small', {}, sub) : null);
+  // ---------- weather chooser (title + garage), persisted ----------
+  const WEATHERS = [['clear', 'Clear'], ['fog', 'Foggy'], ['snow', 'Snow'], ['rain', 'Heavy Rain'], ['storm', 'Stormy']];
+  const TIMES = [['day', 'Day'], ['dusk', 'Dusk'], ['night', 'Night']];
+  let wx = { weather: 'clear', time: 'day' };
+  try { const v = JSON.parse(localStorage.getItem('sbd-weather') || 'null'); if (v && WEATHERS.some((w) => w[0] === v.weather) && TIMES.some((t) => t[0] === v.time)) wx = { weather: v.weather, time: v.time }; } catch (e) {}
+  const wxChips = [];
+  function paintWx() { for (const c of wxChips) c.el.classList.toggle('on', wx[c.kind] === c.id); }
+  function setWx(next, fire) {
+    wx = { ...wx, ...next }; paintWx();
+    try { localStorage.setItem('sbd-weather', JSON.stringify(wx)); } catch (e) {}
+    if (fire) cb('onWeather', { ...wx });
+  }
+  function makeWeather(compact) {
+    const row = (kind, list, label) => h('div', { class: 'sbd-wrow' }, h('span', { class: 'sbd-wlab' }, label),
+      ...list.map(([id, text]) => { const el = h('button', { class: 'sbd-chip', 'aria-label': text, onClick: () => { tryLock(); setWx({ [kind]: id }, true); } }, text); wxChips.push({ el, kind, id }); return el; }));
+    return h('div', { class: `sbd-ply sbd-weather${compact ? ' compact' : ''}` }, row('weather', WEATHERS, 'Weather'), row('time', TIMES, 'Time'));
+  }
   const offlineMark = h('div', { class: 'sbd-offline' }, '\u2713 ready to race offline');
   mk('title', 'sbd-barn sbd-title-screen',
-    h('div', { class: 'sbd-ply sbd-sign' },
-      h('h1', { class: 'sbd-title' }, 'Soap Box', h('span', {}, 'DERBY')),
-      h('div', { class: 'sbd-stripe' }),
-      h('p', {}, 'Homemade racers · one big hill · 3.2 km of gravity')),
+    h('div', { class: 'sbd-leftcol' },
+      h('div', { class: 'sbd-ply sbd-sign' },
+        h('h1', { class: 'sbd-title' }, 'Soap Box', h('span', {}, 'DERBY')),
+        h('div', { class: 'sbd-stripe' }),
+        h('p', {}, 'Homemade racers · one big hill · 3.2 km of gravity')),
+      makeWeather(false)),
     h('div', { class: 'sbd-menu' },
       btn('Solo Race', 'primary', () => cb('onStartSolo'), null),
       btn('Host Family Race', '', () => cb('onHost'), 'up to 6 on one hotspot'),
@@ -108,7 +127,7 @@ export function createUI(root, opts = {}) {
       h('div', { class: 'sbd-preview' }, slot, h('div', { class: 'sbd-floor' }), gNum),
       h('div', { class: 'sbd-ply sbd-card' }, gName, gDesc, gStats),
       btn('›', 'sbd-arrow', () => api.selectTruck(gi + 1))),
-    h('div', { class: 'sbd-foot' }, gDots, btn('Pick this one', 'green', () => { cb('onSelectTruck', o.trucks[gi], gi); api.show('title'); })));
+    h('div', { class: 'sbd-foot' }, gDots, makeWeather(true), btn('Pick this one', 'green', () => { cb('onSelectTruck', o.trucks[gi], gi); api.show('title'); })));
   // swipe in preview
   { let x0 = null; slot.parentElement.addEventListener('pointerdown', (e) => { x0 = e.clientX; });
     slot.parentElement.addEventListener('pointerup', (e) => { if (x0 == null) return; const dx = e.clientX - x0; x0 = null; if (Math.abs(dx) > 40) api.selectTruck(gi + (dx < 0 ? 1 : -1)); }); }
@@ -168,7 +187,9 @@ export function createUI(root, opts = {}) {
     h('div', { class: 'g-hb', html: GLYPHS.hb }), h('div', { class: 'g-hl', html: GLYPHS.hl }), h('div', { class: 'g-gear', html: GLYPHS.gear }));
   const pegBtn = h('button', { class: 'sbd-peg', 'aria-label': 'Pause', html: peg, onClick: () => { api.show('pause'); cb('onPause'); } });
   const toast = h('div', { class: 'sbd-toast' });
-  mk('race', '', glyphs, pegBtn, toast);
+  const rankEl = h('div', { class: 'sbd-rank', 'aria-hidden': 'true' }, h('b', {}, '-'), h('span', {}, '/-'));
+  mk('race', '', glyphs, pegBtn, toast, rankEl);
+  paintWx();
 
   const pauseScr = mk('pause', 'sbd-center', h('div', { class: 'sbd-ply sbd-pause' }, h('h2', {}, 'Paused'),
     btn('Keep rolling', 'green', () => { api.show('race'); cb('onResume'); }),
@@ -230,7 +251,7 @@ export function createUI(root, opts = {}) {
       screens.race.classList.toggle('on', name === 'race' || name === 'pause');
       el.style.pointerEvents = 'none';
       if (name === 'race' && leaving !== 'pause') {
-        raceT0 = performance.now(); stroke = false;
+        raceT0 = performance.now(); stroke = false; rankEl.classList.remove('on');
         clearTimeout(gTimer); clearTimeout(idleTimer); clearTimeout(safetyTimer); glyphs.classList.remove('faint'); glyphOn();
         safetyTimer = setTimeout(() => { glyphOff(); armIdle(); }, 6000); // if main never calls raceStarted()
         armIdle();
@@ -296,6 +317,16 @@ export function createUI(root, opts = {}) {
     },
     showGyroButton(b) { gyroBtn.style.display = b ? '' : 'none'; },
     setFamilyPass(textOrNode) { passBody.replaceChildren(textOrNode.nodeType ? textOrNode : document.createTextNode(textOrNode)); },
+    /** Top-left chalk rank during the race, e.g. setRank(3, 10) -> "3/10". Hidden until first call and outside races. */
+    setRank(place, total) {
+      if (!place) { rankEl.classList.remove('on'); return; }
+      rankEl.firstChild.textContent = String(place); rankEl.lastChild.textContent = `/${total || ''}`;
+      rankEl.classList.add('on');
+    },
+    /** Current {weather:'clear'|'fog'|'snow'|'rain'|'storm', time:'day'|'dusk'|'night'}. */
+    getWeather() { return { ...wx }; },
+    /** Set programmatically (e.g. from URL params / host message); does not fire onWeather unless fire=true. */
+    setWeather(next, fire = false) { setWx(next || {}, fire); },
     notifyInput: noteInput,
     /** Optional: main can call on the player's first paddle stroke (UI also detects drags/keys itself). */
     notifyStroke: noteStroke,

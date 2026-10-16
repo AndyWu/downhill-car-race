@@ -98,6 +98,19 @@ function cheer(r, dur) {
   const loopFade = Math.floor(0.25 * BANK_SR); for (let i = 0; i < loopFade; i++) { const g = i / loopFade; out[i] *= g; out[n - 1 - i] *= g; }
   return norm(out, 0.8, 0.0);
 }
+function thunder(r, dur) {
+  const n = mk(dur).length, noise = new Float32Array(n); for (let i = 0; i < n; i++) noise[i] = r() * 2 - 1;
+  const rumble = biquad(biquad(noise, 'lp', 220 + r() * 120, 0.9), 'lp', 160, 0.7);
+  const crack = biquad(noise, 'bp', 1800, 0.7);
+  const out = new Float32Array(n); let bump = 0;
+  const bumps = Array.from({ length: 6 }, () => [r() * 0.55 * n, 0.4 + r() * 0.6, (0.15 + r() * 0.4) * BANK_SR]);
+  for (let i = 0; i < n; i++) {
+    const t = i / BANK_SR; let env = Math.exp(-t / (dur * 0.33)) * Math.min(1, t * 8);
+    for (const [c, a, w] of bumps) env += a * 0.5 * Math.exp(-(((i - c) / w) ** 2)) * Math.exp(-t / (dur * 0.5));
+    out[i] = rumble[i] * env * 5 + (t < 0.35 ? crack[i] * Math.exp(-t / 0.08) * 0.9 : 0);
+  }
+  return norm(out, 0.85, 0.3);
+}
 function cowbell(r) {
   const out = mk(1.1);
   mode(out, 0, 562, 0.55, 1, 0); mode(out, 0, 845, 0.35, 0.85, 1); mode(out, 0, 1130, 0.18, 0.3, 2); mode(out, 0, 1690, 0.1, 0.15, 3); mode(out, 0, 2400, 0.05, 0.1, 0);
@@ -119,6 +132,7 @@ export function renderBankPCM(seed = 1) {
     drip: V(6, () => splash(r, 0.3, 10 + (r() * 8 | 0), 0.4)),
     bolt: V(8, () => bolt(r, 2 + (r() * 3 | 0))),
     tick: V(5, () => bolt(r, 1, 0.07)),
+    thunder: V(2, () => thunder(r, 4.5)),
     cheer: [cheer(r, 4)],
     cowbell: [cowbell(r)],
   };
