@@ -3,6 +3,7 @@
 export const ZONES = {
   handbrake: { x0: 0, x1: 0.26, y0: 0.58, y1: 1 },   // lower-left: press & drag down
   headlight: { x0: 0.66, x1: 0.80, y0: 0.58, y1: 1 }, // lower-right: tap
+  honk: { x0: 0.42, x1: 0.58, y0: 0, y1: 0.16 },      // top-centre: tap = horn
   gear: { x0: 0.80, x1: 1, y0: 0.50, y1: 1 },        // lower-right corner: drag up = forward, down = reverse
 };
 
@@ -25,7 +26,7 @@ export function createInput(dom) {
     lastT: 0, orientCbs: [], stallMs: 0, frames: 0, ring: [],
   };
   const DEBUG = /[?&]debug=input/.test(location.search);
-  const out = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false };
+  const out = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false, honk: false };
   const DEAD = 3 * Math.PI / 180, FULL = 45 * Math.PI / 180;
 
   // ---------- keyboard ----------
@@ -38,6 +39,7 @@ export function createInput(dom) {
       else if (k === 'l') S.headlight = !S.headlight;
       else if (k === 'r') S.reverse = !S.reverse;
       else if (k === 'c') calibrate();
+      else if (k === 'h') S.honkPend = true;
     }
     S.keys.add(k);
     if (' arrowleft arrowright arrowup arrowdown'.split(' ').includes(k) || k === ' ') e.preventDefault();
@@ -106,6 +108,7 @@ export function createInput(dom) {
     if (!S.enabled || e.pointerType === 'mouse' && !S.mouseTouch) { if (DEBUG) console.log('[input] down ignored: enabled=', S.enabled, e.pointerType); return; }
     if (ignoreTarget(e.target)) { if (DEBUG) console.log('[input] down ignored: target', e.target && (e.target.tagName + '.' + e.target.className)); return; }
     const nx = e.clientX / W(), ny = e.clientY / H();
+    if (inZone(ZONES.honk, nx, ny)) { S.honkPend = true; e.preventDefault && e.preventDefault(); return; }
     const p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientY * 0 + e.clientX, y: e.clientY, t0: e.timeStamp, tl: e.timeStamp, role: 'swipe', side: nx < 0.5 ? 'L' : 'R', accum: 0, dir: 0, moved: 0 };
     if (nx < 0.5 && inZone(ZONES.handbrake, nx, ny)) p.role = 'handbrake';
     else if (nx >= 0.5 && inZone(ZONES.gear, nx, ny)) p.role = 'gear';
@@ -214,6 +217,7 @@ export function createInput(dom) {
     // one shared lever curve for touch, keyboard and debug input: the lever travels up at <= 4/s, releases instantly
     let hbTarget = Math.max(S.touchHB, S.keyHB);
     out.headlight = S.headlight; out.reverse = S.reverse;
+    out.honk = !!S.honkPend; S.honkPend = false;
     if (S.debug) {
       const d = S.debug;
       if (d.steer != null) out.steer = d.steer;
@@ -224,6 +228,7 @@ export function createInput(dom) {
       if (d.handbrake != null) hbTarget = d.handbrake;
       if (d.headlight != null) out.headlight = !!d.headlight;
       if (d.reverse != null) out.reverse = !!d.reverse;
+      if (d.honk) out.honk = true;
     }
     S.hbOut = hbTarget <= (S.hbOut || 0) ? clamp(hbTarget, 0, 1) : Math.min(clamp(hbTarget, 0, 1), (S.hbOut || 0) + 4 * dt);
     out.handbrake = S.hbOut;
@@ -236,6 +241,7 @@ export function createInput(dom) {
     noteFrameEnd(ms) { if (ms > 100) S.stallMs += ms - 50; }, read, requestPermissions, calibrate, isLandscape, isTouch,
     setEnabled(v) { S.enabled = !!v; if (!v) { ptrs.clear(); S.touchHB = 0; } },
     setDebugInput(i) { S.debug = i ? { ...i } : null; S.dbgL = S.dbgR = 0; },
+    honk() { S.honkPend = true; },
     setHeadlight(v) { S.headlight = !!v; }, setReverse(v) { S.reverse = !!v; },
     enableMouseAsTouch(v = true) { S.mouseTouch = v; },
     onOrientationChange(cb) { S.orientCbs.push(cb); },
