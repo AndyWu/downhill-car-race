@@ -72,7 +72,7 @@ export const Buster = make({
   perception: { detect: { default: 1 }, minRockRadius: 2.3 }, // only avoids huge rocks (by half-width)
   hazardWeight: { rock: 15, mud: 2.5, water: 2, default: 0 }, hazardMargin: 0.3, hazardStretch: 0.8,
   line: { mode: 'racing', edge: 0.3, pull: 0.02, maxStep: 3, relaxIters: 70 },
-  speed: { mu: 0.85, cornerFactor: 0.92, brakeDecel: 6.5, cap: 9.9, scale: 1.0 },
+  speed: { mu: 0.85, cornerFactor: 0.92, brakeDecel: 6.5, cap: 10.6, scale: 1.0 },
   paddle: { mode: 'furious', cadence: 2.9, strength: 1.0, jitter: 0.04,
     stamina: { drain: 0.05, regen: 0.05, minFactor: 0.7 } },
   brake: { gain: 0.5, dead: 0.7 },
