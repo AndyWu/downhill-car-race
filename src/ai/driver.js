@@ -32,7 +32,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   let side = rng() < 0.5, nextStroke = 0.2, stamina = 1;
   let attentive = false, nextToggle = 0;
   // stuck recovery
-  let launch = null;
+  let launch = null, blockedT = 0, honkReady = 2, honkRoll = 0, trigPrev = false;
   let passSide = 0, passUntil = 0, passStart = 0, passCool = 0;
   let stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0, consec = 0, stuckTotal = 0;
 
@@ -57,12 +57,13 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const sT = clamp(s + Ld, 0, L);
     const eT = plan.offsetAt(sT);
     const hw = plan.widthAt(s) / 2;
+    let passedNow = false;
     if (ahead) {
       const dl = ahead.lateral - self.lateral;
       const slower = (ahead.speed || 0) < speed - 0.1;
       if (P.pass && aheadDs < 16 && Math.abs(dl) < 2.4 && slower && t > passCool) {
         // overtake: pick a side with road to spare and go around instead of sitting behind
-        if (!passSide || t > passUntil) { passSide = ahead.lateral > 0 ? -1 : 1; passStart = t; }
+        if (!passSide || t > passUntil) { passSide = ahead.lateral > 0 ? -1 : 1; passStart = t; passedNow = true; }
         let latPass = ahead.lateral + passSide * 1.9;
         if (Math.abs(latPass) > hw - 1.2) { passSide = -passSide; latPass = ahead.lateral + passSide * 1.9; }
         if (Math.abs(latPass) > hw - 1.2 || t - passStart > 6) { passSide = 0; passCool = t + 4; } // no room / not working: stay put
@@ -203,7 +204,21 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     else if (typeof headlight === 'boolean') hl = headlight;
     else hl = !!(world.isDark || world.timeOfDay === 'dusk' || world.timeOfDay === 'night');
 
+    // ---- horn: when starting an overtake or stuck behind someone; rate limited, personality dependent ----
+    const H = P.honk || { p: 0.3, gap: 10, idle: 0 };
+    const blocked = ahead && aheadDs < 7 && Math.abs(ahead.lateral - self.lateral) < 1.6 && (ahead.speed || 0) < speed + 0.5 && speed < vt - 0.8;
+    blockedT = blocked ? blockedT + dt : 0;
+    const trig = passedNow || blockedT > 0.6;
+    let honk = false;
+    if (t >= honkReady) {
+      if (trig && (!trigPrev || t >= honkRoll)) { honkRoll = t + 3; if (rng() < H.p) honk = true; }
+      else if (H.idle > 0 && rng() < H.idle * dt) honk = true;
+      if (honk) honkReady = t + H.gap * (0.7 + 0.6 * rng());
+    }
+    trigPrev = trig;
+
     return {
+      honk,
       steer: clamp(steer * STEER_SIGN, -1, 1),
       paddleL: side ? 0 : pv,
       paddleR: side ? pv : 0,
@@ -214,6 +229,6 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   }
   return { think, profile: P, plan, get recoveries() { return recoveries; },
     /** seconds continuously below 1.5 m/s (recovery manoeuvres didn't free the car). Host should call body.recover(~8) when needsRescue. */
-    get stuckFor() { return stuckTotal; }, get needsRescue() { return stuckTotal > 6; },
+    get stuckFor() { return stuckTotal; }, get needsRescue() { return stuckTotal > 3.5; },
     clearStuck() { stuckTotal = 0; stuckT = 0; consec = 0; } };
 }
