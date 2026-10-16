@@ -150,11 +150,14 @@ export const CSS = `
 .sbd-reticle b { position:absolute; left:0; right:0; height:.4vmin; background: rgba(242,194,48,.85); box-shadow: 0 0 1vmin var(--paint-yellow); animation: sbd-scan 2s ease-in-out infinite alternate; }
 @keyframes sbd-scan { from { top: 4%; } to { top: 96%; } }
 .sbd-caption { flex: 0 0 auto; font-size: calc(2*var(--u)); text-align:center; color:#4a2e14; max-height: 3.6em; overflow:hidden; overflow-wrap:anywhere; }
-.sbd-seats { min-height:0; overflow:hidden; list-style:none; margin:0; padding:0; display:grid; grid-template-rows: repeat(6, minmax(0,1fr)); gap: calc(.8*var(--u)); }
+.sbd-seats { min-height:0; overflow:hidden; list-style:none; margin:0; padding:0; display:grid; grid-template-rows: repeat(var(--rows, 10), minmax(0,1fr)); gap: calc(.8*var(--u)); }
 .sbd-seat { display:flex; align-items:center; gap: calc(1.2*var(--u)); padding: 0 calc(1.4*var(--u)); border-radius: calc(.8*var(--u)); background: rgba(60,30,10,.18); border: .3vmin dashed rgba(60,30,10,.45); font-size: calc(2.3*var(--u)); min-height: 0; overflow:hidden; white-space:nowrap; }
 .sbd-seat .dot { width: calc(2.6*var(--u)); height: calc(2.6*var(--u)); border-radius:50%; flex:none; background: var(--c, #888); border: .3vmin solid var(--ink); }
 .sbd-seat.human { background: rgba(255,248,225,.65); border-style: solid; border-color: var(--ink); }
 .sbd-seat.ai { opacity:.7; font-style: italic; }
+.sbd-seats.dense { gap: calc(.45*var(--u)); }
+.sbd-seats.dense .sbd-seat { font-size: calc(1.95*var(--u)); padding: 0 calc(1.1*var(--u)); gap: calc(.9*var(--u)); border-radius: calc(.6*var(--u)); }
+.sbd-seats.dense .sbd-seat .dot { width: calc(1.9*var(--u)); height: calc(1.9*var(--u)); }
 .sbd-seat .tag { margin-left:auto; font-size:.7em; font-family: var(--stencil); letter-spacing:.1em; color: var(--paint-green); }
 .sbd-seat.ai .tag { color:#7a5530; }
 .sbd-status { flex:0 0 auto; font-size: calc(2*var(--u)); color:#4a2e14; max-height: 3.2em; overflow:auto; overflow-wrap:anywhere; line-height:1.2; }

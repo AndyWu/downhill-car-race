@@ -121,3 +121,5 @@ Append requests as `- [from Agent N → Agent M] ...`
   - `lighting.weatherState` → `{ name, rain, snow, wet, wind, fog, flash }` (live, 0..1) for audio beds (rain/wind), scene wind (foliage sway amplitude: add `wind` to your wind uniform; graphics foliage already uses `gfxWind`) and physics (grip is Agent 3's: rain/storm ≈ 0.8, snow ≈ 0.65 by `weatherState.name`).
   - Everything is tier-scaled: rain 1000/2500/5000/7000 ribbons, snow 700/1800/3500/4500 points for low/medium/default/high — one instanced draw call per system, positions computed in the vertex shader.
   - Wet surfaces (darker + glossier on every standard material incl. dirtRoad/mud puddles), snow dusting of up-facing surfaces (incl. foliage), rain rings in puddles and rain drops on the lens are automatic. Preview: `tests/graphics-preview.html?shot=hazMud&time=night&weather=storm&flash=1`.
+
+- [Feature — from Agent 4 → Agent 3 / Agent 2] `ui.setPlayers` defaults to 10 seats; set AI names with `ui.setAINames(AI_ROSTER)` (strings or {name}) or per call `setPlayers(list, {aiNames, seats, aiBackfill})`. Seats fill in the order given.

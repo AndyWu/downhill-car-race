@@ -3,7 +3,7 @@ import { CSS } from './styles.js';
 import { createProjector } from './projection.js';
 
 export const AI_NAMES = ['Barnaby', 'Clementine', 'Buster', 'Maeve', 'Ace'];
-const SEAT_COLORS = ['#c63a24', '#2f7bbf', '#f2c230', '#3f7d3a', '#8a4fb0', '#e07a1f'];
+const SEAT_COLORS = ['#c63a24', '#2f7bbf', '#f2c230', '#3f7d3a', '#8a4fb0', '#e07a1f', '#2aa6a0', '#d65a9a', '#8a6a3a', '#6b7a86'];
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 function h(tag, attrs = {}, ...kids) {
@@ -40,6 +40,7 @@ const GLYPHS = {
 };
 
 export function createUI(root, opts = {}) {
+  let aiRoster = AI_NAMES;
   const o = { trucks: [], ...opts };
   const cb = (name, ...a) => { try { return o[name] && o[name](...a); } catch (e) { console.error(`UI callback ${name}`, e); } };
   if (!document.getElementById('sbd-style')) document.head.append(h('style', { id: 'sbd-style' }, CSS));
@@ -295,12 +296,17 @@ export function createUI(root, opts = {}) {
     setLobbyStatus(t) { statusEl.textContent = t || ''; },
     setStartEnabled(b) { startBtn.toggleAttribute('disabled', !b); },
     /** list: [{name, you?, ready?, kind?:'host'|'human'}]; empty seats auto-fill with named AI. */
-    setPlayers(list = [], { seats = 6, aiBackfill = true } = {}) {
-      seatsEl.replaceChildren(); let ai = 0;
+    /** Names used for AI backfill (e.g. from AI_ROSTER, worst -> best or lineup order). */
+    setAINames(names) { aiRoster = Array.isArray(names) && names.length ? names.map((n) => (typeof n === 'string' ? n : n.name)) : AI_NAMES; },
+    /** list: [{name, you?, ready?, kind?:'host'|'human'}]; remaining seats (default 10) fill with AI names
+     *  (opts.aiNames, else setAINames(), else built-ins), then 'Open seat'. */
+    setPlayers(list = [], { seats = 10, aiBackfill = true, aiNames = null } = {}) {
+      seatsEl.replaceChildren(); let ai = 0; const names = aiNames || aiRoster;
+      seatsEl.style.setProperty('--rows', seats); seatsEl.classList.toggle('dense', seats > 6);
       for (let i = 0; i < seats; i++) {
-        const p = list[i];
-        if (p) seatsEl.append(h('li', { class: 'sbd-seat human' }, h('span', { class: 'dot', style: `--c:${p.color || SEAT_COLORS[i]}` }), p.name + (p.you ? ' (you)' : ''), h('span', { class: 'tag' }, p.kind === 'host' ? 'HOST' : (p.ready === false ? '…' : 'READY'))));
-        else if (aiBackfill && ai < AI_NAMES.length) seatsEl.append(h('li', { class: 'sbd-seat ai' }, h('span', { class: 'dot', style: `--c:${SEAT_COLORS[i]}` }), AI_NAMES[ai++], h('span', { class: 'tag' }, 'AI')));
+        const p = list[i], col = SEAT_COLORS[i % SEAT_COLORS.length];
+        if (p) seatsEl.append(h('li', { class: 'sbd-seat human' }, h('span', { class: 'dot', style: `--c:${p.color || col}` }), p.name + (p.you ? ' (you)' : ''), h('span', { class: 'tag' }, p.kind === 'host' ? 'HOST' : (p.ready === false ? '\u2026' : 'READY'))));
+        else if (aiBackfill && ai < names.length) seatsEl.append(h('li', { class: 'sbd-seat ai' }, h('span', { class: 'dot', style: `--c:${col}` }), names[ai++], h('span', { class: 'tag' }, 'AI')));
         else seatsEl.append(h('li', { class: 'sbd-seat' }, h('span', { class: 'dot' }), 'Open seat'));
       }
     },
