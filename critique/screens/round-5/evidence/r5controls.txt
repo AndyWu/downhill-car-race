@@ -1,0 +1,13 @@
+glyphOpacitySeries [[0,0.33],[5,0],[10,0],[15,0],[20,0],[25,0],[30,0],[35,0],[40,0],[45,0],[50,0],[55,0],[60,0]]
+tilt {"hasMotionBefore":false,"neutral":{"raw":0,"steer":0,"wheelRotZ":0,"angVelY":0.006},"upright":{"raw":0,"steer":0,"wheelRotZ":0,"angVelY":0.006},"tiltA":{"raw":28.6,"steer":0.61,"wheelRotZ":-1.276,"angVelY":-0.043},"tiltB":{"raw":-28.6,"steer":-0.61,"wheelRotZ":1.275,"angVelY":0.284},"screenAngle":0,"isTouch":true,"hasMotion":true}
+swipe {"noInput":[1.62,3.61],"swipes":[3.61,10.61],"strokePairs":1}
+handbrake {"before":10.61,"after1500ms":0.02,"leverRotX":0.7}
+errors []
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+cdpSession.send: Target page, context or browser has been closed
+    at /home/user/downhill-car-race/tests/critic-r5.mjs:184:51
+
+Node.js v22.22.0
