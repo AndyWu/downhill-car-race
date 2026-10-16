@@ -189,7 +189,10 @@ export function createUI(root, opts = {}) {
   const pegBtn = h('button', { class: 'sbd-peg', 'aria-label': 'Pause', html: peg, onClick: () => { api.show('pause'); cb('onPause'); } });
   const toast = h('div', { class: 'sbd-toast' });
   const rankEl = h('div', { class: 'sbd-rank', 'aria-hidden': 'true' }, h('b', {}, '-'), h('span', {}, '/-'));
-  mk('race', '', glyphs, pegBtn, toast, rankEl);
+  // horn: a visible, translucent bulb-horn button at the top-centre (also the H key)
+  const hornBtn = h('button', { class: 'sbd-horn', 'aria-label': 'Honk', html: '<svg viewBox="0 0 64 40" width="100%" height="100%"><path d="M6 14h10l26-10v32L16 26H6z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><circle cx="52" cy="20" r="3" fill="currentColor"/><path d="M56 9q6 11 0 22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>' });
+  hornBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); hornBtn.classList.add('hit'); setTimeout(() => hornBtn.classList.remove('hit'), 160); cb('onHonk'); });
+  mk('race', '', glyphs, pegBtn, toast, rankEl, hornBtn);
   paintWx();
 
   const pauseScr = mk('pause', 'sbd-center', h('div', { class: 'sbd-ply sbd-pause' }, h('h2', {}, 'Paused'),

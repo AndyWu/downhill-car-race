@@ -502,6 +502,7 @@ async function boot() {
       onGyro: async () => { const r = await input.requestPermissions(); return r.motion !== false; },
       onFamilyPass: onFamilyPass,
       onFamilyPassAction: onFamilyPass,
+      onHonk: () => { if (input && input.honk) input.honk(); },
       onPause: () => { if (game.state.role === 'solo') game.state.paused = true; },
       onResume: () => { game.state.paused = false; },
       onQuit: () => goTitle(),
