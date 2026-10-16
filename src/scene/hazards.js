@@ -17,7 +17,7 @@ const KINDS = {
   rutpool: { type: 'water', dip: 0.07, bumpAmp: 0, friction: 0.52, drag: 0.2, bump: 0.05 },
   stream:  { type: 'water', dip: 0.36, bumpAmp: 0.006, friction: 0.42, drag: 0.34, bump: 0.2 },
   mud:     { type: 'mud',   dip: 0.10, bumpAmp: 0.01, friction: 0.36, drag: 1.0, bump: 0.25 },
-  gravel:  { type: 'gravel', dip: 0, bumpAmp: 0.025, friction: 0.66, drag: 0.12, bump: 0.35 },
+  gravel:  { type: 'gravel', dip: 0, bumpAmp: 0.02, friction: 0.68, drag: 0.1, bump: 0.2 },
   rock:    { type: 'rock',  dip: 0, bumpAmp: 0.085, friction: 0.8, drag: 0.05, bump: 0.85 },
   sand:    { type: 'sand',  dip: 0.02, bumpAmp: 0.008, friction: 0.55, drag: 0.45, bump: 0.15 },
 };

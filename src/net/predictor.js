@@ -7,7 +7,9 @@
 //   2. reset the body to the authoritative pose (position, quaternion, velocity, s),
 //   3. replay the not-yet-acknowledged inputs,
 //   4. turn the visual jump (old predicted pose → new predicted pose) into an error offset
-//      that decays smoothly (half-life ~120 ms). Errors > snapDistance snap instantly.
+//      that decays smoothly (half-life ~120 ms) but never faster than 1.5 m/s and 45°/s, i.e.
+//      ≤ 2.5 cm per 60 Hz step (≤ 5 cm per rendered frame even when a frame runs 2 steps).
+//      Errors > snapDistance (3 m: respawn / teleport) snap instantly.
 // Without an ack (old host) it falls back to a gentle positional blend toward the snapshot.
 //
 // The body must follow the core physics contract:
@@ -30,14 +32,16 @@ function qNorm(q) { const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1; q[0] /= l
 /**
  * @param {{ body, slot:number, maxHistory?:number, smoothHalfLifeMs?:number, snapDistance?:number, softGain?:number }} o
  */
-export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs = 120, snapDistance = 6, softGain = 0.15, deadband = 0.2, maxCorrectionSpeed = 2.5 } = {}) {
+export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs = 120, snapDistance = 3, softGain = 0.15, deadband = 0.2, maxCorrectionSpeed = 1.5, maxCorrectionTurn = 45 } = {}) {
   const history = []; // { seq, dt, input }
   const errPos = [0, 0, 0];
   const errQ = [0, 0, 0, 1];
   const arr = new Float32Array(STATE_FLOATS);
   const saved = new Float32Array(STATE_FLOATS);
   let autoSeq = 0;
-  const stats = { reconciles: 0, replayed: 0, lastError: 0, maxError: 0, corrections: 0, skipped: 0, snaps: 0 };
+  let lastRender = null;
+  const visLog = globalThis.__NET_DEBUG ? [] : null; // per-step visual correction (m)
+  const stats = { maxVisualStep: 0, reconciles: 0, replayed: 0, lastError: 0, maxError: 0, corrections: 0, skipped: 0, snaps: 0 };
   const pose = { position: [0, 0, 0], quaternion: [0, 0, 0, 1] };
 
   const curPos = () => { const p = body.state.position; return [p.x, p.y, p.z]; };
@@ -49,9 +53,11 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
     const e = Math.hypot(errPos[0], errPos[1], errPos[2]);
     const kp = e > 0 ? Math.max(k, 1 - (maxCorrectionSpeed * dt) / e) : k;
     errPos[0] *= kp; errPos[1] *= kp; errPos[2] *= kp;
-    // nlerp errQ toward identity
+    // nlerp errQ toward identity, also rate-limited
     const sgn = errQ[3] < 0 ? -1 : 1;
-    errQ[0] *= k; errQ[1] *= k; errQ[2] *= k; errQ[3] = errQ[3] * k + sgn * (1 - k);
+    const ang = 2 * Math.acos(Math.min(1, Math.abs(errQ[3])));
+    const kq = ang > 0 ? Math.max(k, 1 - (maxCorrectionTurn * Math.PI / 180 * dt) / ang) : k;
+    errQ[0] *= kq; errQ[1] *= kq; errQ[2] *= kq; errQ[3] = errQ[3] * kq + sgn * (1 - kq);
     qNorm(errQ);
   }
 
@@ -80,6 +86,7 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
   const api = {
     stats,
     debugLog,
+    visLog,
     get pending() { return history.length; },
     /** Run one local fixed step with the player's input. `seq` = the seq sent with this input frame. */
     step(dt, input, seq = autoSeq++) {
@@ -88,8 +95,15 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
       history.push({ seq, dt, input: qi });
       if (history.length > maxHistory) history.shift();
       prevP = curPos(); prevQ = curQuat();
+      const r0 = lastRender || renderPose(1).position.slice();
       body.step(dt, { ...qi });
       decay(dt);
+      // visual correction this step = rendered motion − physical motion of the body
+      const r1 = renderPose(1).position, b1 = curPos();
+      const vis = Math.hypot(r1[0] - r0[0] - (b1[0] - prevP[0]), r1[1] - r0[1] - (b1[1] - prevP[1]), r1[2] - r0[2] - (b1[2] - prevP[2]));
+      lastRender = r1.slice();
+      stats.maxVisualStep = Math.max(stats.maxVisualStep, vis);
+      if (visLog) { visLog.push(vis); if (visLog.length > 4000) visLog.shift(); }
       if (debugLog) { const p = body.state.position; debugLog.push([seq, p.x, p.y, p.z]); if (debugLog.length > 4000) debugLog.shift(); }
     },
     /** Feed every authoritative snapshot (decoded Float32Array from sync.onSnapshot). */
@@ -136,7 +150,7 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
       stats.lastError = err;
       stats.maxError = Math.max(stats.maxError, err);
       if (err > 0.01) stats.corrections++;
-      if (stats.lastError > snapDistance) { errPos.fill(0); errQ[0] = errQ[1] = errQ[2] = 0; errQ[3] = 1; stats.snaps++; }
+      if (stats.lastError > snapDistance) { errPos.fill(0); errQ[0] = errQ[1] = errQ[2] = 0; errQ[3] = 1; stats.snaps++; lastRender = null; }
       else {
         errPos[0] = e[0]; errPos[1] = e[1]; errPos[2] = e[2];
         // errQ = bq * inverse(q)
@@ -148,7 +162,7 @@ export function createPredictor({ body, slot, maxHistory = 240, smoothHalfLifeMs
     renderPose,
     /** Convenience: write the smoothed pose into a THREE.Object3D. */
     applyTo(obj, alpha = 1) { const r = renderPose(alpha); obj.position.set(r.position[0], r.position[1], r.position[2]); obj.quaternion.set(r.quaternion[0], r.quaternion[1], r.quaternion[2], r.quaternion[3]); return obj; },
-    reset() { history.length = 0; errPos.fill(0); errQ[0] = errQ[1] = errQ[2] = 0; errQ[3] = 1; },
+    reset() { lastRender = null; history.length = 0; errPos.fill(0); errQ[0] = errQ[1] = errQ[2] = 0; errQ[3] = 1; },
   };
   if (globalThis.__NET_DEBUG) (globalThis.__netDebug ??= {}).pred = api; // test instrumentation
   return api;

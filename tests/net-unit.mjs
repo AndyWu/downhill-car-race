@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { packSdp, unpackSdp, parseSdp } from '../src/net/sdpPack.js';
 import { encodeInputFrame, decodeInputFrame, packInputPacket, unpackInputPacket, packSnapshot, unpackSnapshot, createSnapshotEncoder, createSnapshotDecoder, packQuat, unpackQuat, SNAP_HEADER, SNAP_STRIDE } from '../src/net/protocol.js';
 import { createPredictor } from '../src/net/predictor.js';
+import { createSync } from '../src/net/sync.js';
+import { strokeCount } from '../src/net/protocol.js';
 import { createFakeWorld, carAt } from './net-fake-world.js';
 import { createInterpolator } from '../src/net/interpolator.js';
 import { createLicensing, MAX_SEATS } from '../src/net/licensing.js';
@@ -62,13 +64,17 @@ await t('4-byte input frames, 30 Hz packets, 16-bit seq unwrap', () => {
   const d = decodeInputFrame(f);
   assert.ok(Math.abs(d.steer + 0.5) < 1 / 127 && d.paddleL === 1 && d.paddleR === 0 && Math.abs(d.handbrake - 0.25) < 1 / 15 && d.headlight && d.reverse);
   const frames = [f, encodeInputFrame({ steer: 0.3 }, 69999), encodeInputFrame({}, 69998), encodeInputFrame({ paddleR: 0.6 }, 69997)];
-  frames[0][5] |= (5 << 2) | (3 << 5); // stroke counters ride in the flag byte
+  // cumulative stroke counters: newest frame has seen 41 L strokes and 200 R strokes
+  frames[0][5] |= (41 << 2) | (200 << 10);
   const pkt = packInputPacket(frames);
-  assert.equal(pkt.byteLength, 4 + 4 * 4);
+  assert.equal(pkt.byteLength, 6 + 4 * 4);
   const u = unpackInputPacket(pkt, 69990);
   assert.deepEqual(u.map((x) => x[0]), [70000, 69999, 69998, 69997]);
-  for (let i = 0; i < 4; i++) for (let k = 1; k < 6; k++) assert.equal(u[i][k], frames[i][k], `frame ${i} field ${k}`);
-  console.log(`        packet = ${pkt.byteLength} B for 4 frames (2 new + 2 redundant) → ${(pkt.byteLength * 30)} B/s at 30 Hz (was 124 B × 60 Hz = 7.4 KB/s)`);
+  for (let i = 0; i < 4; i++) for (let k = 1; k < 5; k++) assert.equal(u[i][k], frames[i][k], `frame ${i} field ${k}`);
+  // counts walk back through the packet: f0 has an L stroke, f3 an R stroke
+  assert.deepEqual(u.map((x) => [strokeCount(x, 0), strokeCount(x, 1)]), [[41, 200], [40, 200], [40, 200], [40, 200]]);
+  assert.equal(u[0][5] & 3, 3, 'light + reverse flags');
+  console.log(`        packet = ${pkt.byteLength} B for 4 frames (2 new + 2 redundant) → ${(pkt.byteLength * 30)} B/s at 30 Hz (was 124 B × 60 Hz = 7.4 KB/s in R3)`);
 });
 const mkSnap = (tick, cars) => { const s = new Float32Array(SNAP_HEADER + cars.length * SNAP_STRIDE); s[0] = tick; s[1] = cars.length; cars.forEach((c, i) => s.set(c, SNAP_HEADER + i * SNAP_STRIDE)); return s; };
 const randQuat = () => { const q = [Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]; const l = Math.hypot(...q); return q.map((v) => v / l); };
@@ -161,6 +167,31 @@ await t('decoder skips unchanged cars when it missed the keyframe', () => {
   enc.encode(mkSnap(0, [mov(0), still])); // keyframe lost
   const d = createSnapshotDecoder().decode(enc.encode(mkSnap(2, [mov(-1), still])));
   assert.equal(d.data[1], 1); assert.equal(d.data[SNAP_HEADER], 1);
+});
+
+await t('every paddle stroke survives 30% loss + reordering + jitter-buffer merges (cumulative counters)', async () => {
+  for (const loss of [0, 0.15, 0.3]) {
+    let deliver = null;
+    const hostSide = { id: 1, fast: { readyState: 'open' }, on(ev, cb) { if (ev === 'fast') deliver = cb; return () => {}; }, sendFast() {}, sendCtrl() {} };
+    const outbox = [];
+    const clientSide = { id: 0, fast: { readyState: 'open' }, on() { return () => {}; }, sendFast(b) { outbox.push(b); }, sendCtrl() {} };
+    const host = createSync({ role: 'host', peers: [hostSide] });
+    const client = createSync({ role: 'client', peers: [clientSide] });
+    let rnd = 12345; const rand = () => ((rnd = (rnd * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    const inflight = [];
+    let made = [0, 0], got = [0, 0];
+    for (let tick = 0; tick < 3000; tick++) {
+      const inp = { steer: Math.sin(tick / 30), paddleL: tick % 20 === 0 ? 1 : 0, paddleR: tick % 20 === 10 ? 1 : 0 };
+      if (tick < 2900) { made[0] += inp.paddleL > 0; made[1] += inp.paddleR > 0; client.sendInput(encodeInputFrame(inp, tick)); }
+      while (outbox.length) { const b = outbox.shift(); if (rand() >= loss) inflight.push({ at: tick + 1 + Math.floor(rand() * 6), b }); } // 1-6 ticks of jitter → reordering
+      for (let i = inflight.length - 1; i >= 0; i--) if (inflight[i].at <= tick) { deliver(inflight[i].b); inflight.splice(i, 1); }
+      const r = host.takeInput(1);
+      if (r) { got[0] += r.frame[2] > 0; got[1] += r.frame[3] > 0; }
+    }
+    host.close(); client.close();
+    assert.deepEqual(got, made, `loss ${loss}: strokes applied ${got} vs made ${made}`);
+    console.log(`        loss ${Math.round(loss * 100)}%: ${made[0] + made[1]} strokes made, ${got[0] + got[1]} applied on host (recovered from counters: ${host.stats.strokesRecovered || 0}, frames lost ${host.stats.inputsLost || 0}, merged ${host.stats.inputsMerged || 0})`);
+  }
 });
 
 console.log('Interpolator');

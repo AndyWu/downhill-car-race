@@ -54,13 +54,13 @@ export function buildTerrain(track, field, pads, seed = 1, gaps = []) {
   function verge(s, d, hw) {
     const ad = Math.abs(d), a = bermAmp(s, d);
     const ki = clamp(Math.round(s + 40), 0, track.tables.TN - 1);
-    const lip = 0.55 + 0.55 * Math.min(1, Math.abs(track.tables.kap[ki]) / 0.014);
+    const lip = 1.5 + 0.7 * Math.min(1, Math.abs(track.tables.kap[ki]) / 0.014);
     const r = ad - (hw + 0.1);
     const foot = 0.4 * (Math.sqrt(r * r + 0.02) + r) * 0.5;                // rises 0.4 m/m (22 deg) from just outside the road edge
     const rFoot = 1.4, hFoot = 0.56;
     let y = Math.min(foot, hFoot);
-    y += lip * smoothstep(rFoot, rFoot + 0.4, r);                        // steep step
-    const fall = 1 - smoothstep(rFoot + 1.4, rFoot + 5.5, r);
+    y += lip * smoothstep(rFoot, rFoot + 0.55, r);                        // steep step
+    const fall = 1 - smoothstep(rFoot + 2.0, rFoot + 7.0, r);
     return a * y * fall;
   }
 

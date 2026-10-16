@@ -52,6 +52,28 @@ for (const s0 of slowS) for (const side of [-1, 1]) for (const off of [0.9, 1.8,
   }
   if (tBack < 0 || tBack > 6 || minV < 2) bad.push(`slow start s=${s0} side=${side} off=${off}: back ${tBack < 0 ? 'never' : tBack.toFixed(1) + ' s'}, min speed ${minV.toFixed(1)}`);
 }
+// steering INTO the verge: held steer for 6 s (excursion must stay < 5 m), and a 2.5 s steer pulse then release (must return to the road)
+const steerRows = [];
+const steerS = []; for (let v = 200; v < 3000 && steerS.length < 7; v += 20) { if (world.hazards.every((h) => Math.abs(h.s - v - 20) > h.halfLength + 28) && (!steerS.length || v - steerS[steerS.length - 1] > 330)) steerS.push(v); }
+for (const speed of [10, 14]) for (const steer of [-0.5, 0.5]) for (const s0 of steerS) {
+  for (const mode of ['held', 'pulse']) {
+    const f = world.track.sampleAt(s0), body = createVehicleBody(spec, world);
+    const T = f.tangent.clone(); T.y = 0; T.normalize();
+    placeOnGround(body, world, f.position.x, f.position.z, T, T.clone().multiplyScalar(speed));
+    let maxB = 0, tBack = -1, minV = 99;
+    for (let t = 0; t < (mode === 'held' ? 6 : 16); t += 1 / 60) {
+      const inp = { steer: mode === 'held' || t < 2.5 ? steer : 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false };
+      body.step(1 / 60, inp);
+      const st = body.state, bey = Math.abs(st.lateral) - world.track.sampleAt(Math.max(0, st.s)).width / 2;
+      maxB = Math.max(maxB, bey);
+      if (mode === 'pulse' && t > 2.5) { if (tBack < 0 && bey < 0.5) tBack = t; if (tBack >= 0 && t - tBack > 5) minV = Math.min(minV, st.speed); }
+    }
+    worst = Math.max(worst, maxB);
+    if (maxB >= 5) bad.push(`steer ${steer} ${speed} m/s s=${s0} ${mode}: excursion ${maxB.toFixed(1)} m`);
+    if (mode === 'pulse' && (tBack < 0 || tBack > 8 || minV < 2)) bad.push(`steer pulse ${steer} ${speed} m/s s=${s0}: back ${tBack < 0 ? 'never' : tBack.toFixed(1)}, min speed ${minV.toFixed(1)}`);
+    steerRows.push(`steer ${steer} ${speed} m/s s=${s0} ${mode}: ${maxB.toFixed(1)} m`);
+  }
+}
 // full-course coasting check: no input from the start ramp must reach the finish and never stall
 if (process.env.COAST !== '0') {
   const body = createVehicleBody(spec, world), st0 = world.startTransform(0);
@@ -68,6 +90,7 @@ if (process.env.COAST !== '0') {
   if (body.state.s < 3200 || worstStall > 10) bad.push(`coast: stalled (s=${body.state.s.toFixed(0)}, longest stall ${worstStall.toFixed(1)} s at s=${stallAt.toFixed(0)})`);
 }
 console.log(rows.join('\n'));
+if (process.env.VERBOSE) console.log(steerRows.join('\n'));
 console.log(`WORST ${worst.toFixed(1)} m beyond edge (target <= 6)`);
 console.log(bad.length ? 'RECOVERY FAILURES:\n' + bad.join('\n') : 'recovery ok (back on road <= 6 s, >= 2 m/s)');
 process.exitCode = worst <= 6 && !bad.length ? 0 : 1;

@@ -115,13 +115,13 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       else { ref = 0; for (const o of others) ref += o.s; ref /= others.length; }
       rb = 1 + 0.05 * rubberBand * clamp((ref - s) / 60, -1, 1);
     }
-    // leader ease: a car >60 m clear of the AI pack lifts off a little (profile-aware via P.leaderEase) so races stay close
+    // leader ease: a car >35 m clear of the AI pack lifts off a little (profile-aware via P.leaderEase) so races stay close
     let easeK = 0;
     if (rubberBand > 0 && P.leaderEase > 0 && others.length) {
       const hs = typeof human === 'function' ? human() : null;
       let sum = 0, cnt = 0;
       for (const o of others) if (o !== hs) { sum += o.s; cnt++; }
-      if (cnt) easeK = clamp((s - sum / cnt - 60) / 60, 0, 1) * P.leaderEase * rubberBand;
+      if (cnt) easeK = clamp((s - sum / cnt - 15) / 30, 0, 1) * P.leaderEase * rubberBand;
     }
     const vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (1 - 0.1 * easeK) * (outBy > 0 ? 0.65 : 1);
     const over = speed - vt - P.brake.dead;

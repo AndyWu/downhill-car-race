@@ -79,7 +79,7 @@ async function runRace(mode) {
     const orig = sync.broadcastSnapshot.bind(sync);
     sync.broadcastSnapshot = (snap) => {
       const cars = {};
-      for (const v of g.vehicles) { const p = v.body.state.position; cars[v.slot] = [p.x, p.y, p.z]; }
+      for (const v of g.vehicles) { const p = v.body.state.position; cars[v.slot] = [p.x, p.y, p.z, v.body.state.s]; }
       window.hostLog.push([snap[0], sync.consumedSeq(1), cars, performance.now()]);
       return orig(snap);
     };
@@ -103,14 +103,19 @@ async function runRace(mode) {
     };
     requestAnimationFrame(rec);
   });
+  const k0 = { c: await client.evaluate(() => window.__netDebug.sync.stats.strokesSent || 0), h: await host.evaluate(() => window.__netDebug.sync.stats.strokesApplied || 0) };
   const t0 = await client.evaluate(() => ({ tx: window.__netDebug.sync.stats.sentBytes, rx: window.__netDebug.sync.stats.recvBytes, t: performance.now() }));
   const h0 = await host.evaluate(() => ({ tx: window.__netDebug.sync.stats.sentBytes, t: performance.now() }));
   await client.evaluate(() => window.__game.setDebugInput({ paddleL: 1, paddleR: 1 }));
   await host.evaluate(() => window.__game.setDebugInput({ paddleL: 1, paddleR: 1 }));
   // weave the client's car so prediction is tested on steering, not just a straight line
-  const weave = client.evaluate(() => new Promise((done) => { let k = 0; const iv = setInterval(() => { k++; window.__game.setDebugInput({ paddleL: k % 8 < 4 ? 1 : 0, paddleR: k % 8 >= 4 ? 1 : 0, steer: 0.6 * Math.sin(k / 6) }); if (k > 110) { clearInterval(iv); done(); } }, 100); }));
+  const weave = client.evaluate(() => new Promise((done) => { let k = 0; const iv = setInterval(() => { k++; window.__game.setDebugInput({ paddleL: k % 8 < 4 ? 1 : 0, paddleR: k % 8 >= 4 ? 1 : 0, steer: 0.3 * Math.sin(k / 6) }); if (k > 110) { clearInterval(iv); done(); } }, 100); }));
   await host.waitForTimeout(12000);
   await weave;
+  await host.waitForTimeout(1500); // let in-flight inputs land before counting
+  const k1 = { c: await client.evaluate(() => window.__netDebug.sync.stats.strokesSent || 0), h: await host.evaluate(() => window.__netDebug.sync.stats.strokesApplied || 0) };
+  console.log(`  paddle strokes during the run: client made ${k1.c - k0.c}, host applied ${k1.h - k0.h}`);
+  check(Math.abs((k1.c - k0.c) - (k1.h - k0.h)) <= 2, 'every client paddle stroke applied on the host (±2 in flight)');
   const t1 = await client.evaluate(() => ({ tx: window.__netDebug.sync.stats.sentBytes, rx: window.__netDebug.sync.stats.recvBytes, t: performance.now() }));
   const h1 = await host.evaluate(() => ({ tx: window.__netDebug.sync.stats.sentBytes, t: performance.now(), st: window.__netDebug.sync.stats, enc: window.__netDebug.sync.encoderStats }));
   const h = await host.evaluate(() => ({ cars: window.__game.vehicles.map((v) => [v.slot, v.kind, +v.body.state.s.toFixed(1)]), cd: window.__game.state.countdown, t: window.__game.state.raceTime }));
@@ -126,7 +131,7 @@ async function runRace(mode) {
 
   // ---- metrics ----
   const hostLog = await host.evaluate(() => window.hostLog);
-  const { clientLog, popLog, predLog, pstats } = await client.evaluate(() => ({ clientLog: window.clientLog, popLog: window.popLog, predLog: window.__netDebug.pred?.debugLog || [], pstats: window.__netDebug.pred?.stats }));
+  const { clientLog, popLog, predLog, pstats, visLog } = await client.evaluate(() => ({ clientLog: window.clientLog, popLog: window.popLog, predLog: window.__netDebug.pred?.debugLog || [], pstats: window.__netDebug.pred?.stats, visLog: window.__netDebug.pred?.visLog || [] }));
   const byTick = new Map(hostLog.map((e) => [e[0], e[2]]));
   const firstTick = hostLog[0]?.[0] ?? 0;
   const interpErr = [];
@@ -158,6 +163,14 @@ async function runRace(mode) {
     const worst = []; for (const [seq, x, y, z] of predLog) { const hp = hostAtSeq.get(seq); if (hp) worst.push([Math.hypot(x - hp[0], y - hp[1], z - hp[2]), seq]); }
     worst.sort((a, b) => b[0] - a[0]); console.log('  worst pred seqs', JSON.stringify(worst.slice(0, 8).map((w) => [+w[0].toFixed(2), w[1]])), 'seq range', predLog[0]?.[0], predLog.at(-1)?.[0], 'skipBefore', skipBefore);
   }
+  // client car distance over a fixed number of host ticks (wall-clock independent)
+  const TICKS = 600;
+  const startE = hostLog[0], endE = hostLog.find((e) => e[0] >= hostLog[0][0] + TICKS) || hostLog[hostLog.length - 1];
+  const dist = endE[2][1][3] - startE[2][1][3];
+  const vis = visLog.slice(Math.floor(visLog.length * 0.1));
+  console.log(`  client car distance over ${endE[0] - startE[0]} host ticks: ${dist.toFixed(1)} m (host-simulated)`);
+  console.log(`  predictor visual correction per 60 Hz step: p95 ${(pct(vis, 0.95) * 100).toFixed(2)} cm, max ${(Math.max(...vis) * 100).toFixed(2)} cm (${vis.length} steps, snaps ${pstats?.snaps})`);
+  check(vis.length > 100 && Math.max(...vis) <= 0.05, `own-car visual correction ≤ 5 cm per step (max ${(Math.max(...vis) * 100).toFixed(2)} cm)`);
   const pops = popLog.slice(Math.floor(popLog.length * 0.15));
   const cSec = (t1.t - t0.t) / 1000, hSec = (h1.t - h0.t) / 1000;
   const clientTx = (t1.tx - t0.tx) / cSec, clientRx = (t1.rx - t0.rx) / cSec, hostTx = (h1.tx - h0.tx) / hSec;
@@ -171,9 +184,18 @@ async function runRace(mode) {
   check(predErr.length > 100 && pct(predErr, 0.95) < 0.5, `predicted own car within 0.5 m of host simulation for the same input (p95 ${(pct(predErr, 0.95) * 100).toFixed(1)} cm)`);
   check(errors.length === 0, 'no console errors ' + JSON.stringify(errors.slice(0, 3)));
   for (const ctx of ctxs) await ctx.close();
+  return { dist };
 }
 
-try { for (const m of MODES) await runRace(m); }
+const results = {};
+try {
+  for (const m of MODES) results[m] = await runRace(m);
+  if (results.clean && results.lossy) {
+    const r = results.lossy.dist / results.clean.dist;
+    console.log(`\nclient car distance: lossy ${results.lossy.dist.toFixed(1)} m vs clean ${results.clean.dist.toFixed(1)} m (${(r * 100).toFixed(1)}%)`);
+    check(Math.abs(r - 1) <= 0.1, `under 15% loss + jitter the client covers within 10% of the no-loss distance (${(r * 100).toFixed(1)}%)`);
+  }
+}
 catch (e) { console.error(e); fail++; }
 finally { await browser.close().catch(() => {}); if (server) { try { process.kill(-server.pid); } catch { /* already gone */ } } }
 console.log(fail ? `\n${fail} FAILED` : '\nall net-race checks passed');

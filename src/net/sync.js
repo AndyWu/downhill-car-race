@@ -148,8 +148,8 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
       const prev = history[0];
       if (prev && f[0] !== prev[0] + 1) { history.length = 0; unsent = 0; } // seq restarted
       // cumulative stroke counters: every frame with a paddle impulse is one stroke
-      if (f[2] > 0) strokes[0] = (strokes[0] + 1) & 255;
-      if (f[3] > 0) strokes[1] = (strokes[1] + 1) & 255;
+      if (f[2] > 0) { strokes[0] = (strokes[0] + 1) & 255; stats.strokesSent = (stats.strokesSent || 0) + 1; }
+      if (f[3] > 0) { strokes[1] = (strokes[1] + 1) & 255; stats.strokesSent = (stats.strokesSent || 0) + 1; }
       withStrokeCounts(f, strokes[0], strokes[1]);
       history.unshift(f);
       if (history.length > INPUT_REDUNDANCY) history.length = INPUT_REDUNDANCY;
@@ -199,6 +199,7 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
             if (!(src[2 + side] > 0)) stats.strokesRecovered = (stats.strokesRecovered || 0) + 1;
             f[2 + side] = src[2 + side] > 0 ? src[2 + side] : li[side];
             ap[side] = (ap[side] + 1) & 255;
+            stats.strokesApplied = (stats.strokesApplied || 0) + 1;
           } else f[2 + side] = 0;
         }
         lastImpulse.set(id, li);
