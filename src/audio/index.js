@@ -13,7 +13,7 @@ const SURF = {
   dirt:   { f: 900,  q: 0.8, g: 0.10, rate: 3.0, gf: 1400, gq: 1.2, hiss: 0.0 },
   gravel: { f: 2200, q: 0.7, g: 0.14, rate: 6.0, gf: 3200, gq: 0.9, hiss: 0.0 },
   rock:   { f: 500,  q: 1.5, g: 0.09, rate: 1.4, gf: 700,  gq: 2.5, hiss: 0.0 },
-  sand:   { f: 1400, q: 0.7, g: 0.2, rate: 0.5, gf: 800, gq: 0.6, hiss: 0.6 },
+  sand:   { f: 1900, q: 0.7, g: 0.2, rate: 0.5, gf: 800, gq: 0.6, hiss: 0.6 },
   mud:    { f: 260,  q: 1.8, g: 0.14, rate: 1.2, gf: 320,  gq: 3.0, hiss: 0.0 },
   water:  { f: 1800, q: 0.6, g: 0.16, rate: 4.0, gf: 2600, gq: 0.7, hiss: 0.5 },
   grass:  { f: 1200, q: 0.5, g: 0.06, rate: 1.0, gf: 2000, gq: 0.6, hiss: 0.4 },
@@ -98,15 +98,17 @@ export function createAudio(options = {}) {
     n.scrubSrc.connect(n.scrubBP); n.scrubBP.connect(n.scrubGain); n.scrubGain.connect(bus);
 
 
+    // ambient sub-bus (breeze, birds, insects, tractor): weather can muffle it
+    n.amb = gain(1); n.ambLP = filt('lowpass', 20000, 0.5); n.amb.connect(n.ambLP); n.ambLP.connect(bus);
     // ambient: breeze in leaves
     n.breezeSrc = loopSrc(noiseBuf);
     n.breezeLP = filt('lowpass', 800, 0.7);
-    n.breezeGain = gain(0.12);
-    n.breezeSrc.connect(n.breezeLP); n.breezeLP.connect(n.breezeGain); n.breezeGain.connect(bus);
+    n.breezeGain = gain(0);
+    n.breezeSrc.connect(n.breezeLP); n.breezeLP.connect(n.breezeGain); n.breezeGain.connect(n.amb);
     lfo(0.11, 0.05, n.breezeGain.gain); lfo(0.07, 200, n.breezeLP.frequency);
     // distant tractor: low sawtooth drone with a slow chug
-    { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 47; const lp = filt('lowpass', 210, 0.8); n.tractor = gain(0.01); const am = gain(0.5); const ch = gain(0.5);
-      o.connect(lp); lp.connect(am); am.connect(n.tractor); n.tractor.connect(bus); lfo(6.5, 0.4, am.gain, 'triangle'); o.start(); }
+    { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 47; const lp = filt('lowpass', 210, 0.8); n.tractor = gain(0); const am = gain(0.5); const ch = gain(0.5);
+      o.connect(lp); lp.connect(am); am.connect(n.tractor); n.tractor.connect(n.amb); lfo(6.5, 0.4, am.gain, 'triangle'); o.start(); }
 
     // insects at dusk: AM'd high tones (stereo-ish spatial)
     n.insect = [0, 1].map((i) => {
@@ -114,7 +116,7 @@ export function createAudio(options = {}) {
       const am = gain(0); const out = gain(0);
       o.connect(am); am.connect(out);
       lfo(i ? 31 : 24, 0.5, am.gain, 'square'); am.gain.value = 0.5;
-      const p = panner(i ? 14 : -12, 1, -6 + i * 3); out.connect(p); p.connect(bus); o.start();
+      const p = panner(i ? 14 : -12, 1, -6 + i * 3); out.connect(p); p.connect(n.amb); o.start();
       return out;
     });
 
@@ -127,6 +129,14 @@ export function createAudio(options = {}) {
       src.connect(bp); bp.connect(g); g.connect(p); p.connect(bus);
       n.cars.push({ g, p, bp, rattleT: 0, creakT: 0 });
     }
+    // weather: rain bed (hiss + roar), storm gusts
+    n.rainSrcA = loopSrc(noiseBuf); n.rainBP = filt('bandpass', 4200, 0.5); n.rainHiss = gain(0);
+    n.rainSrcA.connect(n.rainBP); n.rainBP.connect(n.rainHiss); n.rainHiss.connect(bus);
+    n.rainSrcB = loopSrc(brownBuf); n.rainLP = filt('lowpass', 1100, 0.7); n.rainRoar = gain(0);
+    n.rainSrcB.connect(n.rainLP); n.rainLP.connect(n.rainRoar); n.rainRoar.connect(bus);
+    n.gustSrc = loopSrc(noiseBuf); n.gustBP = filt('bandpass', 380, 0.9); n.gustGain = gain(0);
+    n.gustMod = gain(0.6); n.gustSrc.connect(n.gustBP); n.gustBP.connect(n.gustMod); n.gustMod.connect(n.gustGain); n.gustGain.connect(bus);
+    lfo(0.13, 400, n.gustBP.frequency); lfo(0.21, 0.4, n.gustMod.gain); // gusts: slow amplitude swell
     // crowd bed near the finish (loop, gain driven by finishDist)
     const cr = play('cheer', { vol: 0, loop: true }); n.crowd = cr && cr.g;
     ready = true;
@@ -193,7 +203,7 @@ export function createAudio(options = {}) {
 
   // birdsong: FM chirp phrases
   function chirp(pan) {
-    const p = panner(pan[0], pan[1], pan[2]); p.connect(bus);
+    const p = panner(pan[0], pan[1], pan[2]); p.connect(n.amb);
     const base = rnd(2400, 5200), notes = 2 + (Math.random() * 5 | 0), kind = Math.random();
     for (let i = 0; i < notes; i++) {
       const f = base * rnd(0.85, 1.25);
@@ -202,7 +212,7 @@ export function createAudio(options = {}) {
     setTimeout(() => { try { p.disconnect(); } catch (e) {} }, 2500);
   }
   function cow() {
-    const p = panner(rnd(-1, 1) > 0 ? 120 : -120, 2, rnd(-150, -60)); p.connect(bus);
+    const p = panner(rnd(-1, 1) > 0 ? 120 : -120, 2, rnd(-150, -60)); p.connect(n.amb);
     const t = ctx.currentTime;
     const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(110, t); o.frequency.linearRampToValueAtTime(85, t + 1.6);
     const f1 = filt('bandpass', 500, 6), f2 = filt('bandpass', 900, 5);
@@ -236,6 +246,68 @@ export function createAudio(options = {}) {
   const poisson = (name, dt, rate, fn) => { // stochastic variant
     if (Math.random() < 1 - Math.exp(-rate * dt)) fn();
   };
+
+  const WEATHER = {
+    clear: { rain: 0, gust: 0, ambLP: 20000, amb: 1, bird: 1 },
+    fog:   { rain: 0, gust: 0, ambLP: 4500, amb: 0.8, bird: 0.35 },
+    snow:  { rain: 0, gust: 0.1, ambLP: 1300, amb: 0.6, bird: 0.1 },
+    rain:  { rain: 0.6, gust: 0.2, ambLP: 6000, amb: 0.7, bird: 0.1 },
+    storm: { rain: 1, gust: 1, ambLP: 5000, amb: 0.7, bird: 0 },
+  };
+  let W = WEATHER.clear, weatherName = 'clear';
+
+  // ---- horns: one procedural voice per truck id ----
+  // voice: oscillator with a frequency path [[t,f],...], optional vibrato / AM buzz, formant bandpasses, envelope.
+  function voice({ type = 'sawtooth', path, dur = 0.4, vol = 0.3, a = 0.01, rel = 0.08, formants = [], vib = null, am = null, dest, when = 0 }) {
+    const t = ctx.currentTime + when;
+    const o = ctx.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(path[0][1], t);
+    for (let i = 1; i < path.length; i++) o.frequency.linearRampToValueAtTime(path[i][1], t + path[i][0]);
+    if (vib) { const l = ctx.createOscillator(); l.frequency.value = vib[0]; const lg = gain(vib[1]); l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t + dur + rel + 0.05); }
+    const g = gain(0); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + a); g.gain.setValueAtTime(vol, t + Math.max(a, dur - rel)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + rel);
+    let tail = o; const sum = gain(1);
+    if (formants.length) formants.forEach(([f, q, gn]) => { const b = filt('bandpass', f, q); const fg = gain(gn); tail.connect(b); b.connect(fg); fg.connect(sum); });
+    else tail.connect(sum);
+    let out = sum;
+    if (am) { const ag = gain(1 - am[1]); const l = ctx.createOscillator(); l.type = 'square'; l.frequency.value = am[0]; const lg = gain(am[1] * 0.5); l.connect(lg); lg.connect(ag.gain); l.start(t); l.stop(t + dur + rel + 0.05); ag.gain.value = 1 - am[1] * 0.5; sum.connect(ag); out = ag; }
+    out.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + rel + 0.05);
+  }
+  const HORNS = {
+    'barrel-bomber'(d) { // rubber bulb horn: honk-HONK
+      voice({ path: [[0, 360], [0.05, 330], [0.18, 310]], dur: 0.2, vol: 0.5, formants: [[900, 4, 1], [1800, 5, 0.8], [2800, 6, 0.5]], dest: d });
+      voice({ path: [[0, 430], [0.05, 400], [0.3, 360]], dur: 0.38, vol: 0.55, formants: [[1000, 4, 1], [1900, 5, 0.8], [2900, 6, 0.5]], dest: d, when: 0.24 }); },
+    'pallet-pounder'(d) { // two-tone truck horn
+      voice({ type: 'square', path: [[0, 233], [0.8, 233]], dur: 0.8, vol: 0.28, formants: [[466, 6, 1], [700, 4, 0.6], [1400, 4, 0.3]], dest: d });
+      voice({ type: 'square', path: [[0, 293], [0.8, 293]], dur: 0.8, vol: 0.28, formants: [[586, 6, 1], [880, 4, 0.6], [1760, 4, 0.3]], dest: d }); },
+    'rust-bucket'(d) { // a-OO-ga
+      voice({ type: 'sawtooth', path: [[0, 220], [0.22, 420], [0.34, 520], [0.55, 300], [0.75, 190]], dur: 0.75, vol: 0.4, a: 0.03, rel: 0.1, formants: [[420, 3, 1], [850, 4, 0.35]], dest: d }); },
+    'wagon-wheel-willy'(d) { // bicycle bell: ding-ding
+      for (let i = 0; i < 3; i++) { const w = i * 0.17; [[2300, 0.5, 0.5], [3550, 0.3, 0.3], [5700, 0.16, 0.18]].forEach(([f, t60, a]) => tone({ f, a: 0.001, d: t60, vol: a, dest: d, when: w })); } },
+    'bathtub-betty'(d) { // duck call: quack quack
+      for (let i = 0; i < 2; i++) voice({ type: 'sawtooth', path: [[0, 520], [0.05, 640], [0.2, 400]], dur: 0.2, vol: 0.5, a: 0.015, rel: 0.05, formants: [[640, 5, 1], [1250, 6, 0.55]], am: [85, 0.6], dest: d, when: i * 0.3 }); },
+    'door-dasher'(d) { // kazoo: da-da-daaa
+      [[440, 0, 0.14], [440, 0.2, 0.14], [587, 0.4, 0.5]].forEach(([f, w, dd]) => voice({ type: 'sawtooth', path: [[0, f], [dd, f * 1.01]], dur: dd, vol: 0.38, a: 0.02, formants: [[1800, 3, 1], [3000, 4, 1], [4200, 5, 0.6]], am: [140, 0.5], vib: [6, 4], dest: d, when: w })); },
+    'crate-comet'(d) { // clown horn
+      voice({ type: 'square', path: [[0, 900], [0.12, 1300]], dur: 0.14, vol: 0.28, formants: [[2000, 4, 1], [3400, 5, 0.7]], dest: d });
+      voice({ type: 'square', path: [[0, 820], [0.28, 1600]], dur: 0.3, vol: 0.28, formants: [[2000, 4, 1], [3400, 5, 0.7]], dest: d, when: 0.17 }); },
+    'tin-lizzie'(d) { // steam whistle with breath
+      voice({ type: 'sine', path: [[0, 640], [0.9, 650]], dur: 0.9, vol: 0.35, a: 0.06, rel: 0.2, vib: [5, 6], formants: [[650, 8, 1], [1300, 8, 0.5]], dest: d });
+      burst({ f: 3000, q: 1.5, a: 0.1, d: 0.8, vol: 0.06, dest: d }); },
+    'ladder-larry'(d) { // fire siren wail
+      voice({ type: 'triangle', path: [[0, 600], [0.45, 1000], [0.9, 600], [1.35, 1000]], dur: 1.35, vol: 0.32, a: 0.05, rel: 0.2, formants: [[900, 2, 1], [1800, 3, 0.4]], dest: d }); },
+    'sled-dog'(d) { // sleigh bells
+      for (let i = 0; i < 14; i++) { const w = i * 0.045 + Math.random() * 0.02, f = 3000 + Math.random() * 3500; tone({ f, a: 0.001, d: 0.22, vol: 0.12, dest: d, when: w }); tone({ f: f * 1.51, a: 0.001, d: 0.12, vol: 0.06, dest: d, when: w }); } },
+  };
+  const HORN_GAIN = { 'barrel-bomber': 1.5, 'pallet-pounder': 1.0, 'rust-bucket': 0.9, 'wagon-wheel-willy': 1.0, 'bathtub-betty': 1.4, 'door-dasher': 1.5, 'crate-comet': 2.1, 'tin-lizzie': 0.45, 'ladder-larry': 0.5, 'sled-dog': 1.9 }; // loudness-matched (see tests/audio-metrics.mjs)
+  const hornAt = {};
+  function posOf(o) {
+    if (!o) return null;
+    if (typeof o.getWorldPosition === 'function') { const v = { x: 0, y: 0, z: 0, set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }, }; try { const r = o.getWorldPosition(v); return { x: r.x, y: r.y, z: r.z }; } catch (e) {} }
+    if (o.matrixWorld && o.matrixWorld.elements) { const e = o.matrixWorld.elements; return { x: e[12], y: e[13], z: e[14] }; }
+    if (o.position) return { x: o.position.x, y: o.position.y, z: o.position.z };
+    if (o.x != null) return { x: o.x, y: o.y || 0, z: o.z || 0 };
+    return null;
+  }
 
   const api = {
     get ready() { return ready; },
@@ -298,7 +370,7 @@ export function createAudio(options = {}) {
       n.rollGain.gain.setTargetAtTime(rollG, t, tc);
       n.rollBP.frequency.setTargetAtTime(S.f * (0.7 + sp * 0.7), t, 0.1);
       n.rollBP.Q.setTargetAtTime(S.q, t, 0.1);
-      n.hissHP.frequency.setTargetAtTime(surfName === 'sand' ? 2000 : 3000, t, 0.1);
+      n.hissHP.frequency.setTargetAtTime(surfName === 'sand' ? 2800 : 3000, t, 0.1);
       n.hissGain.gain.setTargetAtTime(S.hiss * 0.1 * sp * ground, t, tc);
       if (ground > 0.1 && speed > 0.8) {
         const rate = S.rate * speed * ground * 0.8, v = 0.55 * Math.min(1, 0.3 + sp);
@@ -333,14 +405,18 @@ export function createAudio(options = {}) {
       n.scrubGain.gain.setTargetAtTime(hb * clamp(speed / 6, 0, 1) * 0.35 * ground, t, 0.05);
       n.scrubBP.frequency.setTargetAtTime(220 + speed * 14, t, 0.1);
 
-      // ambient bed: ducks as the wind rises
+      // ambient bed: ducks as the wind rises; weather muffles / thins it
       const duck = 1 - clamp(sp, 0, 1) * 0.5;
-      poisson('bird', dt, (0.7 - dusk * 0.55) * duck, () => chirp([rnd(-60, 60), rnd(5, 25), rnd(-80, 20)]));
-      poisson('cow', dt, 0.012 * duck, cow);
+      poisson('bird', dt, (0.7 - dusk * 0.55) * duck * W.bird, () => chirp([rnd(-60, 60), rnd(5, 25), rnd(-80, 20)]));
+      poisson('cow', dt, 0.012 * duck * W.bird, cow);
       const ins = dusk * duck * 0.012;
-      n.insect.forEach((g) => g.gain.setTargetAtTime(ins, t, 1));
-      n.breezeGain.gain.setTargetAtTime(0.12 * duck, t, 0.5);
+      n.insect.forEach((g) => g.gain.setTargetAtTime(ins * (W.bird > 0.3 ? 1 : 0), t, 1));
+      n.breezeGain.gain.setTargetAtTime(0.12 * duck + 0.05 * W.gust, t, 0.5);
       if (n.tractor) n.tractor.gain.setTargetAtTime(0.05 * duck, t, 0.5);
+      n.amb.gain.setTargetAtTime(W.amb, t, 1.0); n.ambLP.frequency.setTargetAtTime(W.ambLP, t, 1.0);
+      n.rainHiss.gain.setTargetAtTime(0.14 * W.rain, t, 1.0); n.rainRoar.gain.setTargetAtTime(0.15 * W.rain, t, 1.0);
+      n.gustGain.gain.setTargetAtTime(0.1 * W.gust, t, 0.8);
+      if (W.rain > 0) poisson('patter', dt, 26 * W.rain, () => play('drip', { vol: 0.07 * W.rain, rate: rnd(1.4, 2.6), lp: 5000 }));
 
       // crowd swell near the finish arch (finishDist in metres) + cowbell when passing an opponent
       if (n.crowd) {
@@ -377,6 +453,27 @@ export function createAudio(options = {}) {
       const f = SOUNDS[name]; if (f) { try { f(); } catch (e) { console.warn('oneShot', name, e); } }
     },
     names: Object.keys(SOUNDS),
+    /** Horn per truck id. pos: Object3D | {x,y,z} | null (null = your own car, centred). Rate-limited per id. */
+    honk(truckId, pos = null) {
+      if (!ready || (!offlineMode && ctx.state !== 'running')) return;
+      const now = ctx.currentTime, key = truckId + (pos ? '@o' : '@me');
+      if (hornAt[key] && now - hornAt[key] < 0.15) return; hornAt[key] = now;
+      const fn = HORNS[truckId] || HORNS['barrel-bomber']; const pp = posOf(pos);
+      const out = gain((pos ? 1.0 : 0.8) * (HORN_GAIN[truckId] || 1)); let node = out, panNode = null;
+      if (pp) { panNode = panner(pp.x, pp.y, pp.z); panNode.refDistance = 6; panNode.rolloffFactor = 1.1; out.connect(panNode); panNode.connect(bus); }
+      else out.connect(bus);
+      try { fn(out); } catch (e) { console.warn('honk', truckId, e); }
+      setTimeout(() => { try { out.disconnect(); panNode && panNode.disconnect(); } catch (e) {} }, 3000);
+    },
+    hornIds: Object.keys(HORNS),
+    /** 'clear'|'fog'|'snow'|'rain'|'storm' */
+    setWeather(name) { W = WEATHER[name] || WEATHER.clear; weatherName = WEATHER[name] ? name : 'clear'; },
+    get weather() { return weatherName; },
+    /** Thunder rumble after `delaySec` (call alongside the lightning flash with the flash-to-sound delay). */
+    thunder(delaySec = 1.5, vol = 0.8) {
+      if (!ready || (!offlineMode && ctx.state !== 'running')) return;
+      play('thunder', { when: Math.max(0, delaySec), vol: 0.9 * vol, rate: rnd(0.85, 1.1) });
+    },
   };
   return api;
 }

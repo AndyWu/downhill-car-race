@@ -14,8 +14,10 @@ const P = {
   truck: Math.max(0, parseInt(params.get('truck') ?? '0', 10) || 0),
   s: params.has('s') ? parseFloat(params.get('s')) : null,
   time: params.get('time') || 'day',
+  timeUrl: params.has('time'),
   headlight: params.get('headlight') === '1',
-  ai: params.has('ai') ? Math.max(0, Math.min(5, parseInt(params.get('ai'), 10) || 0)) : 5,
+  ai: params.has('ai') ? Math.max(0, Math.min(9, parseInt(params.get('ai'), 10) || 0)) : 9,
+  weather: params.get('weather') || null,
   cam: params.get('cam') || 'cockpit',
   q: params.get('q') || 'default',
   scene: params.get('scene') || null,
@@ -84,7 +86,7 @@ async function boot() {
     lighting = { sun, update() {} };
   }
   let post = gfx ? safe(() => gfx.createPostFX(renderer, scene, camera), 'createPostFX') : null;
-  const isDark = P.time === 'night' || P.time === 'dusk';
+  let isDark = P.time === 'night' || P.time === 'dusk';
 
   // ---- world ----
   loading.set(0.18, 'building the hill');
@@ -105,7 +107,9 @@ async function boot() {
   const TRUCKS = (vehMod && vehMod.TRUCKS && vehMod.TRUCKS.length) ? vehMod.TRUCKS : FALLBACK_TRUCKS;
   const input = createInput(canvas);
   const audio = audioMod ? safe(() => audioMod.createAudio(), 'createAudio') : null;
-  const AI_PROFILES = (aiMod && aiMod.AI_PROFILES) || [];
+  const AI_PROFILES = (aiMod && (aiMod.AI_ROSTER || aiMod.AI_PROFILES)) || [];
+  const ROSTER = AI_PROFILES.length ? AI_PROFILES : Array.from({ length: 9 }, (_, i) => ({ name: `Driver ${i + 1}` }));
+  const rosterName = (i) => (ROSTER[i % ROSTER.length] && ROSTER[i % ROSTER.length].name) || `Car ${i + 2}`;
 
   function resize() {
     const w = innerWidth, h = innerHeight;
@@ -140,7 +144,29 @@ async function boot() {
   let cockpit = null, playerV = null, ui = null, chaseT = null, lastRespawns = 0, mudTimer = 0;
   let cfg = { role: 'solo', truck: 0, ai: 5 };   // last race config (for rematch)
   const mp = { predictor: null, sync: null, interp: null, localSlot: 0, players: [], trucks: [], inputs: new Map(), tick: 0, goAtLocal: 0, picks: new Map(), info: null, results: [] };
-  let aiNames = ['Barnaby', 'Clementine', 'Buster', 'Maeve', 'Ace'];
+
+  // ---- weather / time of day ----
+  const WX_OK = ['clear', 'fog', 'snow', 'rain', 'storm'], TIME_OK = ['day', 'dusk', 'night', 'golden'];
+  const normWx = (w) => { w = String(w || '').toLowerCase().replace(/[^a-z]/g, ''); return { foggy: 'fog', heavyrain: 'rain', stormy: 'storm', snowy: 'snow' }[w] || (WX_OK.includes(w) ? w : 'clear'); };
+  function resolveConditions() {
+    const sel = ui && ui.getWeather ? safe(() => ui.getWeather(), 'getWeather', null) : null;
+    const weather = normWx(P.weather || (sel && sel.weather) || 'clear');
+    const t = (P.timeUrl ? P.time : (sel && sel.time)) || 'day';
+    return { weather, time: TIME_OK.includes(t) ? t : 'day' };
+  }
+  let curCond = null;
+  function applyConditions(c, instant = true) {
+    if (!c) return;
+    const wx = normWx(c.weather), tm = TIME_OK.includes(c.time) ? c.time : 'day';
+    curCond = { weather: wx, time: tm };
+    isDark = tm === 'night' || tm === 'dusk';
+    if (world && world.setWeather) safe(() => world.setWeather(wx), 'world.setWeather');
+    if (lighting && lighting.setTime) safe(() => lighting.setTime(tm, instant), 'setTime');
+    if (lighting && lighting.setWeather) safe(() => lighting.setWeather(wx, instant), 'lighting.setWeather');
+    if (audio && audio.setWeather) safe(() => audio.setWeather(wx), 'audio.setWeather');
+    if (materials && materials.setWind && world && world.weather && world.weather.wind != null) safe(() => materials.setWind(world.weather.wind), 'setWind');
+  }
+  if (lighting && lighting.onLightning) safe(() => lighting.onLightning((e) => { if (audio && audio.thunder) safe(() => audio.thunder(e.delay, e.intensity), 'thunder'); }), 'onLightning');
 
   // ---- vehicles ----
   // each AI profile has a signature truck (profile.truckId); fall back to the caller's index when absent
@@ -225,6 +251,7 @@ async function boot() {
   // o: { truck, ai, s, countdown, headlight, role:'solo'|'host'|'client', players, trucks, localSlot, goAtLocal }
   function startRace(o = {}) {
     clearRace();
+    applyConditions(o.conditions || resolveConditions(), true);
     const role = o.role || 'solo';
     const truckIdx = (o.truck ?? game.state.truck) % TRUCKS.length;
     cfg = { role, truck: truckIdx, ai: o.ai ?? P.ai };
@@ -232,12 +259,17 @@ async function boot() {
     const vs = game.vehicles;
     if (role === 'solo') {
       playerV = makeVehicle(truckIdx, 0, 'local', 0, 'You'); vs.push(playerV);
-      for (let i = 0; i < cfg.ai; i++) vs.push(makeVehicle(aiTruckIndex(i, truckIdx + 1 + i), i + 1, 'ai', i, aiNames[i % aiNames.length]));
+      // AI_ROSTER is ordered worst -> best; with fewer than 9 AI an evenly spaced subset is used. The best AI start in the front rows.
+      const nAI = Math.min(cfg.ai, 9);
+      for (let i = 0; i < nAI; i++) {
+        const ri = nAI <= 1 ? 4 : Math.round(i * (ROSTER.length - 1) / (nAI - 1));
+        vs.push(makeVehicle(aiTruckIndex(ri, truckIdx + 1 + i), nAI - i, 'ai', ri, rosterName(ri)));
+      }
     } else {
-      // multiplayer: one car per slot 0..5; humans from players[], rest AI (host simulates them)
+      // multiplayer: 10 cars; humans from players[] first, then AI backfill in roster order (slot k >= humans gets AI_ROSTER[k - humans])
       const humans = new Map(o.players.map((p) => [p.slot, p]));
-      let aiIdx = 0;
-      for (let slot = 0; slot < 6; slot++) {
+      const nHum = o.players.length;
+      for (let slot = 0; slot < 10; slot++) {
         const h = humans.get(slot);
         const tIdx = (o.trucks && o.trucks[slot] != null ? o.trucks[slot] : slot) % TRUCKS.length;
         let kind;
@@ -245,8 +277,8 @@ async function boot() {
         else if (role === 'client') kind = 'proxy';
         else kind = h ? 'remote' : 'ai';
         if (!h && kind === 'proxy') kind = 'proxy';
-        const v = makeVehicle(tIdx, slot, kind, aiIdx, h ? h.name : aiNames[aiIdx % aiNames.length]);
-        if (!h && kind !== 'local') aiIdx++;
+        const ri = Math.max(0, Math.min(ROSTER.length - 1, slot - nHum));
+        const v = makeVehicle(h ? tIdx : aiTruckIndex(ri, tIdx), slot, kind, ri, h ? h.name : rosterName(ri));
         if (kind === 'proxy' && h) v.human = true;
         vs.push(v);
         if (kind === 'local') playerV = v;
@@ -376,10 +408,12 @@ async function boot() {
   function hostLaunch() {
     const trucks = [];
     for (const p of mp.players) trucks[p.slot] = p.slot === 0 ? game.state.truck : (mp.picks.get(p.slot) ?? p.slot);
-    let aiN = 0;
-    for (let i = 0; i < 6; i++) if (trucks[i] == null) trucks[i] = aiTruckIndex(aiN++, i + 1);
-    const goAt = mp.sync.startCountdown(3, { players: mp.players, trucks, seed: 1 });
-    startRace({ role: 'host', players: mp.players, trucks, localSlot: 0, countdown: 0, goAtLocal: goAt });
+    const nHum = mp.players.length;
+    for (let i = 0; i < 10; i++) if (trucks[i] == null) trucks[i] = aiTruckIndex(Math.max(0, i - nHum), i + 1);
+    const cond = resolveConditions();
+    safe(() => mp.sync.setRaceConditions && mp.sync.setRaceConditions(cond), 'setRaceConditions');
+    const goAt = mp.sync.startCountdown(3, { players: mp.players, trucks, seed: 1, weather: cond.weather, time: cond.time });
+    startRace({ role: 'host', players: mp.players, trucks, localSlot: 0, countdown: 0, goAtLocal: goAt, conditions: cond });
     game.state.countdown = Math.max(0, (goAt - performance.now()) / 1000);
   }
   function clientReady(info) {
@@ -395,7 +429,7 @@ async function boot() {
         mp.players = m.players || [];
         mp.interp.clear();
         mp.predictor = null;
-        startRace({ role: 'client', players: mp.players, trucks: m.trucks, localSlot: mp.localSlot, countdown: 0, goAtLocal: goAt });
+        startRace({ role: 'client', players: mp.players, trucks: m.trucks, localSlot: mp.localSlot, countdown: 0, goAtLocal: goAt, conditions: m.weather || m.time ? { weather: m.weather || 'clear', time: m.time || 'day' } : null });
         game.state.countdown = Math.max(0, (goAt - performance.now()) / 1000);
       } else if (m.t === 'result') {
         mp.results[m.place - 1] = m;
@@ -476,12 +510,15 @@ async function boot() {
         else if (cfg.role === 'host' && mp.sync) hostLaunch();
         else if (cfg.role === 'client') { ui.toast && ui.toast('Waiting for the host to restart…'); }
       },
+      onWeather: (c) => { if (game.state.mode !== 'race') applyConditions({ weather: P.weather || c.weather, time: P.timeUrl ? P.time : c.time }, false); },
       onScreen: (name) => {
         if (name === 'garage') { ensurePreview(); previewShow(game.state.truck); ui.selectTruck && ui.selectTruck(game.state.truck); }
         if (name === 'title' && game.state.mode !== 'race') { game.state.mode = 'title'; input.setEnabled(false); }
       },
     }), 'createUI');
     game.ui = ui;
+    if (ui && ui.setAINames) safe(() => ui.setAINames(ROSTER), 'setAINames');
+    if (ui && ui.setWeather && (P.weather || P.timeUrl)) safe(() => ui.setWeather({ weather: normWx(P.weather || (ui.getWeather() || {}).weather), time: P.timeUrl ? P.time : (ui.getWeather() || {}).time }), 'ui.setWeather');
     if (ui && game.state.offlineReady && ui.setOfflineReady) ui.setOfflineReady(true);
     if (ui && !input.isTouch && ui.showGyroButton) safe(() => ui.showGyroButton(false), 'showGyroButton');
   }
@@ -504,13 +541,19 @@ async function boot() {
       // jitter-buffered: exactly one client frame per host tick; paddles cleared when the buffer repeats a frame
       const r = mp.sync.takeInput(slot);
       if (r && r.frame) { const d = netMod.decodeInputFrame(r.frame); remoteLast.set(slot, d); return d; }
-      return remoteLast.get(slot) ? { ...remoteLast.get(slot), paddleL: 0, paddleR: 0 } : idle;
+      return remoteLast.get(slot) ? { ...remoteLast.get(slot), paddleL: 0, paddleR: 0, honk: false } : idle;
     }
     const cur = mp.inputs.get(slot);
     if (!cur) return idle;
     const out = { ...cur }; cur.paddleL = 0; cur.paddleR = 0; return out;
   }
 
+  // horns: audio.honk(truckId, null) for the player's own car, (truckId, group) for everyone else (spatialised)
+  const HONK_BIT = (netMod && netMod.SNAP_EVENTS && netMod.SNAP_EVENTS.HONK) || 0;
+  function honkCar(v) {
+    v.honkTick = true;
+    if (audio && audio.honk) safe(() => audio.honk(v.spec.id, v.isPlayer ? null : v.group), 'audio.honk');
+  }
   function fixedUpdate() {
     const mode = game.state.mode;
     if (mode !== 'race' && mode !== 'finish') return;
@@ -530,6 +573,7 @@ async function boot() {
     if (role === 'client') {
       const inp = input.read(STEP);
       if (cd > 0) { inp.paddleL = inp.paddleR = 0; }
+      if (inp.honk) honkCar(playerV);
       frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
       playerV.lastInp = inp;
       inp.draft = 0;
@@ -549,15 +593,18 @@ async function boot() {
         inp = input.read(STEP);
         if (cd > 0) { inp.handbrake = 1; inp.paddleL = inp.paddleR = 0; }
         if (v.finished) { inp = { ...inp, handbrake: 0.7, paddleL: 0, paddleR: 0 }; }
+        if (inp.honk) honkCar(v);
         frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
       } else if (v.kind === 'remote') {
         inp = remoteInput(v.slot);
         if (cd > 0) inp = { ...idle, steer: inp.steer, handbrake: 1 };
+        if (inp.honk) honkCar(v);
         if (v.finished) inp = { ...idle, handbrake: 0.7 };
       } else if (cd > 0) { inp = { ...idle, handbrake: 1 }; }
       else {
         others.length = 0; for (const o of vs) if (o !== v) others.push(o.body.state);
         inp = safe(() => v.ai.think(STEP, v.body.state, others), 'ai.think') || idle;
+        if (inp.honk) honkCar(v);
         if (v.ai.needsRescue) { v.body.recover(8); if (v.ai.clearStuck) v.ai.clearStuck(); }
         if (v.finished) inp = { ...idle, handbrake: 0.7 };
       }
@@ -586,7 +633,7 @@ async function boot() {
         const b = H + i * S, st = v.body.state;
         snap[b] = v.slot; snap[b + 1] = st.position.x; snap[b + 2] = st.position.y; snap[b + 3] = st.position.z;
         snap[b + 4] = st.quaternion.x; snap[b + 5] = st.quaternion.y; snap[b + 6] = st.quaternion.z; snap[b + 7] = st.quaternion.w;
-        snap[b + 8] = st.velocity.x; snap[b + 9] = st.velocity.y; snap[b + 10] = st.velocity.z; snap[b + 11] = st.s; snap[b + 12] = 0;
+        snap[b + 8] = st.velocity.x; snap[b + 9] = st.velocity.y; snap[b + 10] = st.velocity.z; snap[b + 11] = st.s; snap[b + 12] = v.honkTick ? HONK_BIT : 0; v.honkTick = false;
       });
       mp.sync.broadcastSnapshot(snap);
     }
@@ -600,6 +647,8 @@ async function boot() {
     for (const v of game.vehicles) {
       const st = v.body.state;
       const c = v.isPlayer && mp.predictor ? null : m.get(v.slot);
+      const ce = m.get(v.slot);
+      if (ce && HONK_BIT && (ce.events & HONK_BIT) && v.slot !== mp.localSlot) honkCar(v);
       if (c) {
         st.position.set(c.position[0], c.position[1], c.position[2]);
         st.quaternion.set(c.quaternion[0], c.quaternion[1], c.quaternion[2], c.quaternion[3]);
@@ -634,7 +683,26 @@ async function boot() {
     } else if (reflOn) { safe(() => post.setPlanarReflection({ enabled: false }), 'planarReflection'); reflOn = false; }
   }
 
+  // live place: finished cars by finish time first, then by distance along the road
+  let rankTimer = 0;
+  function livePlace() {
+    if (!playerV) return 0;
+    const me = playerV; let place = 1;
+    for (const v of game.vehicles) {
+      if (v === me) continue;
+      if (me.finished) { if (v.finished && v.finishTime < me.finishTime) place++; }
+      else if (v.finished || v.body.state.s > me.body.state.s) place++;
+    }
+    return place;
+  }
+  function updateRank(dt) {
+    rankTimer += dt; if (rankTimer < 0.25) return; rankTimer = 0;
+    const m = game.state.mode;
+    if (ui && ui.setRank && (m === 'race' || m === 'finish')) safe(() => ui.setRank(livePlace(), game.vehicles.length), 'ui.setRank');
+  }
+
   function render(alpha, dt) {
+    updateRank(dt);
     const ap = game.state.paused ? 1 : alpha;
     for (const v of game.vehicles) {
       const s = v.body.state;
@@ -675,13 +743,14 @@ async function boot() {
       if (audio && audio.update && audio.ready) {
         let load = 0; for (let i = 0; i < 4; i++) { contactsArr[i] = !!s.wheelContacts[i].contact; load += s.wheelContacts[i].compression; }
         const oth = []; for (const v of game.vehicles) if (v !== playerV) oth.push({ position: v.body.state.position, speed: v.body.state.speed });
-        safe(() => audio.update(dt, { speed: s.speed, surface: s.surface, wheelContacts: contactsArr, paddleL: frameImpulse.l, paddleR: frameImpulse.r, handbrake: s.handbrake, bumps: s.bump, suspensionLoad: Math.min(1, load / 4), flagRipple: 2 + s.speed * 0.6, dusk: P.time === 'dusk' ? 1 : P.time === 'night' ? 1 : 0, others: oth, listener: camera }), 'audio.update');
+        safe(() => audio.update(dt, { speed: s.speed, surface: s.surface, wheelContacts: contactsArr, paddleL: frameImpulse.l, paddleR: frameImpulse.r, handbrake: s.handbrake, bumps: s.bump, suspensionLoad: Math.min(1, load / 4), flagRipple: 2 + s.speed * 0.6, dusk: isDark ? 1 : 0, others: oth, listener: camera }), 'audio.update');
       }
       frameImpulse.l = frameImpulse.r = 0;
       updateReflection(dt);
     }
+    const ps0 = playerV ? playerV.body.state : null;
     safe(() => world.update(dt, camera), 'world.update');
-    if (lighting && lighting.update) safe(() => lighting.update(dt, camera), 'lighting.update');
+    if (lighting && lighting.update) safe(() => lighting.update(dt, camera, ps0 ? ps0.speed : 0), 'lighting.update');
     const ps = playerV ? playerV.body.state : null;
     const sp = ps ? ps.speed : 0;
     if (ps) {
@@ -779,6 +848,7 @@ async function boot() {
   }
 
   // ---- go ----
+  applyConditions(resolveConditions(), true);
   loading.set(1, 'ready');
   await nextFrame();
   loading.done();

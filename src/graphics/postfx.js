@@ -34,7 +34,7 @@ precision highp float;
 #define MAXD ${MAXD}
 varying vec2 vUv;
 uniform sampler2D tScene, tB1, tB2;
-uniform float uTime, uMotion, uBloom, uVig, uGrain, uExposure, uAspect, uGrade;
+uniform float uTime, uMotion, uBloom, uVig, uGrain, uExposure, uAspect, uGrade, uCool, uDesat;
 uniform int uDropN;
 uniform vec4 uDA[ MAXD ];
 uniform vec4 uDB[ MAXD ];
@@ -122,6 +122,8 @@ void main() {
 	s *= mix( vec3( 1.0 ), mix( vec3( 0.92, 0.99, 1.06 ), vec3( 1.06, 1.0, 0.92 ), smoothstep( 0.2, 0.85, lum ) ), 0.65 * uGrade );
 	s = mix( s, s * s * ( 3.0 - 2.0 * s ), 0.2 * uGrade );
 	s = s * 0.975 + 0.008;
+	s = mix( s, vec3( dot( s, vec3( 0.2126, 0.7152, 0.0722 ) ) ), uDesat );
+	s *= mix( vec3( 1.0 ), vec3( 0.93, 0.985, 1.08 ), uCool );
 	float vv = length( ( vUv - 0.5 ) * vec2( 1.0, 0.92 ) );
 	s *= 1.0 - uVig * smoothstep( 0.28, 0.85, vv ) * smoothstep( 0.28, 0.85, vv + 0.08 );
 	float n = hash( gl_FragCoord.xy + fract( uTime ) * 913.1 ) - 0.5;
@@ -154,7 +156,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
   const dA = Array.from({ length: MAXD }, () => new THREE.Vector4()), dB = Array.from({ length: MAXD }, () => new THREE.Vector4());
   const finalM = sm(FINAL_FS, {
     tScene: { value: null }, tB1: { value: null }, tB2: { value: null }, uTime: { value: 0 }, uMotion: { value: 0 }, uBloom: { value: 0.5 },
-    uVig: { value: 0.5 }, uGrain: { value: 0.04 }, uExposure: { value: 1 }, uAspect: { value: 1 }, uGrade: { value: 1 },
+    uVig: { value: 0.5 }, uGrain: { value: 0.04 }, uExposure: { value: 1 }, uAspect: { value: 1 }, uGrade: { value: 1 }, uCool: { value: 0 }, uDesat: { value: 0 },
     uDropN: { value: 0 }, uDA: { value: dA }, uDB: { value: dB },
   });
   if (tier.refraction) finalM.defines.REFRACT = 1;
@@ -267,6 +269,8 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
       const spl = typeof splatter === 'number' ? { type: 'mud', amount: splatter } : splatter;
       sim.contact(spl.type, spl.amount, dt, spl.wetSteps);
     }
+    // rain on the lens: spawn rate from the global rain intensity (no frame-rate dependence, see splatter.js)
+    if (G.gfxRain.value > 0.05 && tier.refraction) sim.contact('water', G.gfxRain.value * 0.3, dt, 99);
     stepDrops(dt);
 
     if (refl.on) renderReflection();
@@ -285,6 +289,7 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     }
     const U = finalM.uniforms;
     U.tScene.value = rtScene.texture; U.tB1.value = rtB1.texture; U.tB2.value = rtB2.texture;
+    U.uCool.value = G.gfxCool.value; U.uDesat.value = G.gfxDesat.value;
     U.uTime.value = time; U.uBloom.value = bloomOn ? P.bloom : 0;
     U.uMotion.value = P.motion * 0.02 * Math.min(1, Math.max(0, (speed - 10) / 30));
     U.uVig.value = P.vignette + Math.min(0.2, speed * 0.004); U.uGrain.value = P.grain; U.uGrade.value = P.grade;

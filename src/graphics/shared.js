@@ -12,6 +12,13 @@ export const G = {
   gfxReflTex: { value: null },                           // planar reflection (set by postFX.setPlanarReflection)
   gfxReflVP: { value: new THREE.Matrix4() },
   gfxReflOn: { value: 0 },
+  // weather (set by lighting.setWeather)
+  gfxWet: { value: 0 },      // 0..1 wet surfaces: darker + glossier on every standard material
+  gfxSnow: { value: 0 },     // 0..1 snow dusting on up-facing surfaces
+  gfxRain: { value: 0 },     // 0..1 rain intensity (puddle rings, lens drops)
+  gfxWind: { value: 0 },     // 0..1 extra wind (foliage sway)
+  gfxCool: { value: 0 },     // cold colour grade amount (post)
+  gfxDesat: { value: 0 },    // extra desaturation (post)
 };
 
 export function injectGlobals(shader) {
@@ -71,6 +78,23 @@ export function installFog() {
 
   // clamp near-field spot/point attenuation (headlight hot-spot would otherwise explode within ~2 m of the lamp)
   C.lights_pars_begin = C.lights_pars_begin.replace('max( pow( lightDistance, decayExponent ), 0.01 )', 'max( pow( lightDistance, decayExponent ), 8.0 )');
+
+  // ---- weather on every standard material (cheap: a few ALU, no extra fetches) ----
+  C.common += '\nuniform float gfxWet; uniform float gfxSnow; uniform float gfxRain;\n';
+  C.color_fragment += '\n\tdiffuseColor.rgb *= 1.0 - 0.34 * gfxWet;\n';
+  C.lights_physical_fragment = /* glsl */`
+#ifdef USE_FOG
+	if ( gfxSnow > 0.001 ) {
+		vec3 gsN = inverseTransformDirection( normal, viewMatrix );
+		vec3 gsP = cameraPosition + vFogRel;
+		float gsn = 0.5 + 0.25 * sin( gsP.x * 2.3 + sin( gsP.z * 1.7 ) * 2.0 ) + 0.25 * sin( gsP.z * 3.1 + sin( gsP.x * 2.7 ) * 1.5 );
+		float gsc = smoothstep( 0.45, 0.85, gsN.y ) * gfxSnow * ( 0.7 + 0.5 * gsn ) * ( 1.0 - metalnessFactor );
+		gsc = clamp( gsc, 0.0, 1.0 );
+		diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.74, 0.78, 0.85 ), gsc );
+		roughnessFactor = mix( roughnessFactor, 0.85, gsc );
+	}
+#endif
+` + C.lights_physical_fragment.replace('material.roughness = max( roughnessFactor, 0.0525 );', 'material.roughness = max( roughnessFactor * ( 1.0 - 0.6 * gfxWet ), 0.0525 );');
 
   // every material (unless it overrides onBeforeCompile and calls injectGlobals) gets the globals
   THREE.Material.prototype.onBeforeCompile = function (shader) { injectGlobals(shader); };

@@ -1,10 +1,12 @@
-// SNAPSHOT wire format, VERSION 3 (host → clients, 30 Hz), all little-endian.
+// SNAPSHOT wire format, VERSION 4 (host → clients, 30 Hz), all little-endian. Up to 16 cars
+// (races use 10). v4 = v3 with a 4-bit car id in the head byte.
 //
-// header: u8 type(=2), u8 version(=3), u8 flags (bit0 KEYFRAME, bit1 HAS_ORIGIN), u8 count,
+// header: u8 type(=2), u8 version(=4), u8 flags (bit0 KEYFRAME, bit1 HAS_ORIGIN), u8 count,
 //         u32 tick, u8 baseAge (ticks since the keyframe that UNCHANGED cars refer to)
 //         [+ f32 originX, originY, originZ, f32 scale  — only if any car uses a FULL record]
 //         → 9 B (25 B when a full record is present)
-// per car: u8 head = id(bits0-2) | UNCHANGED(bit3) | HAS_EVENTS(bit4) | HAS_ACK(bit5) | COMPACT(bit6)
+// per car: u8 head = id(bits0-3) | UNCHANGED(bit4) | HAS_EVENTS(bit5) | HAS_ACK(bit6) | COMPACT(bit7)
+//          events bits: SNAP_EVENTS.HONK = 1 (car honked since the last snapshot), others free
 //          [u8 events] [u8 ack = input seq & 255 the host has applied for this car]
 //   UNCHANGED → nothing more (same as the keyframe) ................................... 1 B
 //   COMPACT   (track-relative, needs the deterministic world on both sides) ........ 11 B
@@ -29,11 +31,13 @@
 const MSG_SNAPSHOT = 2;
 export const SNAP_HEADER = 2;
 export const SNAP_STRIDE = 15;
-export const SNAP_VERSION = 3;
+export const SNAP_VERSION = 4;
+export const MAX_CARS = 16;
+export const SNAP_EVENTS = { HONK: 1 };
 export const SNAP_FIELDS = { id: 0, px: 1, py: 2, pz: 3, qx: 4, qy: 5, qz: 6, qw: 7, vx: 8, vy: 9, vz: 10, s: 11, events: 12, ack: 13, exact: 14 };
 
 const F_KEY = 1, F_ORIGIN = 2;
-const C_UNCHANGED = 8, C_EVENTS = 16, C_ACK = 32, C_COMPACT = 64;
+const ID_MASK = 15, C_UNCHANGED = 16, C_EVENTS = 32, C_ACK = 64, C_COMPACT = 128;
 const R = Math.SQRT1_2, U24 = 16777215;
 const DEG = Math.PI / 180, ANG = 0.5 * DEG, SLIP = (2 * Math.PI) / 256;
 const S_OFF = 20, LAT = 0.1, H_OFF = 1, H_STEP = 0.02, HS = 0.25, VY = 0.1;
@@ -175,15 +179,15 @@ const CAR_MAX = 1 + 2 + 21;
 export function createSnapshotEncoder({ keyframeEvery = 10, world, compact = true } = {}) {
   let sinceKey = Infinity, keyTick = 0;
   const base = new Map();
-  const scratch = new Uint8Array(25 + 8 * CAR_MAX);
-  const carBuf = new Uint8Array(8 * CAR_MAX);
+  const scratch = new Uint8Array(25 + MAX_CARS * CAR_MAX);
+  const carBuf = new Uint8Array(MAX_CARS * CAR_MAX);
   const check = new Float32Array(SNAP_STRIDE);
   const stats = { full: 0, compact: 0, unchanged: 0 };
   return {
     stats,
     encode(snap, acks) {
       const tick = snap[0] >>> 0;
-      const count = Math.min(snap[1] | 0, 8);
+      const count = Math.min(snap[1] | 0, MAX_CARS);
       const key = sinceKey >= keyframeEvery - 1 || tick - keyTick > 255;
       if (key) { sinceKey = 0; keyTick = tick; base.clear(); } else sinceKey++;
       const w = compact && !key ? resolveWorld(world) : null;
@@ -194,7 +198,7 @@ export function createSnapshotEncoder({ keyframeEvery = 10, world, compact = tru
       let co = 0, anyFull = false;
       for (let i = 0; i < count; i++) {
         const b = SNAP_HEADER + i * SNAP_STRIDE;
-        const id = snap[b] & 7;
+        const id = snap[b] & ID_MASK;
         if (!key && sameAsBase(snap, b, base.get(id))) { kinds[i] = 'u'; continue; }
         const n = w ? encodeCompact(w, snap, b, cdv, co, check) : 0;
         if (n) { kinds[i] = 'c'; compactAt[i] = co; co += n; } else { kinds[i] = 'f'; anyFull = true; }
@@ -218,7 +222,7 @@ export function createSnapshotEncoder({ keyframeEvery = 10, world, compact = tru
       if (anyFull) { dv.setFloat32(9, mn[0], true); dv.setFloat32(13, mn[1], true); dv.setFloat32(17, mn[2], true); dv.setFloat32(21, scale, true); o = 25; }
       for (let i = 0; i < count; i++) {
         const b = SNAP_HEADER + i * SNAP_STRIDE;
-        const id = snap[b] & 7;
+        const id = snap[b] & ID_MASK;
         const ev = snap[b + 12] & 255;
         const ack = acks && acks.has(id) ? acks.get(id) & 255 : -1;
         const k = kinds[i];
@@ -269,7 +273,7 @@ export function createSnapshotDecoder({ world } = {}) {
       let n = 0;
       for (let i = 0; i < count; i++) {
         const head = dv.getUint8(o++);
-        const id = head & 7;
+        const id = head & ID_MASK;
         const ev = head & C_EVENTS ? dv.getUint8(o++) : 0;
         const ack = head & C_ACK ? dv.getUint8(o++) : -1;
         const b = SNAP_HEADER + n * SNAP_STRIDE;

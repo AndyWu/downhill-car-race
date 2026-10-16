@@ -65,7 +65,7 @@ async function main() {
   if (opened.some((s) => s !== 'open')) throw new Error('no connection');
 
   // ---------------- 2. 60 Hz sync ----------------
-  console.log('2) 60 Hz inputs + 30 Hz snapshots, no world → FULL records (host steps at 60 Hz for 3 s)');
+  console.log('2) 60 Hz inputs + 30 Hz snapshots of 10 cars, no world → FULL records (host steps at 60 Hz for 3 s)');
   await host.evaluate(() => {
     window.hs = net.createSync({ role: 'host', peers: [hp] });
     window.rx = { inputs: 0, lastSeq: -1, gaps: 0, ctrl: [] };
@@ -82,14 +82,14 @@ async function main() {
   const run = (page, role) => page.evaluate((role) => new Promise((done) => {
     const N = 180, dt = 1000 / 60, start = performance.now();
     let sent = 0;
-    const snap = new Float32Array(net.SNAP_HEADER + 6 * net.SNAP_STRIDE);
+    const snap = new Float32Array(net.SNAP_HEADER + 10 * net.SNAP_STRIDE);
     const frame = new Float32Array(net.INPUT_STRIDE);
     const iv = setInterval(() => {
       const due = Math.min(N, Math.floor((performance.now() - start) / dt) + 1);
       while (sent < due) {
         if (role === 'host') {
-          snap[0] = sent; snap[1] = 6;
-          for (let i = 0; i < 6; i++) { const b = net.SNAP_HEADER + i * net.SNAP_STRIDE; snap.set([i, i * 3, 100 - sent * 0.2 - i * 40, -sent * 0.5 - i * 300, 0, Math.sin(sent / 50), 0, Math.cos(sent / 50), 0, -12, -30, sent * 0.5 + i * 300, 0, 0], b); }
+          snap[0] = sent; snap[1] = 10;
+          for (let i = 0; i < 10; i++) { const b = net.SNAP_HEADER + i * net.SNAP_STRIDE; snap.set([i, i * 3, 100 - sent * 0.2 - i * 40, -sent * 0.5 - i * 300, 0, Math.sin(sent / 50), 0, Math.cos(sent / 50), 0, -12, -30, sent * 0.5 + i * 300, 0, 0], b); }
           const by = hs.broadcastSnapshot(snap); if (by) { window.snapBytes = by; window.snapTotal = (window.snapTotal || 0) + by; }
         } else {
           net.encodeInputFrame({ steer: Math.sin(sent / 10), paddleL: sent % 20 === 0 ? 1 : 0, headlight: true }, sent, frame);
@@ -114,14 +114,14 @@ async function main() {
   console.log(`     clock: synced=${cRx.synced} rtt=${cRx.rtt.toFixed(2)} ms; bytes host tx=${hRx.stats.sentBytes} client tx=${cRx.stats.sentBytes}`);
   check(hRx.inputs >= 175, `≥175/180 input frames delivered at 60 Hz (${hRx.inputs})`);
   check(hRx.stats.snapshotsTx === 90 && cRx.snaps >= 85, `30 Hz snapshots: ${hRx.stats.snapshotsTx} sent, ${cRx.snaps} delivered`);
-  check(snapTotal / (hRes.ms / 1000) * 5 < 25 * 1024, `6-car snapshot stream × 5 clients < 25 KiB/s (${(snapTotal / (hRes.ms / 1000) * 5 / 1024).toFixed(1)} KiB/s)`);
+  check(snapTotal / (hRes.ms / 1000) * 5 < 40 * 1024, `10-car FULL-record fallback (no world) × 5 clients < 40 KiB/s (${(snapTotal / (hRes.ms / 1000) * 5 / 1024).toFixed(1)} KiB/s); with the world see 2b`);
   check(cRx.sampled > 100, 'interpolator produced samples');
   check(cRx.synced && cRx.rtt < 50, 'clock ping/pong synced');
   check(cRx.ctrl.some((m) => m.t === 'seed' && m.seed === 99) && hRx.ctrl.some((m) => m.t === 'truck'), 'reliable control channel both ways');
 
   // ---------------- 2b. Lossy, jittery link: interpolation + prediction smoothness ----------------
   for (const [loss, jMin, jMax] of [[0.05, 20, 80], [0.15, 20, 80]]) {
-    console.log(`2b) ${Math.round(loss * 100)}% loss, ${jMin}-${jMax} ms jitter on the fast channel (8 s, v3 track-relative snapshots, prediction on)`);
+    console.log(`2b) ${Math.round(loss * 100)}% loss, ${jMin}-${jMax} ms jitter on the fast channel (8 s, 10 cars, v4 track-relative snapshots, prediction on)`);
     const shim = (page) => page.evaluate(([loss, jMin, jMax]) => {
       const peer = window.hp || window.cp;
       const ch = peer.fast;
@@ -155,7 +155,7 @@ async function main() {
     const run2 = (page, role) => page.evaluate((role) => new Promise((done) => {
       const N = 480, dt = 1 / 60, start = performance.now();
       let k = 0, prev = null;
-      const snap = new Float32Array(net.SNAP_HEADER + 6 * net.SNAP_STRIDE);
+      const snap = new Float32Array(net.SNAP_HEADER + 10 * net.SNAP_STRIDE);
       const fr = new Float32Array(20);
       const iv = setInterval(() => {
         const due = Math.min(N, Math.floor((performance.now() - start) / (dt * 1000)) + 1);
@@ -163,8 +163,8 @@ async function main() {
           if (role === 'host') {
             const r = hs.takeInput(1);
             if (r) hbody.step(dt, net.decodeInputFrame(r.frame));
-            snap[0] = k; snap[1] = 6;
-            for (let id = 0; id < 6; id++) {
+            snap[0] = k; snap[1] = 10;
+            for (let id = 0; id < 10; id++) {
               const b = net.SNAP_HEADER + id * net.SNAP_STRIDE;
               if (id === 1) { hbody.serialize(fr); snap.set([1, fr[0], fr[1], fr[2], fr[3], fr[4], fr[5], fr[6], fr[7], fr[8], fr[9], fr[13], 0, -1, 1], b); }
               else snap.set([...fw.carAt(world, id, k * dt), -1, 1], b);
@@ -206,7 +206,7 @@ async function main() {
     const p95 = C2.ack[Math.floor(C2.ack.length * 0.95)] ?? Infinity;
     const avgSnap = H2.st.snapshotBytesTotal / H2.st.snapshotsTx;
     console.log(`     host: ${H2.st.snapshotsTx} snapshots avg ${avgSnap.toFixed(1)} B (${(avgSnap * 30 / 1024).toFixed(2)} KiB/s per client, ${(avgSnap * 30 * 5 / 1024).toFixed(2)} KiB/s ×5); records full/compact ${H2.enc.full}/${H2.enc.compact}; inputs repeated ${H2.st.inputsRepeated || 0}, merged ${H2.st.inputsMerged || 0} (latency trims ${H2.st.inputsTrimmed || 0})`);
-    console.log(`     client: ${C2.snaps} snapshots received; interp delay adapted to ${C2.delay.toFixed(0)} ms (jitter ${C2.jit.toFixed(0)} ms), extrapolated ${C2.ext}/${C2.samples * 5} samples`);
+    console.log(`     client: ${C2.snaps} snapshots received; interp delay adapted to ${C2.delay.toFixed(0)} ms (jitter ${C2.jit.toFixed(0)} ms), extrapolated ${C2.ext}/${C2.samples * 9} samples`);
     console.log(`     interpolation error vs ground truth: max ${(C2.interpMax * 100).toFixed(1)} cm, mean ${(C2.interpSum / C2.interpN * 100).toFixed(1)} cm`);
     console.log(`     prediction: ${C2.pred.reconciles} reconciles, ${C2.pred.corrections} corrections >1 cm, ${C2.pred.skipped} inside deadband, max correction ${(C2.pred.maxError * 100).toFixed(1)} cm, max visual pop ${(C2.pop * 100).toFixed(2)} cm/frame; ack latency p50 ${C2.ack[C2.ack.length >> 1]?.toFixed(0)} ms, p95 ${p95.toFixed(0)} ms`);
     console.log(`     client upload: ${(C2.tx / 8 / 1024).toFixed(2)} KiB/s (inputs 30 Hz × 20 B + pings)`);
@@ -232,7 +232,7 @@ async function main() {
     window.lobby = net.createLobby({ role: 'host', name: 'Dad' }); // camera enabled: must stay off until asked
     window.peerLog = []; lobby.onPeer((p) => { window.peerLog.push('open ' + p.id); p.on('state', (st) => window.peerLog.push(p.id + ':' + st + ':' + p.pc.connectionState)); });
     window.lobbyReady = null;
-    lobby.onReady((info) => { window.lobbyReady = { n: info.peers.length, players: info.players }; });
+    lobby.onReady((info) => { window.lobbyReady = { n: info.peers.length, players: info.players, lineup: info.lineup }; });
     lobby.start();
   });
   const pre = await host.waitForFunction(() => lobby.state.offerCode && lobby.state, null, { timeout: 15000 }).then((h) => h.jsonValue());
@@ -290,9 +290,12 @@ async function main() {
   }
   await host.waitForFunction(() => lobby.peers.size === 2 && lobby.state.peers.filter((p) => p.name.startsWith('Kid')).length === 2, null, { timeout: 10000 });
   if (process.env.NET_SHOT) await host.screenshot({ path: process.env.NET_SHOT }).catch(() => {});
+  const seats = await host.evaluate(() => lobby.state.seatList.map((p) => `${p.slot}:${p.kind}:${p.name}`));
+  check(seats.length === 10 && seats.filter((x) => x.includes(':ai:')).length === 7 && seats.some((x) => /Tilly|Rosco|Vance|Dot/.test(x)), `lobby shows 10 seats, 3 humans + 7 AI from AI_ROSTER: ${seats.join(', ')}`);
   await host.evaluate(() => lobby.startRace());
   const ready = await host.evaluate(() => window.lobbyReady);
   if (!ready || ready.n !== 2) console.log('     host lobby state', JSON.stringify(await host.evaluate(() => ({ peers: lobby.state.peers, notice: lobby.state.notice, log: window.peerLog }))));
+  check(ready?.lineup?.length === 10, `race lineup has 10 cars (${ready?.lineup?.map((p) => p.name).join(', ')})`);
   check(ready && ready.n === 2 && ready.players.length === 3, `host onReady with ${ready?.n} peers: ${ready?.players.map((p) => p.name).join(', ')}`);
 
   // ---------------- 4. Agent 4 UI slot adapter ----------------

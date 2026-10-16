@@ -5,6 +5,7 @@ import { createVehicleBody, placeOnGround } from '../core/physics.js';
 import { TRUCKS } from '../vehicles/index.js';
 
 const world = await createWorld(new THREE.Scene(), { seed: 1 });
+world.setWeather(process.env.WEATHER || 'clear');
 const spec = TRUCKS[Number(process.env.TRUCK || 0)];
 let worst = 0; const bad = [];
 const rows = [];

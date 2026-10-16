@@ -43,6 +43,7 @@ const _F = new THREE.Vector3(), _T = new THREE.Vector3(), _tmp = new THREE.Vecto
 const _nSum = new THREE.Vector3(), _fw = new THREE.Vector3(), _fc = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _dq = new THREE.Quaternion(), _wl = new THREE.Vector3();
 const _qi = new THREE.Quaternion(), _ws = new THREE.Vector3();
+const _gn = new THREE.Vector3(), _ax = new THREE.Vector3(), _qr = new THREE.Quaternion();
 
 export function createVehicleBody(specIn, world, opts = {}) {
   const spec = { ...DEFAULT_SPEC, ...(specIn || {}) };
@@ -213,8 +214,10 @@ export function createVehicleBody(specIn, world, opts = {}) {
     w.addScaledVector(_wl, h);
     w.multiplyScalar(1 - Math.min(0.25 * h, 0.5));
     if (w.length() > 14) w.setLength(14);
+    if (hasWorld) selfRight(h, contacts);
     _dq.set(w.x, w.y, w.z, 0).multiply(q);
     q.set(q.x + 0.5 * h * _dq.x, q.y + 0.5 * h * _dq.y, q.z + 0.5 * h * _dq.z, q.w + 0.5 * h * _dq.w).normalize();
+    if (hasWorld) noUpsideDown(h, contacts);
 
     // hard floor safety
     if (hasWorld) {
@@ -224,6 +227,61 @@ export function createVehicleBody(specIn, world, opts = {}) {
     state.airborne = contacts === 0;
     state.bump = Math.max(state.bump * (1 - 6 * h), clamp(bumpMax * 0.12, 0, 1));
     state.slip = slipMax;
+  }
+
+  // Anti-flip. High in the air the cart spins freely (jumps and air rotation are part of the fun);
+  // on the ground, and while dropping back towards it, a gyro-like assist pulls the chassis upright
+  // against the ground normal so it always lands on its wheels and never ends up on its roof.
+  function groundInfo() {
+    const p = state.position;
+    const gh = fin(world.heightAt(p.x, p.z), p.y);
+    const n = world.normalAt(p.x, p.z);
+    _gn.set(fin(n.x), fin(n.y, 1), fin(n.z)).normalize();
+    return p.y - gh;
+  }
+  function selfRight(h, contacts) {
+    const w = state.angularVelocity, v = state.velocity;
+    const above = groundInfo();
+    _up.set(0, 1, 0).applyQuaternion(state.quaternion);
+    const c = clamp(_up.dot(_gn), -1, 1), ang = Math.acos(c);
+    let k, damp;
+    if (contacts > 0) {
+      // on the ground: free up to ~20 deg of body roll/pitch, then an increasingly stiff restoring spring
+      const e = clamp((ang - 0.3) / 0.5, 0, 1);
+      k = 110 * e; damp = 14 * e;
+    } else {
+      // in the air: nothing while high; ramps up as the cart falls back within ~3 m so it lands wheels-down
+      const near = 1 - clamp((above - 1.0) / 2.5, 0, 1);
+      const falling = v.y < 0.5 ? 1 : 0.25;
+      const e = near * falling;
+      k = 45 * e; damp = 6 * e;
+    }
+    if (k <= 0 && damp <= 0) return;
+    _ax.copy(_up).cross(_gn);
+    const sl = _ax.length();
+    if (sl > 1e-5) w.addScaledVector(_ax.multiplyScalar(1 / sl), k * ang * h);
+    else if (c < 0) { _ax.set(0, 0, -1).applyQuaternion(state.quaternion); w.addScaledVector(_ax, k * Math.PI * h); }
+    // damp only the tumbling components (keep yaw about the ground normal free for spins and drifts)
+    const wn = w.dot(_gn);
+    _tmp2.copy(w).addScaledVector(_gn, -wn);
+    w.addScaledVector(_tmp2, -Math.min(1, damp * h));
+  }
+  function noUpsideDown(h, contacts) {
+    // hard guarantee: touching or about to touch the ground past ~80 deg of tilt -> rotate back towards upright
+    const above = groundInfo();
+    if (contacts === 0 && above > 1.4) return;
+    const q = state.quaternion;
+    _up.set(0, 1, 0).applyQuaternion(q);
+    const c = _up.dot(_gn);
+    if (c > 0.45) return;
+    _qr.setFromUnitVectors(_up, _gn);
+    const t = clamp(h * 8 + (c < -0.2 ? 0.08 : 0), 0, 1);
+    _q.identity().slerp(_qr, t);
+    q.premultiply(_q).normalize();
+    const w = state.angularVelocity, wn = w.dot(_gn);
+    _tmp2.copy(_gn).multiplyScalar(wn);
+    w.lerp(_tmp2, clamp(h * 10, 0, 1));
+    if (above < 0.35) state.position.y += 0.02;
   }
 
   function sanitize() {

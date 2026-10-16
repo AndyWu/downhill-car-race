@@ -16,9 +16,11 @@ export const INPUT_REDUNDANCY = 4; // frames per packet (2 new + 2 repeated)
 export const INPUT_HZ = 30;
 export const FLAG_HEADLIGHT = 1;
 export const FLAG_REVERSE = 2;
+export const FLAG_HONK = 1 << 18; // decoded-frame flags bit (bits 2-17 hold the stroke counters)
+const KEEP = FLAG_HEADLIGHT | FLAG_REVERSE | FLAG_HONK;
 export {
   SNAP_HEADER, SNAP_STRIDE, SNAP_VERSION, SNAP_FIELDS, packQuat, unpackQuat,
-  createSnapshotEncoder, createSnapshotDecoder, packSnapshot, unpackSnapshot,
+  createSnapshotEncoder, createSnapshotDecoder, packSnapshot, unpackSnapshot, SNAP_EVENTS, MAX_CARS,
 } from './snapshot.js';
 
 // Quantisation shared by client prediction and the host (both must simulate the SAME input):
@@ -36,6 +38,7 @@ export function quantizeInput(input, out = {}) {
   out.handbrake = q4(input.handbrake) / 15;
   out.headlight = !!input.headlight;
   out.reverse = !!input.reverse;
+  out.honk = !!input.honk;
   if (input.draft !== undefined) out.draft = input.draft;
   return out;
 }
@@ -47,24 +50,25 @@ export function encodeInputFrame(input, seq, out = new Float32Array(INPUT_STRIDE
   out[2] = q4(input.paddleL) / 15;
   out[3] = q4(input.paddleR) / 15;
   out[4] = q4(input.handbrake) / 15;
-  out[5] = (input.headlight ? FLAG_HEADLIGHT : 0) | (input.reverse ? FLAG_REVERSE : 0);
+  out[5] = (input.headlight ? FLAG_HEADLIGHT : 0) | (input.reverse ? FLAG_REVERSE : 0) | (input.honk ? FLAG_HONK : 0);
   return out;
 }
 export function decodeInputFrame(f) {
   const flags = f[5] | 0;
-  return { seq: f[0], steer: f[1], paddleL: f[2], paddleR: f[3], handbrake: f[4], headlight: !!(flags & FLAG_HEADLIGHT), reverse: !!(flags & FLAG_REVERSE) };
+  return { seq: f[0], steer: f[1], paddleL: f[2], paddleR: f[3], handbrake: f[4], headlight: !!(flags & FLAG_HEADLIGHT), reverse: !!(flags & FLAG_REVERSE), honk: !!(flags & FLAG_HONK) };
 }
 /** Cumulative (mod 256) stroke count of a paddle as of this frame; stored in flags bits 2-9 (L) / 10-17 (R). */
 export const strokeCount = (f, side) => ((f[5] | 0) >> (side ? 10 : 2)) & 255;
-export const withStrokeCounts = (f, cL, cR) => { f[5] = ((f[5] | 0) & 3) | ((cL & 255) << 2) | ((cR & 255) << 10); return f; };
+export const withStrokeCounts = (f, cL, cR) => { f[5] = ((f[5] | 0) & KEEP) | ((cL & 255) << 2) | ((cR & 255) << 10); return f; };
 
-/** One frame → u32: steer int8 | pL<<8 | pR<<12 | hb<<16 | light<<20 | reverse<<21 */
+/** One frame → u32: steer int8 | pL<<8 | pR<<12 | hb<<16 | light<<20 | reverse<<21 | honk<<22 */
 function frameToU32(f) {
-  return ((q8(f[1]) & 255) | (q4(f[2]) << 8) | (q4(f[3]) << 12) | (q4(f[4]) << 16) | (((f[5] | 0) & 3) << 20)) >>> 0;
+  const fl = f[5] | 0;
+  return ((q8(f[1]) & 255) | (q4(f[2]) << 8) | (q4(f[3]) << 12) | (q4(f[4]) << 16) | ((fl & 3) << 20) | ((fl & FLAG_HONK ? 1 : 0) << 22)) >>> 0;
 }
 function u32ToFrame(u, seq) {
   let st = u & 255; if (st > 127) st -= 256;
-  return Float32Array.of(seq, st / 127, ((u >>> 8) & 15) / 15, ((u >>> 12) & 15) / 15, ((u >>> 16) & 15) / 15, (u >>> 20) & 3);
+  return Float32Array.of(seq, st / 127, ((u >>> 8) & 15) / 15, ((u >>> 12) & 15) / 15, ((u >>> 16) & 15) / 15, ((u >>> 20) & 3) | ((u >>> 22) & 1 ? FLAG_HONK : 0));
 }
 
 /**

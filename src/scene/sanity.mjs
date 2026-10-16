@@ -47,10 +47,14 @@ for (const t of ['mud', 'water', 'rock', 'sand', 'gravel']) assert(seen[t] > 0, 
 const hk = {}; for (const h of w.hazards) hk[h.kind] = (hk[h.kind] || 0) + 1; console.log('hazards', w.hazards.length, hk);
 
 // start slots
-const st = [0, 1, 2, 3, 4, 5].map((i) => w.startTransform(i));
+const st = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => w.startTransform(i));
 let okSlots = true;
-for (const t of st) { const info = w.track.project(t.position); const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(t.quaternion); if (info.s < -2 || info.s > 14 || Math.abs(info.lateral) > 2 || fwd.dot(w.track.sampleAt(info.s).tangent) < 0.95) okSlots = false; }
-assert(okSlots, 'startTransform: 6 slots on the ramp, facing downhill');
+for (const t of st) { const info = w.track.project(t.position); const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(t.quaternion); if (info.s < -10 || info.s > 14 || Math.abs(info.lateral) > 2 || fwd.dot(w.track.sampleAt(info.s).tangent) < 0.95) okSlots = false; }
+for (let i = 0; i < 10; i++) for (let j = i + 1; j < 10; j++) if (st[i].position.distanceTo(st[j].position) < 2.6) okSlots = false;
+assert(okSlots, 'startTransform: 10 slots on the ramp, >= 2.6 m apart, facing downhill');
+const wr = w.setWeather('rain'); assert(wr.gripMul === 0.8, 'rain gripMul 0.8'); const ws = w.setWeather('snow'); assert(ws.gripMul === 0.65 && ws.dragAdd > 0, 'snow grip 0.65 + drag');
+{ const f0 = w.track.sampleAt(500); const sf = w.surfaceAt(f0.position.x, f0.position.z); assert(sf.friction <= 0.85 * 0.65 + 0.01, 'surfaceAt applies weather grip (' + sf.friction.toFixed(2) + ')'); }
+w.setWeather('clear');
 
 // render cost estimate at sample camera positions
 const cam = new THREE.PerspectiveCamera(70, 16 / 9, 0.1, 2500);

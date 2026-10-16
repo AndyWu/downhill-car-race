@@ -230,6 +230,48 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
     decals.push({ mesh, center: bs.center.clone(), radius: bs.radius, kind: 'decal' });
   }
 
+  // ---------- rain-only puddles (hidden unless it is wet): extra pooled water in ruts and low spots ----------
+  const rainItems = [];
+  {
+    const rr = mulberry32(seed * 313 + 5);
+    const per = new Map();
+    for (let sp = 40; sp < L - 20; sp += 22 + rr() * 26) {
+      track.atS(sp, pp);
+      const hw = pp.hw, rut = rr() < 0.6;
+      const lat = rut ? (rr() < 0.5 ? -1 : 1) * (0.9 + 0.15 * rr()) : (rr() - 0.5) * 2 * (hw - 1.2);
+      const a = rut ? 2 + rr() * 4 : 1.2 + rr() * 1.8, b = rut ? 0.35 + rr() * 0.25 : 0.8 + rr() * 0.9;
+      const key = Math.floor(sp / 400);
+      if (!per.has(key)) per.set(key, { Pa: [], Na: [], UVa: [], Ca: [], Ia: [] });
+      const g = per.get(key), Pa = g.Pa, base = Pa.length / 3, rings = 4, seg = 20;
+      const cx = pp.px + pp.rhx * lat, cz = pp.pz + pp.rhz * lat, Tx = pp.rhz, Tz = -pp.rhx;
+      let level = -1e9;
+      for (const [ox, oz] of [[0, 0], [a, 0], [-a, 0], [0, b], [0, -b]]) level = Math.max(level, terrain.heightAt(cx + Tx * ox + pp.rhx * oz, cz + Tz * ox + pp.rhz * oz));
+      level += 0.02;
+      const ph = rr() * 6;
+      for (let k = 0; k <= rings; k++) for (let j = 0; j < (k ? seg : 1); j++) {
+        const an = k ? (j / seg) * Math.PI * 2 : 0, o2 = 1 + 0.16 * Math.sin(an * 2 + ph) + 0.09 * Math.sin(an * 3 + ph * 2), r2 = (k / rings) * (k ? o2 : 0);
+        const lx = Math.cos(an) * r2 * a, lz = Math.sin(an) * r2 * b;
+        Pa.push(cx + Tx * lx + pp.rhx * lz, level, cz + Tz * lx + pp.rhz * lz); g.Na.push(0, 1, 0); g.UVa.push(lx, lz);
+        const t = k / rings, al = t < 0.55 ? 1 : 1 - ((t - 0.55) / 0.45) ** 1.2, dk = 0.55 + 0.45 * t;
+        g.Ca.push(dk, dk, dk, Math.max(0, al));
+      }
+      const rs = (k) => (k === 0 ? 0 : 1 + (k - 1) * seg);
+      const tri = (p0, q2, r3) => { const ny = (Pa[q2 * 3 + 2] - Pa[p0 * 3 + 2]) * (Pa[r3 * 3] - Pa[p0 * 3]) - (Pa[q2 * 3] - Pa[p0 * 3]) * (Pa[r3 * 3 + 2] - Pa[p0 * 3 + 2]); if (ny >= 0) g.Ia.push(p0, q2, r3); else g.Ia.push(p0, r3, q2); };
+      for (let j = 0; j < seg; j++) tri(base, base + rs(1) + ((j + 1) % seg), base + rs(1) + j);
+      for (let k = 1; k < rings; k++) for (let j = 0; j < seg; j++) { const a0 = base + rs(k) + j, b0 = base + rs(k) + ((j + 1) % seg), c0 = base + rs(k + 1) + j, d0 = base + rs(k + 1) + ((j + 1) % seg); tri(a0, b0, c0); tri(b0, d0, c0); }
+    }
+    const wmat = lib.get('waterPuddle', { vertexColors: true, transparent: true, polygonOffset: -2, direct: true });
+    for (const g of per.values()) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(g.Pa, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(g.Na, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(g.UVa, 2)); geo.setAttribute('color', new THREE.Float32BufferAttribute(g.Ca, 4));
+      geo.setIndex(g.Ia); geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, wmat); mesh.renderOrder = 2; mesh.visible = false; mesh.name = 'rain_puddles'; mesh.receiveShadow = true;
+      parent.add(mesh);
+      rainItems.push({ mesh, center: geo.boundingSphere.center.clone(), radius: geo.boundingSphere.radius });
+    }
+  }
+
   // ---------- far-field cap (24 m cells, sunk 1.6 m under the ribbons) ----------
   {
     const { GX, GZ, G, gx0, gz0 } = terrain.grid, st = 8;
@@ -250,7 +292,7 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
   }
 
   const landmarks = buildLandmarks({ track, terrain, field, lib, parent, L });
-  return { chunks, farItems, decals, landmarks, items: landmarks.items, update: landmarks.update };
+  return { chunks, farItems, decals, rainItems, landmarks, items: landmarks.items, update: landmarks.update };
 }
 
 // ======================================================================================

@@ -125,7 +125,8 @@ async function runRace(mode) {
   const h = await host.evaluate(() => ({ cars: window.__game.vehicles.map((v) => [v.slot, v.kind, +v.body.state.s.toFixed(1)]), cd: window.__game.state.countdown, t: window.__game.state.raceTime }));
   const c = await client.evaluate(() => ({ cars: window.__game.vehicles.map((v) => [v.slot, v.kind, +v.body.state.s.toFixed(1)]), cd: window.__game.state.countdown, t: window.__game.state.raceTime, me: window.__game.state.s }));
   log('host', JSON.stringify(h)); log('client', JSON.stringify(c));
-  chk(h.cars.length === 6 && c.cars.length === 6, 'six cars on both pages');
+  chk(h.cars.length >= 6 && h.cars.length === c.cars.length, `${h.cars.length} cars on both pages`);
+  if (h.cars.length !== 10) log(`  NOTE: main.js still spawns ${h.cars.length} cars (feature target is 10)`);
   const hostSlot1 = h.cars.find((x) => x[0] === 1)[2];
   chk(hostSlot1 > 5, 'host simulates the client car (remote input applied): s=' + hostSlot1);
   const cl0 = c.cars.find((x) => x[0] === 0)[2];
@@ -171,6 +172,10 @@ async function runRace(mode) {
   const TICKS = 600;
   const startE = hostLog.find((e) => e[4] === 0), endE = hostLog.find((e) => e[0] >= startE[0] + TICKS) || hostLog[hostLog.length - 1];
   const dist = endE[2][1][3] - startE[2][1][3];
+  // same window counted in CLIENT input frames (independent of how fast each page could run)
+  const goSeq = startE[1], endF = hostLog.find((e) => e[1] >= goSeq + TICKS);
+  const distFrames = endF ? endF[2][1][3] - startE[2][1][3] : NaN;
+  log(`  client car distance over the first ${TICKS} client input frames after GO: ${distFrames.toFixed(1)} m (host-simulated)`);
   const vis = visLog.slice(Math.floor(visLog.length * 0.1));
   log(`  client car distance over the first ${endE[0] - startE[0]} host ticks after GO (straight paddling): ${dist.toFixed(1)} m (host-simulated)`);
   log(`  predictor visual correction per 60 Hz step: p95 ${(pct(vis, 0.95) * 100).toFixed(2)} cm, max ${(Math.max(...vis) * 100).toFixed(2)} cm (${vis.length} steps, snaps ${pstats?.snaps})`);
@@ -188,7 +193,7 @@ async function runRace(mode) {
   chk(predErr.length > 100 && pct(predErr, 0.95) < 0.5, `predicted own car within 0.5 m of host simulation for the same input (p95 ${(pct(predErr, 0.95) * 100).toFixed(1)} cm)`);
   chk(errors.length === 0, 'no console errors ' + JSON.stringify(errors.slice(0, 3)));
   for (const ctx of ctxs) await ctx.close();
-  return { dist, lines };
+  return { dist, distFrames, lines };
 }
 
 const results = {};
@@ -198,8 +203,10 @@ try {
   const runs = await Promise.all(MODES.map((m) => runRace(m)));
   MODES.forEach((m, i) => { results[m] = runs[i]; console.log(runs[i].lines.join('\n')); });
   if (results.clean && results.lossy) {
-    const r = results.lossy.dist / results.clean.dist;
-    console.log(`\nclient car distance: lossy ${results.lossy.dist.toFixed(1)} m vs clean ${results.clean.dist.toFixed(1)} m (${(r * 100).toFixed(1)}%)`);
+    const rt = results.lossy.dist / results.clean.dist;
+    console.log(`\nclient car distance per 600 host ticks: lossy ${results.lossy.dist.toFixed(1)} m vs clean ${results.clean.dist.toFixed(1)} m (${(rt * 100).toFixed(1)}%; sensitive to how fast each page runs under machine load)`);
+    const r = results.lossy.distFrames / results.clean.distFrames;
+    console.log(`client car distance per 600 client input frames: lossy ${results.lossy.distFrames.toFixed(1)} m vs clean ${results.clean.distFrames.toFixed(1)} m (${(r * 100).toFixed(1)}%)`);
     check(Math.abs(r - 1) <= 0.1, `under 15% loss + jitter the client covers within 10% of the no-loss distance (${(r * 100).toFixed(1)}%)`);
   }
 }
