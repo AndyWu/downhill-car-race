@@ -29,7 +29,20 @@ const CLIENT_SLOW_MS = 40000;
 /**
  * @param {{role:'host'|'client', ui?:object, maxPeers?:number, name?:string, camera?:boolean, root?:HTMLElement, slowMs?:number}} o
  */
-export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = true, root, slowMs = CLIENT_SLOW_MS } = {}) {
+export const RACE_SEATS = 10;     // cars per race (humans + AI backfill)
+export const MAX_HUMANS = 6;      // family pass: host + 5 clients
+const FALLBACK_AI_NAMES = ['Barnaby', 'Tilly', 'Clementine', 'Dot', 'Buster', 'Rosco', 'Maeve', 'Vance', 'Ace'];
+
+/** Seat list for a race: humans first, then AI backfill (roster order) up to `seats`. */
+export function seatList(humans, { seats = RACE_SEATS, aiNames = FALLBACK_AI_NAMES } = {}) {
+  const list = humans.slice(0, MAX_HUMANS).map((p, i) => ({ ...p, slot: p.slot ?? i }));
+  let ai = 0;
+  while (list.length < seats) list.push({ slot: list.length, name: aiNames[ai++ % aiNames.length], kind: 'ai', ready: true });
+  return list;
+}
+
+export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Player', camera = true, root, slowMs = CLIENT_SLOW_MS, seats = RACE_SEATS, aiNames } = {}) {
+  maxPeers = Math.min(maxPeers, MAX_HUMANS - 1);
   const isHost = role === 'host';
   const tag = isHost ? (crypto.getRandomValues(new Uint16Array(1))[0]) : null;
   const peers = new Map();          // slot → open Peer (host: clients; client: {0: host})
@@ -49,6 +62,7 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
     offerCode: null, answerCode: null, error: null, notice: null, busy: false,
     radioConfirmed: false, scanning: false, cameraOn: false, slow: false,
     peers: [], steps: [], copy: LOBBY_COPY,
+    seats, aiNames: aiNames || FALLBACK_AI_NAMES, seatList: [],
   };
 
   const actions = {
@@ -61,6 +75,10 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
     state.peers = [...slots.values()].map((p) => ({ id: p.id, state: p.state, name: p.meta.name || `Player ${p.id + 1}` }));
     if (!isHost && peers.get(0)) state.peers = [{ id: 0, state: peers.get(0).state, name: 'Host' }];
     state.error = state.notice; // back-compat field name
+    const humans = isHost
+      ? [{ slot: 0, name, kind: 'host', you: true, ready: true }, ...state.peers.filter((p) => p.state === 'open' || p.state === 'connecting').map((p) => ({ slot: p.id, name: p.name, kind: 'human', ready: p.state === 'open' }))]
+      : [{ slot: 0, name: 'Host', kind: 'host', ready: state.phase === 'connected' }, { slot: state.slot ?? 1, name, kind: 'human', you: true, ready: state.phase === 'connected' }];
+    state.seatList = seatList(humans, { seats, aiNames: state.aiNames });
     state.steps = computeSteps(state);
     stateCbs.forEach((cb) => cb(state));
     if (closed) return;
@@ -85,6 +103,8 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
   function stopCamera() { scanner?.stop(); state.cameraOn = false; }
   function stopScan() { stopCamera(); state.scanning = false; render(); }
   async function flipCamera() { await scanner?.flip(); render(); }
+
+  if (!aiNames) import('../ai/index.js').then((m) => { const r = m.AI_ROSTER || m.AI_PROFILES; if (r?.length) { state.aiNames = r.map((p) => p.name); if (!closed && state.phase !== 'idle') render(); } }).catch(() => {});
 
   function start() {
     closed = false;
@@ -174,9 +194,10 @@ export function createLobby({ role, ui, maxPeers = 5, name = 'Player', camera = 
     for (const [s, p] of slots) if (p.state !== 'open') { p.close(); slots.delete(s); }
     current = null;
     const players = [{ slot: 0, name }, ...[...peers.values()].map((p) => ({ slot: p.id, name: p.meta.name || `Player ${p.id + 1}` }))];
-    peers.forEach((p) => p.sendCtrl({ t: 'lobby-closed', players }));
+    const lineup = seatList(players.map((p) => ({ ...p, kind: p.slot === 0 ? 'host' : 'human' })), { seats, aiNames: state.aiNames });
+    peers.forEach((p) => p.sendCtrl({ t: 'lobby-closed', players, lineup }));
     setPhase('ready');
-    const info = { role, tag, localSlot: 0, peers: [...peers.values()], players };
+    const info = { role, tag, localSlot: 0, peers: [...peers.values()], players, lineup, seats };
     readyCbs.forEach((cb) => cb(info));
   }
 

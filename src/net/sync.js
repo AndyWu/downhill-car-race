@@ -3,11 +3,21 @@
 //   ctrl (reliable, ordered): JSON lobby/control messages (countdown, truck choices, seed)
 
 import {
-  MSG, INPUT_REDUNDANCY, INPUT_STRIDE, INPUT_HZ, packInputPacket, unpackInputPacket, strokeCount, withStrokeCounts,
-  createSnapshotEncoder, createSnapshotDecoder, packPing, packPong, msgType, SNAP_HEADER, SNAP_STRIDE,
+  MSG, INPUT_REDUNDANCY, INPUT_STRIDE, INPUT_HZ, packInputPacket, unpackInputPacket, strokeCount, withStrokeCounts, FLAG_HONK,
+  createSnapshotEncoder, createSnapshotDecoder, packPing, packPong, msgType, SNAP_HEADER, SNAP_STRIDE, SNAP_EVENTS,
 } from './protocol.js';
 
 const now = () => performance.now();
+
+export const WEATHERS = ['clear', 'fog', 'snow', 'rain', 'storm'];
+export const TIMES_OF_DAY = ['day', 'night', 'dusk', 'golden'];
+/** Whitelists weather/time from the wire (also accepts 'foggy'/'heavy rain'/'stormy' spellings). */
+export function normalizeConditions({ weather, time } = {}) {
+  const alias = { foggy: 'fog', snowy: 'snow', 'heavy rain': 'rain', heavyrain: 'rain', rainy: 'rain', stormy: 'storm', sunny: 'clear' };
+  let w = String(weather || 'clear').toLowerCase(); w = alias[w] || w;
+  const t = String(time || 'day').toLowerCase();
+  return { weather: WEATHERS.includes(w) ? w : 'clear', time: TIMES_OF_DAY.includes(t) ? t : 'day' };
+}
 
 function listPeers(peers) {
   if (!peers) return [];
@@ -26,6 +36,9 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
   const lastSeq = new Map();      // host: peerId → last delivered input seq
   let lastTick = -1;              // client: newest snapshot tick delivered
   const history = [];             // client: last input frames, newest first
+  let raceConditions = normalizeConditions();
+  const HONK = SNAP_EVENTS.HONK, HONK_CNT_MASK = 0xc0;
+  const honkCount = new Map(), honkRepeat = new Map(), seenHonk = new Map();
   const strokes = [0, 0];         // client: cumulative paddle stroke counters (mod 256)
   const applied = new Map();      // host: peerId → [strokes applied L, R] (mod 256)
   const lastImpulse = new Map();  // host: peerId → [last non-zero impulse L, R]
@@ -97,6 +110,16 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
         if (s.tick <= lastTick) return; // stale / reordered
         lastTick = s.tick;
         stats.snapshotsRx++;
+        // honk de-duplication (each honk is repeated in up to 3 snapshots with a 2-bit counter)
+        for (let i = 0; i < s.data[1]; i++) {
+          const b = SNAP_HEADER + i * SNAP_STRIDE, id = s.data[b], ev = s.data[b + 12] | 0;
+          if (ev & HONK) {
+            const cnt = (ev & HONK_CNT_MASK) >> 6;
+            const fresh = seenHonk.get(id) !== cnt;
+            seenHonk.set(id, cnt);
+            s.data[b + 12] = (ev & ~(HONK | HONK_CNT_MASK)) | (fresh ? HONK : 0);
+          }
+        }
         snapCbs.forEach((cb) => cb(s.data, s.tick));
         break;
       }
@@ -171,9 +194,9 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
     takeInput(id) {
       const q = queues.get(id);
       const merge = (n) => { // fold n queued frames into one (latest steer, paddle pulses kept)
-        let pl = 0, pr = 0;
-        for (let i = 0; i < n - 1; i++) { const d = q.shift(); pl = Math.max(pl, d[2]); pr = Math.max(pr, d[3]); }
-        q[0][2] = Math.max(q[0][2], pl); q[0][3] = Math.max(q[0][3], pr);
+        let pl = 0, pr = 0, honk = 0;
+        for (let i = 0; i < n - 1; i++) { const d = q.shift(); pl = Math.max(pl, d[2]); pr = Math.max(pr, d[3]); honk |= (d[5] | 0) & FLAG_HONK; }
+        q[0][2] = Math.max(q[0][2], pl); q[0][3] = Math.max(q[0][3], pr); q[0][5] = (q[0][5] | 0) | honk;
         stats.inputsMerged = (stats.inputsMerged || 0) + n - 1;
       };
       if (q && q.length > inputBacklog) merge(q.length - inputBacklog + 1);
@@ -217,6 +240,7 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
       const last = lastTaken.get(id);
       if (!last) { consumed.set(id, consumed.get(id) ?? -1); return null; }
       const rep = last.slice();
+      rep[5] = (rep[5] | 0) & ~FLAG_HONK; // a repeated frame never re-honks
       const src = last.slice(); src[2] = 0; src[3] = 0; // the repeated frame's own stroke was already applied
       applyStrokes(rep, src);                             // …but a backlog of missed strokes still drains
       stats.inputsRepeated = (stats.inputsRepeated || 0) + 1;
@@ -229,6 +253,7 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
      * ticks are OR-ed into the next sent snapshot. Returns bytes sent per peer (0 when skipped).
      */
     broadcastSnapshot(snap) {
+      const snapIn = snap;
       const tick = snap[0];
       const n = snap[1] | 0;
       if (tick - lastSentTick < sendEvery) {
@@ -236,10 +261,20 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
         return 0;
       }
       lastSentTick = tick;
-      if (pendingEvents.size) {
+      if (pendingEvents.size || honkRepeat.size) {
         snap = snap.slice();
         for (let i = 0; i < n; i++) { const b = SNAP_HEADER + i * SNAP_STRIDE; snap[b + 12] = (snap[b + 12] | 0) | (pendingEvents.get(snap[b]) | 0); }
         pendingEvents.clear();
+      }
+      // Honks ride in 3 consecutive snapshots with a 2-bit per-car counter (bits 6-7), so a lost
+      // unreliable packet doesn't eat a horn and clients can de-duplicate the repeats.
+      for (let i = 0; i < n; i++) {
+        const b = SNAP_HEADER + i * SNAP_STRIDE, id = snap[b];
+        let ev = (snap[b + 12] | 0) & ~(HONK | HONK_CNT_MASK);
+        if ((snap[b + 12] | 0) & HONK) { if (snap === snapIn) snap = snap.slice(); honkCount.set(id, ((honkCount.get(id) || 0) + 1) & 3); honkRepeat.set(id, 3); }
+        const rep = honkRepeat.get(id) || 0;
+        if (rep > 0) { ev |= HONK | (honkCount.get(id) << 6); if (rep > 1) honkRepeat.set(id, rep - 1); else honkRepeat.delete(id); }
+        if (ev !== (snap[b + 12] | 0)) { if (snap === snapIn) snap = snap.slice(); snap[b + 12] = ev; }
       }
       let acks = lastSeq;
       if (consumed.size) { acks = new Map(lastSeq); for (const [id, sq] of consumed) { if (sq >= 0) acks.set(id, sq); else acks.delete(id); } }
@@ -259,8 +294,24 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
     /** HOST helper: schedule a synchronized countdown; clients convert with clock.toLocal(). */
     startCountdown(seconds = 3, extra = {}) {
       const at = now() + 300 + seconds * 1000;
-      this.sendControl({ t: 'countdown', goAtHostMs: at, seconds, ...extra });
+      this.sendControl({ t: 'countdown', goAtHostMs: at, seconds, ...raceConditions, ...extra });
       return at;
+    },
+    /** HOST: weather/time sent with the race-start (countdown) message. Unknown values fall back to clear/day. */
+    setRaceConditions({ weather, time } = {}) { raceConditions = normalizeConditions({ weather, time }); return raceConditions; },
+    get raceConditions() { return { ...raceConditions }; },
+    /**
+     * CLIENT: cb({ goAtLocal, seconds, weather, time, players, trucks, seed, raw }) when the host
+     * starts the race. goAtLocal is already converted to this device's performance.now() clock.
+     */
+    onRaceStart(cb) {
+      const h = (id, m) => {
+        if (!m || m.t !== 'countdown') return;
+        const goAtLocal = clock.synced ? clock.toLocal(m.goAtHostMs) : now() + (m.seconds || 3) * 1000;
+        cb({ goAtLocal, seconds: m.seconds, ...normalizeConditions(m), players: m.players, trucks: m.trucks, seed: m.seed, raw: m });
+      };
+      ctrlCbs.add(h);
+      return () => ctrlCbs.delete(h);
     },
     /** HOST: last input seq applied for a slot via takeInput (−1 if none). */
     consumedSeq(id) { return consumed.has(id) ? consumed.get(id) : -1; },

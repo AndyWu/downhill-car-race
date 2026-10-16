@@ -6,8 +6,8 @@
 //   licensing = { init(), provisionSeat(name), seats(), verify(), … }
 
 export { registerServiceWorker, injectPWAHead, isStandalone, applyUpdate, offlineReady, onOfflineReady, getOfflineStatus } from './pwa.js';
-export { createLobby } from './lobby.js';
-export { createSync } from './sync.js';
+export { createLobby, seatList, RACE_SEATS, MAX_HUMANS } from './lobby.js';
+export { createSync, normalizeConditions, WEATHERS, TIMES_OF_DAY } from './sync.js';
 export { createInterpolator } from './interpolator.js';
 export { createPredictor } from './predictor.js';
 export { licensing, MAX_SEATS } from './licensing.js';
@@ -18,5 +18,5 @@ export { packSdp, unpackSdp } from './sdpPack.js';
 export { createPeer, hostCreateOffer, hostAcceptAnswer, clientAcceptOffer, CHANNELS } from './peer.js';
 export {
   encodeInputFrame, decodeInputFrame, packSnapshot, unpackSnapshot, createSnapshotEncoder, createSnapshotDecoder, SNAP_VERSION,
-  INPUT_STRIDE, SNAP_HEADER, SNAP_STRIDE, SNAP_FIELDS, FLAG_HEADLIGHT, FLAG_REVERSE,
+  INPUT_STRIDE, SNAP_HEADER, SNAP_STRIDE, SNAP_FIELDS, FLAG_HEADLIGHT, FLAG_REVERSE, FLAG_HONK, SNAP_EVENTS, MAX_CARS,
 } from './protocol.js';

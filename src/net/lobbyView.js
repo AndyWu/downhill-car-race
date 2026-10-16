@@ -66,7 +66,7 @@ export function createLobbyView(root = document.body) {
       c.el ? h('div', { class: 'box' + (c.kind === 'video' ? ' vid' : '') }, c.el) : '',
       c.caption ? h('p', { class: 'cap' }, c.caption) : '');
     panel.updateBar(state, actions);
-    const players = h('ul', { class: 'peers' }, state.peers.filter((p) => p.state !== 'new').map((p) => h('li', {}, `${p.state === 'open' ? '✓' : '…'} ${p.name}`)));
+    const players = h('ol', { class: 'peers' }, state.seatList.map((p) => h('li', { class: p.kind }, `${p.kind === 'ai' ? 'AI' : p.ready ? '✓' : '…'} ${p.name}${p.you ? ' (you)' : ''}`)));
     const foot = h('div', { class: 'foot' },
       h('button', { class: 'sec', onclick: () => actions.cancel() }, 'Back'),
       state.role === 'host' && state.phase === 'offering' ? h('button', { onclick: () => actions.startRace() }, C.offering.start) : '',

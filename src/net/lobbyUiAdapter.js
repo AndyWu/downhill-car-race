@@ -37,16 +37,10 @@ export function createUiAdapter(ui, { name = 'Player' } = {}) {
     panel.updateBar(state, actions);
     placeBar();
 
-    if (state.role === 'host') {
-      const players = [{ name, you: true, ready: true, kind: 'host' },
-        ...state.peers.filter((p) => p.state === 'open' || p.state === 'connecting').map((p) => ({ name: p.name, you: false, ready: p.state === 'open', kind: 'human' }))];
-      ui.setPlayers?.(players);
-      ui.setStartEnabled?.(state.phase === 'offering' || state.phase === 'radio');
-    } else {
-      const on = state.phase === 'connected';
-      ui.setStartEnabled?.(false);
-      ui.setPlayers?.([{ name: 'Host', you: false, ready: on, kind: 'host' }, { name, you: true, ready: on, kind: 'human' }]);
-    }
+    // 10 seats: humans first, then AI backfill named from the AI roster (worst → best)
+    const humans = state.seatList.filter((p) => p.kind !== 'ai');
+    ui.setPlayers?.(humans, { seats: state.seats, aiBackfill: true, aiNames: state.aiNames, lineup: state.seatList });
+    ui.setStartEnabled?.(state.role === 'host' && (state.phase === 'offering' || state.phase === 'radio'));
   }
   return { render };
 }
