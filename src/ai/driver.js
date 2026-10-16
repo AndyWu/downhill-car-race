@@ -125,7 +125,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       if (gapB < Infinity) easeK = clamp((gapB - 20) / 40, 0, 1) * P.leaderEase * rubberBand;
     }
     let vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (outBy > 0 ? 0.65 : 1);
-    if (easeK > 0 && chaserV < Infinity) vt = Math.min(vt, vt + (Math.max(5, chaserV * 0.96) - vt) * easeK);
+    vt *= 1 - 0.04 * easeK; // lift off a touch (and paddle less, below) when clear of the AI behind
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
     if (P.brake.tap && hbRaw > 0 && over < 1.2) hbRaw = ((t * 6) % 1) < 0.5 ? Math.min(0.4, hbRaw * 2) : 0; // light taps
@@ -162,8 +162,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (hbOut > 0.05) want = 0;
     const fat = PD.stamina.minFactor + (1 - PD.stamina.minFactor) * stamina;
     // physics gives dv ~ 1/(1+(v/5.5)^2) per stroke, so the pro bursts hardest when slowest
-    const burst = PD.mode === 'optimal' ? Math.min(4.2 / PD.cadence, 1 + 0.4 * (1 - clamp(speed / 8, 0, 1))) : 1;
-    const cadence = PD.cadence * fat * burst * rb * (1 - 0.2 * easeK) * (PD.mode === 'optimal' ? want : 1);
+    const burst = PD.mode === 'rhythm' ? 1 + 0.3 * (1 - clamp(speed / 8, 0, 1)) : PD.mode === 'optimal' ? Math.min(4.2 / PD.cadence, 1 + 0.4 * (1 - clamp(speed / 8, 0, 1))) : 1;
+    const cadence = PD.cadence * fat * burst * rb * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;

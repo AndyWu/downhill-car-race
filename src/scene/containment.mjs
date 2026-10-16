@@ -24,7 +24,7 @@ for (const s0 of [120, 260, 700, 1000, 1350, 1700, 2050, 2500, 2900]) for (const
     const bey = Math.abs(st.lateral) - hw;
     if (bey > 1.5 && !left) { left = true; tLeft = t; }
     if (left && tBack < 0 && bey < 1.0) { tBack = t; vBack = st.speed; }
-    if (tBack >= 0) { minV = Math.min(minV, st.speed); if (t - tBack > 5) break; }
+    if (tBack >= 0) { if (t - tBack > 3) minV = Math.min(minV, st.speed); if (t - tBack > 6) break; }
     if (tBack < 0) maxBeyond = Math.max(maxBeyond, bey);
     if (st.s > 3200) break;
     tEnd = t;

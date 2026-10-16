@@ -4,7 +4,7 @@ import * as THREE from 'three';
 
 const G = 9.81;
 const RHO = 1.2;
-const PADDLE_DV = 0.30; // m/s per full stroke at standstill
+const PADDLE_DV = 0.22; // m/s per full stroke at standstill
 const PADDLE_V0 = 9;   // speed at which a stroke is worth half
 const MUD_ROLL = 0.045;   // extra rolling-resistance coefficient at drag = 1 (mud)
 const MUD_VISC = 0.12;    // speed-proportional deceleration (1/s) per unit drag

@@ -191,7 +191,7 @@ async function getRealPhysicsWorld(seed) {
 // Game-faithful: mirrors src/main.js solo race. World seed 1, player (coasting, zero input) in slot 0 with truck T,
 // AI i in slot i+1 with truck (T+1+i)%10 and rng(1000+i), 3 s countdown with handbrake 1, collideBodies, draftFactor, rescue.
 // "seed k" = player truck T = k-1 (that changes every AI's truck pairing exactly like the game does).
-async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = null, rubberBand = 1, trace = false, snapAt = 90, player = true } = {}) {
+async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = null, rubberBand = Number(process.env.RB ?? 1), trace = false, snapAt = 90, player = true } = {}) {
   const { createVehicleBody, collideBodies, draftFactor } = await import('../src/core/physics.js');
   const { TRUCKS } = await import('../src/vehicles/index.js');
   const world = await getRealPhysicsWorld(1);

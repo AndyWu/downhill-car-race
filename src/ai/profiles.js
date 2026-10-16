@@ -30,7 +30,7 @@ const BASE = {
     stamina: { drain: 0.01, regen: 0.05, minFactor: 0.6 },
   },
   brake: { gain: 0.35, dead: 0.4, max: 1, tap: false },
-  aggression: 0, carAvoid: 0, leaderEase: 0.5,
+  aggression: 0, carAvoid: 0, leaderEase: 0.3,
   draft: { range: 0, strength: 0, overtake: false },
 };
 
@@ -44,7 +44,7 @@ export const Barnaby = make({
   perception: { detect: { rock: 0.5, mud: 1, water: 1, default: 0.5 } },
   hazardWeight: { rock: 20, mud: 10, water: 8, default: 5 }, hazardMargin: 0.8, hazardStretch: 0.9,
   line: { mode: 'center', edge: 0.1, pull: 0.3, maxStep: 3, smooth: 1 },
-  speed: { mu: 0.8, cornerFactor: 1.2, brakeDecel: 9, cap: 10.0 },
+  speed: { mu: 0.8, cornerFactor: 1.2, brakeDecel: 9, cap: 9.4 },
   paddle: { mode: 'forgetful', cadence: 2.7, strength: 0.9, jitter: 0.3,
     attentive: 0.5, startDist: 120 },
   brake: { gain: 0.3, dead: 0.5, max: 0.9 },
@@ -72,11 +72,11 @@ export const Buster = make({
   perception: { detect: { default: 1 }, minRockRadius: 2.3 }, // only avoids huge rocks (by half-width)
   hazardWeight: { rock: 15, mud: 2.5, water: 2, default: 0 }, hazardMargin: 0.3, hazardStretch: 0.8,
   line: { mode: 'racing', edge: 0.3, pull: 0.02, maxStep: 3, relaxIters: 70 },
-  speed: { mu: 0.85, cornerFactor: 1.05, brakeDecel: 6.5, cap: 9.8, scale: 1.0 },
-  paddle: { mode: 'furious', cadence: 2.8, strength: 1.0, jitter: 0.04,
+  speed: { mu: 0.85, cornerFactor: 1.05, brakeDecel: 6.5, cap: 10.6, scale: 1.0 },
+  paddle: { mode: 'furious', cadence: 3.2, strength: 1.0, jitter: 0.04,
     stamina: { drain: 0.02, regen: 0.1, minFactor: 0.85 } },
   brake: { gain: 0.5, dead: 0.7 },
-  aggression: 0.8, pass: true,
+  aggression: 0.8, pass: true, leaderEase: 0.4,
 });
 
 export const Maeve = make({
@@ -90,7 +90,7 @@ export const Maeve = make({
   speed: { mu: 0.8, cornerFactor: 1.0, brakeDecel: 3.8, cap: 13.2, useSurface: true, streamV: 8 },
   paddle: { mode: 'rhythm', cadence: 2.8, strength: 1.0, jitter: 0, slopeMax: 0.12, stamina: { drain: 0.01, regen: 0.08, minFactor: 0.8 } },
   brake: { gain: 0.45, dead: 0.3 },
-  carAvoid: 0.8, pass: true, leaderEase: 0.7,
+  carAvoid: 0.8, pass: true, leaderEase: 0.5,
 });
 
 export const Ace = make({
@@ -105,7 +105,7 @@ export const Ace = make({
   paddle: { mode: 'optimal', cadence: 2.8, strength: 1.0, jitter: 0, slopeMax: 0.08, stamina: { drain: 0.005, regen: 0.1, minFactor: 0.9 } },
   brake: { gain: 0.5, dead: 0.2, tap: true },
   draft: { range: 8, strength: 0.9, overtake: true },
-  carAvoid: 0.8, pass: true, leaderEase: 0.8,
+  carAvoid: 0.8, pass: true, leaderEase: 0.6,
 });
 
 export const AI_PROFILES = [Barnaby, Clementine, Buster, Maeve, Ace];

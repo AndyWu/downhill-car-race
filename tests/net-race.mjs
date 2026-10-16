@@ -25,9 +25,12 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 const pct = (arr, p) => { if (!arr.length) return NaN; const a = arr.slice().sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(a.length * p))]; };
 
 async function runRace(mode) {
+  const lines = [];
+  const log = (...a) => lines.push(a.join(' '));
+  const chk = (c, m) => { lines.push((c ? 'PASS ' : 'FAIL ') + m); if (!c) fail++; };
   const lossy = mode === 'lossy';
   const shim = lossy ? { loss: 0.15, jMin: 20, jMax: 80 } : null;
-  console.log(`\n=== ${mode} link${shim ? ` (${shim.loss * 100}% loss, ${shim.jMin}-${shim.jMax} ms jitter on 'fast')` : ''} ===`);
+  log(`\n=== ${mode} link${shim ? ` (${shim.loss * 100}% loss, ${shim.jMin}-${shim.jMax} ms jitter on 'fast')` : ''} ===`);
   const errors = [];
   const ctxs = [];
   const mk = async (qs, tag) => {
@@ -46,7 +49,7 @@ async function runRace(mode) {
       }
     }, shim);
     const p = await ctx.newPage();
-    p.on('console', (m) => { if (process.env.VERBOSE) console.log(tag, m.type(), m.text()); if (m.type() === 'error') errors.push(tag + ': ' + m.text()); });
+    p.on('console', (m) => { if (process.env.VERBOSE) log(tag, m.type(), m.text()); if (m.type() === 'error') errors.push(tag + ': ' + m.text()); });
     p.on('pageerror', (e) => errors.push(tag + ' pageerror: ' + e.message));
     await p.goto(base + '/' + qs);
     await p.waitForFunction(() => window.__game && window.__game.lobby, null, { timeout: 90000 });
@@ -55,22 +58,22 @@ async function runRace(mode) {
   const host = await mk('?menu=host&q=low&norender=1', 'host');
   const client = await mk('?menu=join&q=low&norender=1', 'client');
   const offer = await host.waitForFunction(() => window.__game.lobby.state.offerCode, null, { timeout: 30000 }).then((h) => h.jsonValue());
-  check(!!offer, 'host produced an offer code (' + offer.length + ' chars)');
+  chk(!!offer, 'host produced an offer code (' + offer.length + ' chars)');
   client.evaluate((c) => { window.__game.lobby.submitCode(c); }, offer); // resolves only once connected, so don't await
   const answer = await client.waitForFunction(() => window.__game.lobby.state.answerCode, null, { timeout: 30000 }).then((h) => h.jsonValue());
-  check(!!answer, 'client produced an answer code');
+  chk(!!answer, 'client produced an answer code');
   host.evaluate((c) => { window.__game.lobby.submitCode(c); }, answer);
   await client.waitForFunction(() => window.__game.lobby.state.phase === 'connected', null, { timeout: 30000 }).catch(async () => {
-    console.log('host state', JSON.stringify(await host.evaluate(() => ({ ...window.__game.lobby.state, copy: undefined }))));
-    console.log('client state', JSON.stringify(await client.evaluate(() => ({ ...window.__game.lobby.state, copy: undefined }))));
-    console.log(errors); process.exit(1);
+    log('host state', JSON.stringify(await host.evaluate(() => ({ ...window.__game.lobby.state, copy: undefined }))));
+    log('client state', JSON.stringify(await client.evaluate(() => ({ ...window.__game.lobby.state, copy: undefined }))));
+    log(errors); process.exit(1);
   });
-  check(true, 'client connected');
+  chk(true, 'client connected');
   await host.waitForFunction(() => window.__game.lobby.peers.size === 1, null, { timeout: 30000 });
   await host.evaluate(() => window.__game.lobby.startRace());
   await host.waitForFunction(() => window.__game.state.mode === 'race', null, { timeout: 30000 });
   await client.waitForFunction(() => window.__game.state.mode === 'race', null, { timeout: 30000 });
-  check(true, 'both pages in race mode');
+  chk(true, 'both pages in race mode');
 
   // ---- instrumentation (host: authoritative per-tick truth; client: what it renders/predicts) ----
   await host.evaluate(() => {
@@ -80,7 +83,7 @@ async function runRace(mode) {
     sync.broadcastSnapshot = (snap) => {
       const cars = {};
       for (const v of g.vehicles) { const p = v.body.state.position; cars[v.slot] = [p.x, p.y, p.z, v.body.state.s]; }
-      window.hostLog.push([snap[0], sync.consumedSeq(1), cars, performance.now()]);
+      window.hostLog.push([snap[0], sync.consumedSeq(1), cars, performance.now(), g.state.countdown]);
       return orig(snap);
     };
   });
@@ -108,26 +111,27 @@ async function runRace(mode) {
   const h0 = await host.evaluate(() => ({ tx: window.__netDebug.sync.stats.sentBytes, t: performance.now() }));
   await client.evaluate(() => window.__game.setDebugInput({ paddleL: 1, paddleR: 1 }));
   await host.evaluate(() => window.__game.setDebugInput({ paddleL: 1, paddleR: 1 }));
-  // weave the client's car so prediction is tested on steering, not just a straight line
-  const weave = client.evaluate(() => new Promise((done) => { let k = 0; const iv = setInterval(() => { k++; window.__game.setDebugInput({ paddleL: k % 8 < 4 ? 1 : 0, paddleR: k % 8 >= 4 ? 1 : 0, steer: 0.3 * Math.sin(k / 6) }); if (k > 110) { clearInterval(iv); done(); } }, 100); }));
-  await host.waitForTimeout(12000);
+  // phase A (distance metric): straight paddling from GO for 600 host ticks — deterministic inputs
+  await host.waitForFunction(() => { const L = window.hostLog; const go = L.findIndex((e) => e[4] === 0); return go >= 0 && L[L.length - 1][0] >= L[go][0] + 600; }, null, { timeout: 60000, polling: 200 });
+  // phase B (prediction metrics): weave the client's car so steering is exercised too
+  const weave = client.evaluate(() => new Promise((done) => { let k = 0; const iv = setInterval(() => { k++; window.__game.setDebugInput({ paddleL: k % 8 < 4 ? 1 : 0, paddleR: k % 8 >= 4 ? 1 : 0, steer: 0.3 * Math.sin(k / 6) }); if (k > 60) { clearInterval(iv); done(); } }, 100); }));
   await weave;
   await host.waitForTimeout(1500); // let in-flight inputs land before counting
   const k1 = { c: await client.evaluate(() => window.__netDebug.sync.stats.strokesSent || 0), h: await host.evaluate(() => window.__netDebug.sync.stats.strokesApplied || 0) };
-  console.log(`  paddle strokes during the run: client made ${k1.c - k0.c}, host applied ${k1.h - k0.h}`);
-  check(Math.abs((k1.c - k0.c) - (k1.h - k0.h)) <= 2, 'every client paddle stroke applied on the host (±2 in flight)');
+  log(`  paddle strokes during the run: client made ${k1.c - k0.c}, host applied ${k1.h - k0.h}`);
+  chk(Math.abs((k1.c - k0.c) - (k1.h - k0.h)) <= 2, 'every client paddle stroke applied on the host (±2 in flight)');
   const t1 = await client.evaluate(() => ({ tx: window.__netDebug.sync.stats.sentBytes, rx: window.__netDebug.sync.stats.recvBytes, t: performance.now() }));
   const h1 = await host.evaluate(() => ({ tx: window.__netDebug.sync.stats.sentBytes, t: performance.now(), st: window.__netDebug.sync.stats, enc: window.__netDebug.sync.encoderStats }));
   const h = await host.evaluate(() => ({ cars: window.__game.vehicles.map((v) => [v.slot, v.kind, +v.body.state.s.toFixed(1)]), cd: window.__game.state.countdown, t: window.__game.state.raceTime }));
   const c = await client.evaluate(() => ({ cars: window.__game.vehicles.map((v) => [v.slot, v.kind, +v.body.state.s.toFixed(1)]), cd: window.__game.state.countdown, t: window.__game.state.raceTime, me: window.__game.state.s }));
-  console.log('host', JSON.stringify(h)); console.log('client', JSON.stringify(c));
-  check(h.cars.length === 6 && c.cars.length === 6, 'six cars on both pages');
+  log('host', JSON.stringify(h)); log('client', JSON.stringify(c));
+  chk(h.cars.length === 6 && c.cars.length === 6, 'six cars on both pages');
   const hostSlot1 = h.cars.find((x) => x[0] === 1)[2];
-  check(hostSlot1 > 5, 'host simulates the client car (remote input applied): s=' + hostSlot1);
+  chk(hostSlot1 > 5, 'host simulates the client car (remote input applied): s=' + hostSlot1);
   const cl0 = c.cars.find((x) => x[0] === 0)[2];
-  check(cl0 > 5, 'client sees the host car moving via snapshots: s=' + cl0);
-  check(c.me > 5, 'client own car advances: s=' + c.me);
-  check(Math.abs(c.me - hostSlot1) < 40, 'client/host agree on client car position');
+  chk(cl0 > 5, 'client sees the host car moving via snapshots: s=' + cl0);
+  chk(c.me > 5, 'client own car advances: s=' + c.me);
+  chk(Math.abs(c.me - hostSlot1) < 40, 'client/host agree on client car position');
 
   // ---- metrics ----
   const hostLog = await host.evaluate(() => window.hostLog);
@@ -158,38 +162,41 @@ async function runRace(mode) {
   }
   const hl = hostLog.length ? (hostLog[hostLog.length - 1][0] - hostLog[0][0]) / ((hostLog[hostLog.length - 1][3] - hostLog[0][3]) / 1000) : 0;
   const crate = await client.evaluate(() => window.__netDebug.interp?.hostTickRate);
-  console.log(`  host simulation rate ${hl.toFixed(1)} ticks/s (client estimate ${crate?.toFixed(1)})`);
+  log(`  host simulation rate ${hl.toFixed(1)} ticks/s (client estimate ${crate?.toFixed(1)})`);
   if (process.env.NET_DEBUG) {
     const worst = []; for (const [seq, x, y, z] of predLog) { const hp = hostAtSeq.get(seq); if (hp) worst.push([Math.hypot(x - hp[0], y - hp[1], z - hp[2]), seq]); }
-    worst.sort((a, b) => b[0] - a[0]); console.log('  worst pred seqs', JSON.stringify(worst.slice(0, 8).map((w) => [+w[0].toFixed(2), w[1]])), 'seq range', predLog[0]?.[0], predLog.at(-1)?.[0], 'skipBefore', skipBefore);
+    worst.sort((a, b) => b[0] - a[0]); log('  worst pred seqs', JSON.stringify(worst.slice(0, 8).map((w) => [+w[0].toFixed(2), w[1]])), 'seq range', predLog[0]?.[0], predLog.at(-1)?.[0], 'skipBefore', skipBefore);
   }
   // client car distance over a fixed number of host ticks (wall-clock independent)
   const TICKS = 600;
-  const startE = hostLog[0], endE = hostLog.find((e) => e[0] >= hostLog[0][0] + TICKS) || hostLog[hostLog.length - 1];
+  const startE = hostLog.find((e) => e[4] === 0), endE = hostLog.find((e) => e[0] >= startE[0] + TICKS) || hostLog[hostLog.length - 1];
   const dist = endE[2][1][3] - startE[2][1][3];
   const vis = visLog.slice(Math.floor(visLog.length * 0.1));
-  console.log(`  client car distance over ${endE[0] - startE[0]} host ticks: ${dist.toFixed(1)} m (host-simulated)`);
-  console.log(`  predictor visual correction per 60 Hz step: p95 ${(pct(vis, 0.95) * 100).toFixed(2)} cm, max ${(Math.max(...vis) * 100).toFixed(2)} cm (${vis.length} steps, snaps ${pstats?.snaps})`);
-  check(vis.length > 100 && Math.max(...vis) <= 0.05, `own-car visual correction ≤ 5 cm per step (max ${(Math.max(...vis) * 100).toFixed(2)} cm)`);
+  log(`  client car distance over the first ${endE[0] - startE[0]} host ticks after GO (straight paddling): ${dist.toFixed(1)} m (host-simulated)`);
+  log(`  predictor visual correction per 60 Hz step: p95 ${(pct(vis, 0.95) * 100).toFixed(2)} cm, max ${(Math.max(...vis) * 100).toFixed(2)} cm (${vis.length} steps, snaps ${pstats?.snaps})`);
+  chk(vis.length > 100 && Math.max(...vis) <= 0.05, `own-car visual correction ≤ 5 cm per step (max ${(Math.max(...vis) * 100).toFixed(2)} cm)`);
   const pops = popLog.slice(Math.floor(popLog.length * 0.15));
   const cSec = (t1.t - t0.t) / 1000, hSec = (h1.t - h0.t) / 1000;
   const clientTx = (t1.tx - t0.tx) / cSec, clientRx = (t1.rx - t0.rx) / cSec, hostTx = (h1.tx - h0.tx) / hSec;
-  console.log(`  bandwidth: client upload ${clientTx.toFixed(0)} B/s, client download ${clientRx.toFixed(0)} B/s (host tx ${hostTx.toFixed(0)} B/s to 1 client); snapshot records full/compact/unchanged ${h1.enc.full}/${h1.enc.compact}/${h1.enc.unchanged}`);
-  console.log(`  host jitter buffer: repeated ${h1.st.inputsRepeated || 0}, merged ${h1.st.inputsMerged || 0}, lost ${h1.st.inputsLost || 0}, strokes recovered ${h1.st.strokesRecovered || 0}`);
-  console.log(`  interpolation (client proxies vs host truth at the same tick, ${interpErr.length} samples): p50 ${(pct(interpErr, 0.5) * 100).toFixed(1)} cm, p95 ${(pct(interpErr, 0.95) * 100).toFixed(1)} cm, max ${(Math.max(...interpErr) * 100).toFixed(1)} cm`);
-  console.log(`  prediction (client-predicted own car vs host car for the same input seq, ${predErr.length} samples): p50 ${(pct(predErr, 0.5) * 100).toFixed(1)} cm, p95 ${(pct(predErr, 0.95) * 100).toFixed(1)} cm, max ${(Math.max(...predErr) * 100).toFixed(1)} cm`);
-  console.log(`  predictor: ${pstats?.reconciles} reconciles, ${pstats?.corrections} corrections >1 cm, ${pstats?.skipped} inside deadband, largest pending correction ${((pstats?.maxError || 0) * 100).toFixed(1)} cm; visual pop p95 ${(pct(pops, 0.95) * 100).toFixed(2)} cm, max ${(Math.max(...pops) * 100).toFixed(2)} cm per frame (${pops.length} frames)`);
-  check(clientTx <= 1536, `client upload ≤ 1.5 KiB/s (${clientTx.toFixed(0)} B/s)`);
-  check(interpErr.length > 100 && pct(interpErr, 0.95) < 0.5, `interpolated remote cars within 0.5 m of host truth (p95 ${(pct(interpErr, 0.95) * 100).toFixed(1)} cm)`);
-  check(predErr.length > 100 && pct(predErr, 0.95) < 0.5, `predicted own car within 0.5 m of host simulation for the same input (p95 ${(pct(predErr, 0.95) * 100).toFixed(1)} cm)`);
-  check(errors.length === 0, 'no console errors ' + JSON.stringify(errors.slice(0, 3)));
+  log(`  bandwidth: client upload ${clientTx.toFixed(0)} B/s, client download ${clientRx.toFixed(0)} B/s (host tx ${hostTx.toFixed(0)} B/s to 1 client); snapshot records full/compact/unchanged ${h1.enc.full}/${h1.enc.compact}/${h1.enc.unchanged}`);
+  log(`  host jitter buffer: repeated ${h1.st.inputsRepeated || 0}, merged ${h1.st.inputsMerged || 0}, lost ${h1.st.inputsLost || 0}, strokes recovered ${h1.st.strokesRecovered || 0}`);
+  log(`  interpolation (client proxies vs host truth at the same tick, ${interpErr.length} samples): p50 ${(pct(interpErr, 0.5) * 100).toFixed(1)} cm, p95 ${(pct(interpErr, 0.95) * 100).toFixed(1)} cm, max ${(Math.max(...interpErr) * 100).toFixed(1)} cm`);
+  log(`  prediction (client-predicted own car vs host car for the same input seq, ${predErr.length} samples): p50 ${(pct(predErr, 0.5) * 100).toFixed(1)} cm, p95 ${(pct(predErr, 0.95) * 100).toFixed(1)} cm, max ${(Math.max(...predErr) * 100).toFixed(1)} cm`);
+  log(`  predictor: ${pstats?.reconciles} reconciles, ${pstats?.corrections} corrections >1 cm, ${pstats?.skipped} inside deadband, largest pending correction ${((pstats?.maxError || 0) * 100).toFixed(1)} cm; visual pop p95 ${(pct(pops, 0.95) * 100).toFixed(2)} cm, max ${(Math.max(...pops) * 100).toFixed(2)} cm per frame (${pops.length} frames)`);
+  chk(clientTx <= 1536, `client upload ≤ 1.5 KiB/s (${clientTx.toFixed(0)} B/s)`);
+  chk(interpErr.length > 100 && pct(interpErr, 0.95) < 0.5, `interpolated remote cars within 0.5 m of host truth (p95 ${(pct(interpErr, 0.95) * 100).toFixed(1)} cm)`);
+  chk(predErr.length > 100 && pct(predErr, 0.95) < 0.5, `predicted own car within 0.5 m of host simulation for the same input (p95 ${(pct(predErr, 0.95) * 100).toFixed(1)} cm)`);
+  chk(errors.length === 0, 'no console errors ' + JSON.stringify(errors.slice(0, 3)));
   for (const ctx of ctxs) await ctx.close();
-  return { dist };
+  return { dist, lines };
 }
 
 const results = {};
 try {
-  for (const m of MODES) results[m] = await runRace(m);
+  // run both links at the same time so they share the same machine load (the distance metric
+  // depends on how fast each page can simulate)
+  const runs = await Promise.all(MODES.map((m) => runRace(m)));
+  MODES.forEach((m, i) => { results[m] = runs[i]; console.log(runs[i].lines.join('\n')); });
   if (results.clean && results.lossy) {
     const r = results.lossy.dist / results.clean.dist;
     console.log(`\nclient car distance: lossy ${results.lossy.dist.toFixed(1)} m vs clean ${results.clean.dist.toFixed(1)} m (${(r * 100).toFixed(1)}%)`);
