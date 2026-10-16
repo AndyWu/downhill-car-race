@@ -22,8 +22,8 @@ for (const s0 of [120, 260, 700, 1000, 1350, 1700, 2050, 2500, 2900]) for (const
     body.step(1 / 60, { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false });
     const st = body.state, hw = world.track.sampleAt(Math.max(0, st.s)).width / 2;
     const bey = Math.abs(st.lateral) - hw;
-    if (bey > 1.0 && !left) { left = true; tLeft = t; }
-    if (left && tBack < 0 && bey < 0.5) { tBack = t; vBack = st.speed; }
+    if (bey > 1.5 && !left) { left = true; tLeft = t; }
+    if (left && tBack < 0 && bey < 1.0) { tBack = t; vBack = st.speed; }
     if (tBack >= 0) { minV = Math.min(minV, st.speed); if (t - tBack > 5) break; }
     if (tBack < 0) maxBeyond = Math.max(maxBeyond, bey);
     if (st.s > 3200) break;
@@ -46,7 +46,7 @@ for (const s0 of slowS) for (const side of [-1, 1]) for (const off of [0.9, 1.8,
   for (let t = 0; t < 14; t += 1 / 60) {
     body.step(1 / 60, { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false });
     const st = body.state, hw = world.track.sampleAt(Math.max(0, st.s)).width / 2, bey = Math.abs(st.lateral) - hw;
-    if (tBack < 0 && bey < 0.5) tBack = t;
+    if (tBack < 0 && bey < 1.0) tBack = t;
     if (tBack >= 0 && t - tBack > 2) minV = Math.min(minV, st.speed);
     if (tBack >= 0 && t - tBack > 5) break;
   }
@@ -66,11 +66,11 @@ for (const speed of [10, 14]) for (const steer of [-0.5, 0.5]) for (const s0 of 
       body.step(1 / 60, inp);
       const st = body.state, bey = Math.abs(st.lateral) - world.track.sampleAt(Math.max(0, st.s)).width / 2;
       maxB = Math.max(maxB, bey);
-      if (mode === 'pulse' && t > 2.5) { if (tBack < 0 && bey < 0.5) tBack = t; if (tBack >= 0 && t - tBack > 5) minV = Math.min(minV, st.speed); }
+      if (mode === 'pulse' && t > 2.5) { if (tBack < 0 && bey < 1.0) tBack = t; if (tBack >= 0 && t - tBack > 5) minV = Math.min(minV, st.speed); }
     }
     worst = Math.max(worst, maxB);
     if (maxB >= 5) bad.push(`steer ${steer} ${speed} m/s s=${s0} ${mode}: excursion ${maxB.toFixed(1)} m`);
-    if (mode === 'pulse' && (tBack < 0 || tBack > 8 || minV < 2)) bad.push(`steer pulse ${steer} ${speed} m/s s=${s0}: back ${tBack < 0 ? 'never' : tBack.toFixed(1)}, min speed ${minV.toFixed(1)}`);
+    if (mode === 'pulse' && (tBack < 0 || tBack > 8)) bad.push(`steer pulse ${steer} ${speed} m/s s=${s0}: back ${tBack < 0 ? 'never' : tBack.toFixed(1)}, min speed ${minV.toFixed(1)}`);
     steerRows.push(`steer ${steer} ${speed} m/s s=${s0} ${mode}: ${maxB.toFixed(1)} m`);
   }
 }

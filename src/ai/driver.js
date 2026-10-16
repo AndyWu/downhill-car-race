@@ -115,15 +115,17 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       else { ref = 0; for (const o of others) ref += o.s; ref /= others.length; }
       rb = 1 + 0.05 * rubberBand * clamp((ref - s) / 60, -1, 1);
     }
-    // leader ease: a car >35 m clear of the AI pack lifts off a little (profile-aware via P.leaderEase) so races stay close
-    let easeK = 0;
+    // leader ease: a car clear of the next AI behind it matches that chaser's pace (minus a little) so races stay close.
+    // Strength scales with the gap (20 m -> 60 m) and the profile's leaderEase; it never raises speed.
+    let easeK = 0, chaserV = Infinity;
     if (rubberBand > 0 && P.leaderEase > 0 && others.length) {
       const hs = typeof human === 'function' ? human() : null;
-      let sum = 0, cnt = 0;
-      for (const o of others) if (o !== hs) { sum += o.s; cnt++; }
-      if (cnt) easeK = clamp((s - sum / cnt - 15) / 30, 0, 1) * P.leaderEase * rubberBand;
+      let gapB = Infinity;
+      for (const o of others) if (o !== hs && o.s < s && s - o.s < gapB) { gapB = s - o.s; chaserV = o.speed || 0; }
+      if (gapB < Infinity) easeK = clamp((gapB - 20) / 40, 0, 1) * P.leaderEase * rubberBand;
     }
-    const vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (1 - 0.1 * easeK) * (outBy > 0 ? 0.65 : 1);
+    let vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (outBy > 0 ? 0.65 : 1);
+    if (easeK > 0 && chaserV < Infinity) vt = Math.min(vt, vt + (Math.max(5, chaserV * 0.96) - vt) * easeK);
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
     if (P.brake.tap && hbRaw > 0 && over < 1.2) hbRaw = ((t * 6) % 1) < 0.5 ? Math.min(0.4, hbRaw * 2) : 0; // light taps
