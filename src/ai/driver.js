@@ -50,7 +50,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       const dsO = o.s - s, dl = o.lateral - self.lateral;
       if (dsO === 0 && dl === 0) continue;
       if (dsO > 0.5 && dsO < aheadDs && Math.abs(dl) < 3) { ahead = o; aheadDs = dsO; }
-      if (Math.abs(dsO) < 4 && Math.abs(dl) > 0.3 && Math.abs(dl) < 2.6) alongside = o;
+      if (Math.abs(dsO) < 5 && Math.abs(dl) > 0.2 && Math.abs(dl) < 2.6 && (!alongside || Math.abs(dl) < Math.abs(alongside.lateral - self.lateral))) alongside = o;
     }
     const outBy = Math.max(0, Math.abs(self.lateral) - plan.widthAt(s) / 2); // metres beyond the verge
     const Ld = Math.max(P.look.min, P.look.time * speed) + 2.5 * outBy; // look further to rejoin the road at a shallow angle
@@ -82,7 +82,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (P.pass && passSide && t <= passUntil && alongside && !goal) goal = clamp(alongside.lateral + passSide * 1.9 - eT, -3.5, 3.5); // hold the line until clear
     if (P.pass && t > passUntil) passSide = 0;
     if (P.aggression > 0.5 && alongside) goal = clamp(alongside.lateral - eT, -2.5, 2.5) * 0.35; // shove
-    else if (P.carAvoid > 0 && alongside && !goal) goal = (alongside.lateral > self.lateral ? -1 : 1) * 0.9 * P.carAvoid; // give room
+    else if (P.carAvoid > 0 && alongside && !goal) goal = (alongside.lateral > self.lateral ? -1 : 1) * (0.5 + Math.max(0, 2.2 - Math.abs(alongside.lateral - self.lateral))) * P.carAvoid; // give room, more when closer
     if (goal !== 0 && plan.costAt(sT, eT + goal) > plan.costAt(sT, eT) + 1) goal = 0; // don't drive into a hazard for it
     extra += (goal - extra) * (1 - Math.exp(-dt / 0.4));
 
@@ -158,12 +158,15 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       }
     }
     const offRoad = Math.abs(self.lateral) > plan.widthAt(s) / 2 + 0.3;
+    const sf = self.surface;
+    if (offRoad || sf === 'mud' || sf === 'water' || sf === 'sand') want = Math.max(want, PD.mode === 'forgetful' ? 0 : 1); // dig in when drag spikes
     if (offRoad) want = 1; // always dig in when on the verge
     if (hbOut > 0.05) want = 0;
     const fat = PD.stamina.minFactor + (1 - PD.stamina.minFactor) * stamina;
     // physics gives dv ~ 1/(1+(v/5.5)^2) per stroke, so the pro bursts hardest when slowest
-    const burst = PD.mode === 'rhythm' ? 1 + 0.3 * (1 - clamp(speed / 8, 0, 1)) : PD.mode === 'optimal' ? Math.min(4.2 / PD.cadence, 1 + 0.4 * (1 - clamp(speed / 8, 0, 1))) : 1;
-    const cadence = PD.cadence * fat * burst * rb * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
+    const burst = PD.mode === 'rhythm' ? 1 + 0.6 * (1 - clamp(speed / 10, 0, 1)) : PD.mode === 'optimal' ? Math.min(4.6 / PD.cadence, 1 + 0.6 * (1 - clamp(speed / 10, 0, 1))) : 1;
+    const warm = PD.warmup && t < PD.warmup.t ? PD.warmup.f : 1; // e.g. Buster's cold start
+    const cadence = PD.cadence * warm * fat * burst * rb * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;

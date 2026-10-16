@@ -244,7 +244,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       state.velocity.copy(velocity || _tmp.set(0, 0, 0));
       state.angularVelocity.set(0, 0, 0);
       state.steerAngle = 0; state.paddleL = state.paddleR = 0;
-      state.stuck = state.wrongWay = state._wc = state.upsideDown = 0; state.maxS = 0; state.wetHit = state.mudHit = 0;
+      state.stuck = state.wrongWay = state._wc = state.upsideDown = 0; state.maxS = 0; state.wetHit = state.mudHit = 0; state.wetSteps = state.wetPeak = 0;
       lastHad.fill(false);
       good.p.copy(state.position); good.q.copy(state.quaternion);
       this.updateTrack();
@@ -308,12 +308,13 @@ export function createVehicleBody(specIn, world, opts = {}) {
       // water drops on the lens only on real wheel contact with a water surface (never on dry road)
       if (state.speed > 3 && state.surface !== 'mud' && state.wheelContacts.some((c) => c.contact && c.surface === 'water')) {
         state.wetHit += dt * state.speed; state.mudCoat = Math.max(0, state.mudCoat - dt * 0.25);
-      }
+        state.wetSteps = (state.wetSteps || 0) + 1; state.wetPeak = Math.max(state.wetPeak || 0, state.wetSteps);
+      } else state.wetSteps = 0;
       state.mudCoat = Math.max(0, state.mudCoat - dt * 0.02);
     },
     recover(ahead = 0) {
       const tr = world && world.track;
-      state.upsideDown = 0;
+      state.upsideDown = 0; state.respawns = (state.respawns || 0) + 1;
       if (!tr) { state.quaternion.identity(); state.position.y += 1; return; }
       this.updateTrack();
       // never move backwards along the track: resets go to the furthest point reached (or the current s if that is further) + ahead

@@ -26,8 +26,8 @@ const pct = (arr, p) => { if (!arr.length) return NaN; const a = arr.slice().sor
 
 async function runRace(mode) {
   const lines = [];
-  const log = (...a) => lines.push(a.join(' '));
-  const chk = (c, m) => { lines.push((c ? 'PASS ' : 'FAIL ') + m); if (!c) fail++; };
+  const log = (...a) => { lines.push(a.join(' ')); if (process.env.VERBOSE_LIVE) console.error(`[${mode}] ` + a.join(' ')); };
+  const chk = (c, m) => { lines.push((c ? 'PASS ' : 'FAIL ') + m); if (process.env.VERBOSE_LIVE) console.error(`[${mode}] ` + (c ? 'PASS ' : 'FAIL ') + m); if (!c) fail++; };
   const lossy = mode === 'lossy';
   const shim = lossy ? { loss: 0.15, jMin: 20, jMax: 80 } : null;
   log(`\n=== ${mode} link${shim ? ` (${shim.loss * 100}% loss, ${shim.jMin}-${shim.jMax} ms jitter on 'fast')` : ''} ===`);
@@ -182,7 +182,7 @@ async function runRace(mode) {
   log(`  host jitter buffer: repeated ${h1.st.inputsRepeated || 0}, merged ${h1.st.inputsMerged || 0}, lost ${h1.st.inputsLost || 0}, strokes recovered ${h1.st.strokesRecovered || 0}`);
   log(`  interpolation (client proxies vs host truth at the same tick, ${interpErr.length} samples): p50 ${(pct(interpErr, 0.5) * 100).toFixed(1)} cm, p95 ${(pct(interpErr, 0.95) * 100).toFixed(1)} cm, max ${(Math.max(...interpErr) * 100).toFixed(1)} cm`);
   log(`  prediction (client-predicted own car vs host car for the same input seq, ${predErr.length} samples): p50 ${(pct(predErr, 0.5) * 100).toFixed(1)} cm, p95 ${(pct(predErr, 0.95) * 100).toFixed(1)} cm, max ${(Math.max(...predErr) * 100).toFixed(1)} cm`);
-  log(`  predictor: ${pstats?.reconciles} reconciles, ${pstats?.corrections} corrections >1 cm, ${pstats?.skipped} inside deadband, largest pending correction ${((pstats?.maxError || 0) * 100).toFixed(1)} cm; visual pop p95 ${(pct(pops, 0.95) * 100).toFixed(2)} cm, max ${(Math.max(...pops) * 100).toFixed(2)} cm per frame (${pops.length} frames)`);
+  log(`  predictor: ${pstats?.reconciles} reconciles, ${pstats?.corrections} corrections >1 cm, ${pstats?.skipped} inside deadband, largest pending correction ${((pstats?.maxError || 0) * 100).toFixed(1)} cm`);
   chk(clientTx <= 1536, `client upload ≤ 1.5 KiB/s (${clientTx.toFixed(0)} B/s)`);
   chk(interpErr.length > 100 && pct(interpErr, 0.95) < 0.5, `interpolated remote cars within 0.5 m of host truth (p95 ${(pct(interpErr, 0.95) * 100).toFixed(1)} cm)`);
   chk(predErr.length > 100 && pct(predErr, 0.95) < 0.5, `predicted own car within 0.5 m of host simulation for the same input (p95 ${(pct(predErr, 0.95) * 100).toFixed(1)} cm)`);

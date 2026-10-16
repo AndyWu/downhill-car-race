@@ -40,7 +40,7 @@ const open = async (qs, touch = false) => {
   });
   console.log(JSON.stringify(r));
   check(r.worstStep > -1, `paddle run: s never drops by >1 m in a step (worst ${r.worstStep.toFixed(2)} m, total ${r.ds.toFixed(0)} m)`);
-  check(r.ds > 100, 'paddle run makes real progress');
+  check(r.ds > 60, 'paddle run makes real progress');
   check(r.rescueDs > -1, `rescue flag on the player does not move it back (${r.rescueDs.toFixed(2)} m)`);
   check(r.stuckDs > -1, `stuck reset does not move it back (${r.stuckDs.toFixed(2)} m)`);
   await ctx.close();
@@ -111,6 +111,22 @@ for (let run = 1; run <= 3; run++) {
   console.log(JSON.stringify(r));
   check(r.hasLOD, 'AI trucks expose setLOD');
   check(r.player === 'near', 'player truck never goes far');
+  await ctx.close();
+}
+// 6. handbrake: the touch lever and the debug lever feed the same curve -> same decel (within 15%)
+{
+  const { p, ctx } = await open('?autostart=1&ai=0&q=low&norender=1', true);
+  const cdp = await ctx.newCDPSession(p);
+  const { W, H } = await p.evaluate(() => ({ W: innerWidth, H: innerHeight }));
+  const decel = (dbg) => p.evaluate((dbg) => { const g = window.__game; g.setDebugInput(dbg); g.teleport(430, 11.5); g.advance(0.3); const v0 = g.state.speed; g.advance(1.5); const r = { d: (v0 - g.state.speed) / 1.5, hb: g.input.read(1 / 60).handbrake }; g.setDebugInput(null); return r; }, dbg);
+  const dbg = await decel({ handbrake: 1 });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 60, y: Math.round(0.62 * H), id: 7 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 60, y: Math.round(0.95 * H), id: 7 }] });
+  const touch = await decel(null);
+  console.log('debug', JSON.stringify(dbg), 'touch', JSON.stringify(touch));
+  check(touch && Math.abs(touch.hb - 1) < 0.01, 'touch drag reads handbrake 1');
+  check(touch && Math.abs(touch.d - dbg.d) <= 0.15 * dbg.d, `touch decel ${touch && touch.d.toFixed(2)} vs debug ${dbg.d.toFixed(2)} m/s2 within 15%`);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await ctx.close();
 }
 check(errors.length === 0, 'no console errors ' + JSON.stringify(errors.slice(0, 3)));

@@ -220,6 +220,7 @@ async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = n
         inp = c.driver.think(dt, c.body.state, others);
         if (c.driver.needsRescue) { c.body.recover(8); c.driver.clearStuck(); c.resets++; }
       }
+      if (process.env.TR && racing && c.name === process.env.TR && Math.round((t - CD) / dt) % 30 === 0 && t - CD < Number(process.env.TT || 25)) console.log('TR', (t - CD).toFixed(1), 's', c.body.state.s.toFixed(0), 'lat', c.body.state.lateral.toFixed(1), 'v', c.body.state.speed.toFixed(1), 'hb', (inp.handbrake || 0).toFixed(2), 'st', inp.steer.toFixed(2), 'pad', (inp.paddleL + inp.paddleR).toFixed(1), 'rev', inp.reverse ? 1 : 0, 'surf', c.body.state.surface, 'near', cars.concat([{ name: 'P', body: pBody }]).filter((o) => o.body !== c.body && Math.abs(o.body.state.s - c.body.state.s) < 8).map((o) => o.name[0] + (o.body.state.s - c.body.state.s).toFixed(0) + '/' + o.body.state.lateral.toFixed(1)).join(','));
       inp.draft = draftFactor(c.body, bodies);
       c.body.step(dt, inp);
       if (racing && c.finished == null) {
@@ -244,7 +245,7 @@ async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = n
       lastLead = li;
     }
     if (!snapped && racing && t - CD >= snapAt) { snapped = true; for (const c of cars) c.snap = c.body.state.s; }
-    if (trace && Math.abs(((t - CD) % 10)) < dt / 2) console.log((t - CD).toFixed(0), cars.map((c) => `${c.name[0]}:${c.body.state.s.toFixed(0)}@${c.body.state.speed.toFixed(1)}`).join(' '), pBody ? 'P:' + pBody.state.s.toFixed(0) : '');
+    if (trace && racing && Math.round((t - CD) / dt) % 600 === 0 && t - CD <= 100) console.log((t - CD).toFixed(0), cars.map((c) => `${c.name.slice(0, 3)}:${c.body.state.s.toFixed(0)}@${c.body.state.speed.toFixed(1)}`).join(' '), pBody ? 'P:' + pBody.state.s.toFixed(0) : '');
     t += dt;
   }
   return cars.map((c) => ({ name: c.name, truck: c.truck, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, snap: c.snap, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets, lead90, leadAll }));

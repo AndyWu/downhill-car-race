@@ -78,8 +78,8 @@ Anything non-standard (a fingerprint that is not sha-256, `mid ≠ 0`, …) fall
 
 Two pre-negotiated DataChannels per peer: `fast` (id 0, `ordered:false, maxRetransmits:0`) and `ctrl` (id 1, reliable).
 
-- **Input** (client → host): 60 Hz frames packed as u32 and sent in packets at 30 Hz. Each packet carries the 2 new frames plus the 2 previous ones, 20 B in all, about 0.6 KiB/s. A frame holds steer int8, paddles and handbrake 4 bit each, the light and reverse flags, and 3-bit stroke counters. The decoded frame is still `Float32Array [seq, steer, paddleL, paddleR, handbrake, flags]` with
-  `flags` = `1` headlight | `2` reverse. If both copies of a frame are lost, the host still re-applies any paddle stroke the counters show was missed.
+- **Input** (client → host): 60 Hz frames packed as u32 and sent in packets at 30 Hz. Each packet carries the 2 new frames plus the 2 previous ones, plus cumulative uint8 stroke counters per paddle: 22 B in all, about 0.65 KiB/s. A frame holds steer int8, paddles and handbrake 4 bits each, and the light and reverse flags. The host applies paddle strokes from the counters, one per tick, so a stroke survives lost, merged or trimmed frames; it may land a few ticks late, but it is never lost. The decoded frame is still `Float32Array [seq, steer, paddleL, paddleR, handbrake, flags]` with
+  `flags` = `1` headlight | `2` reverse.
 - **Snapshot** (host → clients), **wire v3 at 30 Hz** (`src/net/snapshot.js`).
   - **Compact delta records** are track-relative, 11 B: u16 s (≈ 5 cm), i8 lateral (10 cm), u8 height above ground (2 cm), i8 yaw-vs-track / pitch / roll (0.5°), u8 horizontal speed (0.25 m/s), i8 slip angle, i8 vertical speed.
   - **Self-check:** the host decodes each compact record against its own world, and falls back to a 22 B FULL record if the result is off by more than 15 cm / 1.5° / 0.8 m/s, or the car is off-road, airborne or flipped.
@@ -91,7 +91,7 @@ Two pre-negotiated DataChannels per peer: `fast` (id 0, `ordered:false, maxRetra
   - The adaptive interpolation delay settles around 115–130 ms.
   - Prediction's visual pop stays ≤ about 5 cm per frame.
   - Ack latency is p50 about 150–170 ms. The link alone accounts for about 145 ms of that at p95.
-- **Prediction**: `createPredictor({ body, slot })` runs the local car on the client with its own inputs. On each snapshot it rewinds to the acked authoritative state, replays the inputs that haven't been acked yet, and fades out the visual correction (half-life 120 ms, never faster than 2.5 m/s). Corrections within the quantisation deadband of compact records are ignored.
+- **Prediction**: `createPredictor({ body, slot })` runs the local car on the client with its own inputs. On each snapshot it rewinds to the acked authoritative state, replays the inputs that haven't been acked yet, and fades out the visual correction (half-life 120 ms, never faster than 1.5 m/s or 45°/s, so at most 2.5 cm per 60 Hz step; it snaps only beyond 3 m). Corrections within the quantisation deadband of compact records are ignored.
 - **Clock**: a ping/pong on `fast`. The sample with the lowest RTT out of the last 8 is kept.
   `sync.clock.toLocal(hostMs)` is used for the synchronized countdown (`sync.startCountdown()`).
 - **Interpolation**: `createInterpolator({ delayMs: 100 })`. It renders about 100 ms behind using cubic

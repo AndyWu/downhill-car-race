@@ -137,7 +137,7 @@ async function boot() {
   window.__game = game;
   let readyFrames = 0;
 
-  let cockpit = null, playerV = null, ui = null, chaseT = null;
+  let cockpit = null, playerV = null, ui = null, chaseT = null, lastRespawns = 0, mudTimer = 0;
   let cfg = { role: 'solo', truck: 0, ai: 5 };   // last race config (for rematch)
   const mp = { predictor: null, sync: null, interp: null, localSlot: 0, players: [], trucks: [], inputs: new Map(), tick: 0, goAtLocal: 0, picks: new Map(), info: null, results: [] };
   let aiNames = ['Barnaby', 'Clementine', 'Buster', 'Maeve', 'Ace'];
@@ -252,7 +252,7 @@ async function boot() {
         if (kind === 'local') playerV = v;
       }
     }
-    chaseT = null;
+    chaseT = null; lastRespawns = 0;
     cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam });
     const cd = o.countdown ?? 3;
     Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });
@@ -537,6 +537,7 @@ async function boot() {
       if (mp.sync) mp.sync.sendInput(netMod.encodeInputFrame(inp, seq));
       if (mp.predictor) mp.predictor.step(STEP, inp, seq);
       else if (playerV) { playerV.prevPos.copy(playerV.body.state.position); playerV.prevQuat.copy(playerV.body.state.quaternion); playerV.body.step(STEP, inp); }
+      if (game.state.mode === 'finish') refreshFinish(false);
       return;
     }
 
@@ -618,6 +619,7 @@ async function boot() {
     }
   }
 
+  const _pv = new THREE.Matrix4(), _mi = new THREE.Matrix4(), _fr = new THREE.Frustum(), _sph = new THREE.Sphere();
   const contactsArr = [false, false, false, false];
   let reflOn = false, reflY = null, reflTimer = 0;
   function updateReflection(dt) {
@@ -684,14 +686,39 @@ async function boot() {
     const sp = ps ? ps.speed : 0;
     if (ps) {
       // consume the wet/mud hits latched by the fixed update
-      const mh = ps.mudHit || 0, wh = ps.wetHit || 0;
-      if (mh + wh > 0.4 && post && post.addSplatter) safe(() => post.addSplatter(mh >= wh ? 'mud' : 'water', Math.min(1, (mh + wh) / 12 + 0.15)), 'splatter');
-      ps.mudHit = 0; ps.wetHit = 0; // consume every render: small grazing hits must not pile up and fire later on dry road
+      // intensity while in contact (not an accumulated amount); water needs >= 2 consecutive physics steps of real water contact
+      const mh = ps.mudHit || 0, wh = ps.wetHit || 0, inten = Math.min(1, sp / 12);
+      if (ps.respawns !== lastRespawns) { lastRespawns = ps.respawns; safe(() => post && post.clearSplatter && post.clearSplatter(), 'clearSplatter'); }
+      else if (post && post.addSplatter) {
+        if (mh > 0.05) safe(() => post.addSplatter('mud', inten), 'splatter');
+        else if (wh > 0.05 && (ps.wetPeak || 0) >= 2) safe(() => post.addSplatter('water', inten, ps.wetPeak), 'splatter');
+      }
+      ps.mudHit = 0; ps.wetHit = 0; ps.wetPeak = ps.wetSteps || 0; // consume every render
     }
+    mudTimer += dt; const mudTick = mudTimer >= 1; if (mudTick) mudTimer = 0;
+    camera.updateMatrixWorld(); _pv.multiplyMatrices(camera.projectionMatrix, _mi.copy(camera.matrixWorld).invert()); _fr.setFromProjectionMatrix(_pv);
+    const countdown = game.state.countdown > 0;
+    let sh1 = null, sh2 = null;   // the two nearest AI/remote trucks within 12 m keep their shadows
     for (const v of game.vehicles) {
       v.mudCoat = Math.round((v.body.state.mudCoat || 0) * 50) / 50;   // 0.02 steps: each real change rewrites vertex colours
       v.group.userData.mudCoat = v.mudCoat; if (v.setMudCoat) v.setMudCoat(v.mudCoat);
-      if (v.setLOD && !v.isPlayer) { const d = camera.position.distanceTo(v.group.position); const want = v.lod === 'far' ? (d < 27 ? 'near' : 'far') : (d > 33 ? 'far' : 'near'); if (want !== v.lod) { v.lod = want; v.setLOD(want); } }
+      if (mudTick && v.mudCoat > 0 && v.group.userData.updateMud) safe(() => v.group.userData.updateMud(), 'updateMud');
+      if (v.isPlayer) continue;
+      const d = camera.position.distanceTo(v.group.position); v.camDist = d;
+      if (d < 12) { if (!sh1 || d < sh1.camDist) { sh2 = sh1; sh1 = v; } else if (!sh2 || d < sh2.camDist) sh2 = v; }
+      if (v.setLOD) {
+        _sph.center.copy(v.group.position); _sph.radius = 2.5;
+        const visible = _fr.intersectsSphere(_sph);
+        const nearD = countdown ? 18 : 27, farD = countdown ? 20 : 33;
+        const want = v.lod === 'far' ? (d < nearD && visible ? 'near' : 'far') : ((d > farD || (!visible && d > 5)) ? 'far' : 'near');
+        if (want !== v.lod) { v.lod = want; v.setLOD(want); }
+      }
+    }
+    for (const v of game.vehicles) {
+      if (v.isPlayer) continue;
+      if (!v.shadowMeshes) { v.shadowMeshes = []; v.group.traverse((o) => { if (o.isMesh && o.castShadow && o.name !== 'farLOD') v.shadowMeshes.push(o); }); v.shadowOn = true; }
+      const want = v === sh1 || v === sh2;
+      if (want !== v.shadowOn) { v.shadowOn = want; for (const o of v.shadowMeshes) o.castShadow = want; }
     }
     if (post && post.render) {
       try { post.render(dt, { speed: sp }); }

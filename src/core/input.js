@@ -211,7 +211,8 @@ export function createInput(dom) {
     out.steer = clamp(steer, -1, 1);
     out.paddleL = Math.min(1, S.pendL); out.paddleR = Math.min(1, S.pendR);
     S.pendL = S.pendR = 0;
-    out.handbrake = Math.max(S.touchHB, S.keyHB);
+    // one shared lever curve for touch, keyboard and debug input: the lever travels up at <= 4/s, releases instantly
+    let hbTarget = Math.max(S.touchHB, S.keyHB);
     out.headlight = S.headlight; out.reverse = S.reverse;
     if (S.debug) {
       const d = S.debug;
@@ -220,10 +221,12 @@ export function createInput(dom) {
       const sdt = simDt != null ? simDt : dt; // simulation time keeps advance() deterministic
       if (d.paddleL) { S.dbgL = (S.dbgL || 0) - sdt; if (S.dbgL <= 0) { out.paddleL = d.paddleL; S.dbgL = 0.33; } }
       if (d.paddleR) { S.dbgR = (S.dbgR || 0) - sdt; if (S.dbgR <= 0) { out.paddleR = d.paddleR; S.dbgR = 0.33; } }
-      if (d.handbrake != null) out.handbrake = d.handbrake;
+      if (d.handbrake != null) hbTarget = d.handbrake;
       if (d.headlight != null) out.headlight = !!d.headlight;
       if (d.reverse != null) out.reverse = !!d.reverse;
     }
+    S.hbOut = hbTarget <= (S.hbOut || 0) ? clamp(hbTarget, 0, 1) : Math.min(clamp(hbTarget, 0, 1), (S.hbOut || 0) + 4 * dt);
+    out.handbrake = S.hbOut;
     return out;
   }
 
