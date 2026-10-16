@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { mulberry32, Noise, clamp, smoothstep } from './util.js';
 
 export const TRACK_LENGTH = 3218;
+export const MIN_GRADE = 0.022; // never flatter than this anywhere on the centreline (coasting cars must keep rolling)
 export const T_PRE = 40;   // table starts at s = -T_PRE
 export const T_POST = 80;  // table ends at s = L + T_POST
 
@@ -41,7 +42,7 @@ export function buildTrack(seed = 1, L = TRACK_LENGTH) {
     if (s < 0) return 0.05;
     if (s > L) return 0.028;
     let g = 0.076 + 0.02 * nz.n1(s / 420) + 0.008 * nz.n1(s / 90 + 40);
-    for (const f of flats) g += (0.018 - g) * bump(s, f.s, f.len);
+    for (const f of flats) g += (0.026 - g) * bump(s, f.s, f.len);
     for (const f of steeps) g += 0.032 * bump(s, f.s, f.len);
     return g;
   };
@@ -57,7 +58,7 @@ export function buildTrack(seed = 1, L = TRACK_LENGTH) {
     th += kappaS(s + 0.5, th);
     X[i + 1] = X[i] + Math.sin(th);
     Z[i + 1] = Z[i] - Math.cos(th);
-    const g = s >= 0 && s <= L ? gradeRaw(s + 0.5) * gScale : gradeRaw(s + 0.5);
+    const g = Math.max(MIN_GRADE, s >= 0 && s <= L ? gradeRaw(s + 0.5) * gScale : gradeRaw(s + 0.5));
     Y[i + 1] = Y[i] - g;
   }
   // control points every 20 m
