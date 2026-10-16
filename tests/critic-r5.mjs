@@ -62,12 +62,9 @@ try {
     await shot(page, 'glyphs-60s');
     await c3.close();
   }
-  if (PH.includes('extra')) {
-    const c4 = await browser.newContext(ctxOpts);
-    const page = await open('autostart=1&truck=0&ai=5&q=default&debug=input', c4);
-    const inputLogs = []; page.on('console', (m) => { if (m.text().startsWith('[input]')) inputLogs.push(m.text()); });
-    const info = await page.evaluate(() => { const g = window.__game; const r = {}; for (const s of [0, 600, 1500, 3150]) { g.teleport(s, 0); g.vehicles.forEach((v, i) => { if (i) { /* keep AI where they are */ } }); const inf = g.renderer.info; inf.autoReset = false; g.advance(1 / 60); inf.reset(); g.advance(1 / 60); const i = inf.render; r[s] = { calls: i.calls, triangles: i.triangles }; inf.autoReset = true; } return r; });
-    log('rendererInfo_q_default_ai5', info);
+  if (PH.includes('phys')) {
+    const cp = await browser.newContext(ctxOpts);
+    const page = await open('autostart=1&truck=0&ai=5&q=low&norender=1', cp);
     const det = await page.evaluate(() => { const g = window.__game; const run = (pad) => { g.setDebugInput(pad ? { steer: 0, paddleL: 1, paddleR: 1 } : { steer: 0 }); g.teleport(100, 2); g.advance(0.05); const s0 = g.state.s; g.advance(10); return +(g.state.s - s0).toFixed(2); };
       const r = { coastA: run(false), coastB: run(false), padA: run(true), padB: run(true) };
       g.setDebugInput({ steer: 0, handbrake: 1 }); g.teleport(400, 12); g.advance(0.05); const b0 = g.state.speed; g.advance(2); r.hbDecel = +((b0 - g.state.speed) / 2).toFixed(2);
@@ -80,6 +77,15 @@ try {
       r.waterNear150 = (g.world.hazards || []).filter((h) => Math.abs(h.s - 150) < 60).map((h) => ({ kind: h.kind || h.type, s: Math.round(h.s), r: h.radius }));
       return r; });
     log('physics', det);
+    await cp.close();
+  }
+  if (PH.includes('extra')) {
+    const c4 = await browser.newContext(ctxOpts);
+    const page = await open('autostart=1&truck=0&ai=5&q=default&debug=input', c4);
+    const inputLogs = []; page.on('console', (m) => { if (m.text().startsWith('[input]')) inputLogs.push(m.text()); });
+    const info = await page.evaluate(() => { const g = window.__game; const r = {}; for (const s of [0, 600, 1500, 3150]) { g.teleport(s, 0); g.vehicles.forEach((v, i) => { if (i) { /* keep AI where they are */ } }); const inf = g.renderer.info; inf.autoReset = false; g.advance(1 / 60); inf.reset(); g.advance(1 / 60); const i = inf.render; r[s] = { calls: i.calls, triangles: i.triangles }; inf.autoReset = true; } return r; });
+    log('rendererInfo_q_default_ai5', info);
+
     await page.evaluate(() => window.__game.teleport(150 - 25, 0)); await page.evaluate(() => window.__game.advance(0.1));
     await shot(page, 'puddle-s150');
     // headlight tap with debug logs

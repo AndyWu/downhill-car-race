@@ -1,0 +1,3 @@
+physics {"coastA":28.34,"coastB":28.34,"padA":74.03,"padB":74.02,"hbDecel":2.96,"berm":[{"s0":600,"steer":0.35,"maxBeyondEdge_m":1.63},{"s0":1500,"steer":-0.35,"maxBeyondEdge_m":1.53},{"s0":2200,"steer":0.5,"maxBeyondEdge_m":1.71}],"noInput30s_maxBeyondEdge_m":1.27,"coastThrough570":{"from":959,"to":633,"minSpeedIn560_620":2.35,"vEnd":5.72},"hazards":{"mud":6,"rutpool":7,"gravel":6,"rock":6,"sand":5,"stream":5,"puddle":5},"waterNear150":[{"kind":"mud","s":114,"r":8},{"kind":"rutpool","s":190,"r":1.2}]}
+fps {}
+errors []
