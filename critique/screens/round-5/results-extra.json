@@ -1,21 +1,40 @@
 {
   "rendererInfo_q_default_ai5": {
     "0": {
-      "calls": 180,
-      "triangles": 287239
+      "calls": 179,
+      "triangles": 286231
     },
     "600": {
       "calls": 103,
       "triangles": 179814
     },
     "1500": {
-      "calls": 91,
-      "triangles": 136864
+      "calls": 148,
+      "triangles": 224412
     },
     "3150": {
-      "calls": 74,
-      "triangles": 152652
+      "calls": 86,
+      "triangles": 167176
     }
   },
+  "headlightTap": {
+    "before": false,
+    "after": [
+      true,
+      false,
+      true
+    ],
+    "logs": [
+      "[input] down headlight R 861 656 touch",
+      "[input] up headlight inZone true held 6751 allowed 600 moved 0",
+      "[input] headlight -> true",
+      "[input] down headlight R 861 656 touch",
+      "[input] up headlight inZone true held 5968 allowed 6343 moved 0",
+      "[input] headlight -> false",
+      "[input] down headlight R 861 656 touch",
+      "[input] up headlight inZone true held 958 allowed 600 moved 0"
+    ]
+  },
+  "fps": {},
   "errors": []
 }
