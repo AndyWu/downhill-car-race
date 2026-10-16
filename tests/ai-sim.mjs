@@ -207,7 +207,7 @@ async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = n
   });
   const bodies = (pBody ? [pBody] : []).concat(cars.map((c) => c.body));
   const dt = 1 / 60, CD = 3;
-  let t = 0, snapped = false;
+  let t = 0, snapped = false, lastLead = -1, lead90 = 0, leadAll = 0, nextSample = CD + 1;
   const idle = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false };
   while (t < maxT + CD && cars.some((c) => c.finished == null)) {
     const racing = t >= CD;
@@ -237,11 +237,17 @@ async function racePhysics(seed, { profiles = AI_PROFILES, maxT = 700, truck = n
     }
     if (pBody) { pBody.step(dt, racing ? { ...idle } : { ...idle, handbrake: 1 }); }
     for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) collideBodies(bodies[i], bodies[j]);
+    if (racing && t >= nextSample) { // lead changes among the AIs, sampled once a second
+      nextSample += 1;
+      let li = 0; cars.forEach((c, i) => { if (c.body.state.s > cars[li].body.state.s) li = i; });
+      if (lastLead >= 0 && li !== lastLead) { leadAll++; if (t - CD <= snapAt) lead90++; }
+      lastLead = li;
+    }
     if (!snapped && racing && t - CD >= snapAt) { snapped = true; for (const c of cars) c.snap = c.body.state.s; }
     if (trace && Math.abs(((t - CD) % 10)) < dt / 2) console.log((t - CD).toFixed(0), cars.map((c) => `${c.name[0]}:${c.body.state.s.toFixed(0)}@${c.body.state.speed.toFixed(1)}`).join(' '), pBody ? 'P:' + pBody.state.s.toFixed(0) : '');
     t += dt;
   }
-  return cars.map((c) => ({ name: c.name, truck: c.truck, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, snap: c.snap, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets }));
+  return cars.map((c) => ({ name: c.name, truck: c.truck, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, snap: c.snap, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets, lead90, leadAll }));
 }
 
 // ---------------- run ----------------
@@ -261,16 +267,17 @@ const AITRUCK = AIT ? Number(AIT.split('=')[1]) : null; // all AIs on one truck 
 const TRUCK = TRUCKARG ? Number(TRUCKARG.split('=')[1]) : null;
 const runRace = (sd, o = {}) => (PHYS ? racePhysics(sd, { truck: TRUCK, trace: TRACE, ...o }) : race(sd, { real: REAL, ...o }));
 const seeds = Array.from({ length: Number(process.argv.find((a) => /^\d+$/.test(a)) || 3) }, (_, i) => i + 1);
-const snapRanks = [];
+const snapRanks = [], leads = [];
 const agg = AI_PROFILES.map((p) => ({ name: p.name, time: 0, mud: 0, water: 0, rock: 0, off: 0, dnf: 0 }));
 const t0 = Date.now();
 for (const sd of seeds) {
   const res = await runRace(sd);
   console.log(`seed ${sd}: ` + res.map((r) => `${r.name} ${r.time === Infinity ? 'DNF@' + r.s.toFixed(0) : r.time.toFixed(1) + 's'} (m${r.hits.mud} w${r.hits.water} r${r.hits.rock} off${r.offroad.toFixed(1)}s${r.resets ? ' RESCUE' + r.resets : ''}${r.maxStall > 2.5 ? ' STALL' + r.maxStall.toFixed(0) + 's@' + r.stallS.toFixed(0) : ''})`).join(' | '));
-  if (PHYS) { const order = res.map((r, i) => i).sort((a, b) => res[b].snap - res[a].snap); snapRanks.push(order); console.log('   s@90: ' + order.map((i) => res[i].name + ' ' + res[i].snap?.toFixed(0)).join(' > ') + '   trucks: ' + res.map((r) => r.truck).join(',')); }
+  if (PHYS) { leads.push([res[0].lead90, res[0].leadAll]); const order = res.map((r, i) => i).sort((a, b) => res[b].snap - res[a].snap); snapRanks.push(order); console.log('   s@90: ' + order.map((i) => res[i].name + ' ' + res[i].snap?.toFixed(0)).join(' > ') + '   trucks: ' + res.map((r) => r.truck).join(',')); }
   res.forEach((r, i) => { const a = agg[i]; if (r.time === Infinity) a.dnf++; a.time += Math.min(r.time, 900); a.mud += r.hits.mud; a.water += r.hits.water; a.rock += r.hits.rock; a.off += r.offroad; });
 }
 const n = seeds.length;
+if (PHYS) console.log(`lead changes (AI leader, per race): first 90 s avg ${(leads.reduce((a, l) => a + l[0], 0) / leads.length).toFixed(1)}, whole race avg ${(leads.reduce((a, l) => a + l[1], 0) / leads.length).toFixed(1)}; Maeve ahead of Buster at 90 s in ${snapRanks.filter((o) => o.indexOf(3) < o.indexOf(2)).length}/${snapRanks.length}`);
 console.log('\nAverages over ' + n + ' seeds (' + ((Date.now() - t0) / 1000).toFixed(1) + 's wall):');
 console.log('name        time    mud  water  rock  total  off-road(s)');
 for (const a of agg) console.log(`${a.name.padEnd(10)} ${(a.time / n).toFixed(1).padStart(6)}  ${(a.mud / n).toFixed(1).padStart(5)} ${(a.water / n).toFixed(1).padStart(5)} ${(a.rock / n).toFixed(1).padStart(5)} ${((a.mud + a.water + a.rock) / n).toFixed(1).padStart(6)}  ${(a.off / n).toFixed(1).padStart(6)}`);
@@ -289,6 +296,10 @@ if (PHYS) {
   const aceTop2 = snapRanks.filter((o) => o.indexOf(4) < 2).length, barBot2 = snapRanks.filter((o) => o.indexOf(0) >= 3).length;
   ok(aceTop2 >= Math.ceil(snapRanks.length * 5 / 6), `Ace top-2 at 90 s in only ${aceTop2}/${snapRanks.length} seeds`);
   ok(barBot2 >= Math.ceil(snapRanks.length * 5 / 6), `Barnaby bottom-2 at 90 s in only ${barBot2}/${snapRanks.length} seeds`);
+}
+if (PHYS) {
+  ok(leads.reduce((a, l) => a + l[1], 0) / leads.length >= 4, 'fewer than 4 lead changes per race on average');
+  ok(snapRanks.filter((o) => o.indexOf(3) < o.indexOf(2)).length >= Math.ceil(snapRanks.length * 5 / 6), 'Maeve ahead of Buster at 90 s in too few seeds');
 }
 if (PHYS) ok(T[0] / T[4] <= 1.35, `Barnaby/Ace ratio ${(T[0] / T[4]).toFixed(2)} > 1.35`);
 ok(tot[1] === Math.min(...tot), 'Clementine should have fewest hazard hits');

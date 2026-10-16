@@ -1,6 +1,7 @@
 // Assembles a truck: model body + shared cockpit rig + wheels + moving parts.
 import * as THREE from 'three';
 import { Kit } from './kit.js';
+import { DECAL } from './textures.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { applyMudCoat } from '../graphics/mudcoat.js';
 import {
@@ -169,13 +170,12 @@ export function assemble(def, materials, lod = 'near') {
   group.traverse((o) => { if (o.isMesh && o.geometry.attributes.mud && o.geometry.attributes.color) mudGeos.add(o.geometry); });
   const mudBase = new Map();
   mudGeos.forEach((g) => mudBase.set(g, g.attributes.color.array.slice()));
-  const MUD = new THREE.Color(0x30211a);
-  let mudNow = 0, handles = null;
-  const setMudCoat = (t) => {
-    t = Math.min(1, Math.max(0, t));
-    if (Math.abs(t - mudNow) < 0.005) return;
-    mudNow = t;
-    // preferred: the graphics agent's shader mud coat (per-truck material clones, patched once)
+  const MUD_WET = new THREE.Color(0x24170e), MUD_DRY = new THREE.Color(0x85735c), MUDC = new THREE.Color();
+  let mudNow = 0, wetNow = 1, handles = null, lastRise = 0, lastWetArg = null;
+  const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const DRY_MS = 20000;
+  const applyMud = (t, wet) => {
+    // graphics-agent shader coat (gloss + roughness live there); drier mud lowers its effective amount so it matte-fades
     if (!handles && t > 0.01) {
       handles = [];
       try {
@@ -183,31 +183,46 @@ export function assemble(def, materials, lod = 'near') {
         group.traverse((o) => {
           if (!o.isMesh || o.material === k.mats.lens) return;
           if (!cache.has(o.material)) { const m = o.material.clone(); cache.set(o.material, { m, h: applyMudCoat(m) }); }
-          const e = cache.get(o.material);
-          o.material = e.m;
+          o.material = cache.get(o.material).m;
         });
         cache.forEach((e) => handles.push(e.h));
       } catch (err) { handles = null; }
     }
-    if (handles && handles.length) handles.forEach((h) => h.set(t));
-    // vertex-colour splatter always runs too, so cockpit-visible parts (hood, paddles, wheel) darken even where the shader mask sits low
+    if (handles && handles.length) handles.forEach((h) => h.set(t * (0.6 + 0.4 * wet)));
+    // vertex-colour caking on every part with a mud mask (hood, paddles, knobs, wheel rim, tyres, panels):
+    // fresh mud = dark; as it dries it lightens to a dusty matte tan
+    MUDC.copy(MUD_WET).lerp(MUD_DRY, (1 - wet) * (1 - wet) * 0.9 + (1 - wet) * 0.1);
+    const tt = 1 - Math.pow(1 - t, 2.6); // strong early response: 0.4 coat reads as ~0.75 caked
     mudGeos.forEach((g) => {
       const c0 = mudBase.get(g), col = g.attributes.color, w = g.attributes.mud;
       for (let i = 0; i < w.count; i++) {
-        const tt = 1 - Math.pow(1 - t, 2.6); // strong early response: 0.4 coat reads as ~0.75
-        const a = Math.min(1, w.getX(i) * tt * 2.4) * 0.96;
-        col.array[i * 3] = c0[i * 3] + (MUD.r - c0[i * 3]) * a;
-        col.array[i * 3 + 1] = c0[i * 3 + 1] + (MUD.g - c0[i * 3 + 1]) * a;
-        col.array[i * 3 + 2] = c0[i * 3 + 2] + (MUD.b - c0[i * 3 + 2]) * a;
+        const a = Math.min(1, w.getX(i) * tt * 2.6) * 0.97 * (0.82 + 0.18 * wet);
+        col.array[i * 3] = c0[i * 3] + (MUDC.r - c0[i * 3]) * a;
+        col.array[i * 3 + 1] = c0[i * 3 + 1] + (MUDC.g - c0[i * 3 + 1]) * a;
+        col.array[i * 3 + 2] = c0[i * 3 + 2] + (MUDC.b - c0[i * 3 + 2]) * a;
       }
       col.needsUpdate = true;
     });
   };
+  const autoWet = () => Math.max(0, 1 - (nowMs() - lastRise) / DRY_MS);
+  /** setMudCoat(level 0..1, wetness 0..1?) — omit wetness to let it auto-dry over ~20 s after the last increase */
+  const setMudCoat = (t, wetness) => {
+    t = Math.min(1, Math.max(0, t));
+    if (t > mudNow + 0.003) lastRise = nowMs();
+    lastWetArg = wetness ?? null;
+    const wet = wetness ?? autoWet();
+    if (Math.abs(t - mudNow) < 0.005 && Math.abs(wet - wetNow) < 0.02) return;
+    mudNow = t; wetNow = wet;
+    applyMud(t, wet);
+  };
+  /** call ~1 Hz (or whenever convenient) so auto-drying progresses while the coat level is unchanged */
+  const updateMud = () => { if (mudNow > 0.005 && lastWetArg === null) setMudCoat(mudNow); };
   const parts = { steeringWheel, paddleL, paddleR, handbrakeLever, gearLever, headlight, flagMount, wheels, driverEye, driver };
-  group.userData = { id: def.id, parts, setMudCoat, setLOD, wheelRadii: [L.Rf, L.Rf, L.R, L.R] };
+  const numberDecals = (k.decalCells || []).map((c) => c - 0).filter((c) => Object.entries(DECAL).some(([n, v]) => /^n\d+$/.test(n) && v === c)).map((c) => +Object.entries(DECAL).find(([n, v]) => v === c)[0].slice(1));
+  group.userData = { id: def.id, number: def.number, numberDecals, parts, setMudCoat, updateMud, setLOD, wheelRadii: [L.Rf, L.Rf, L.R, L.R] };
   let calls = 0;
   group.traverse((o) => { if (o.isMesh) calls++; });
   group.userData.drawCalls = calls;
   if (lod === 'far') setLOD('far');
-  return { group, parts, setMudCoat, setLOD, get lod() { return lodNow; } };
+  return { group, parts, setMudCoat, updateMud, setLOD, get lod() { return lodNow; } };
 }

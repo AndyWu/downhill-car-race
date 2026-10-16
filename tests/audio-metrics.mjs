@@ -57,4 +57,14 @@ for (const [k, v] of Object.entries(res)) {
 }
 console.log('errors', errs);
 fs.writeFileSync('/tmp/claude-0/audio-metrics.json', JSON.stringify(Object.fromEntries(Object.entries(res).map(([k,v])=>[k,{...v,b64:undefined}]))));
-await b.close();
+const fails = [];
+const chk = (c, m) => { if (!c) fails.push(m); };
+const dB = (x) => 20 * Math.log10(x);
+chk(res.sand.centroid >= 1200 && res.sand.centroid <= 1800, `sand centroid ${Math.round(res.sand.centroid)} not in 1200-1800`);
+chk(Math.abs(dB(res.ambient.rms) + 26) <= 1.5, `ambient ${dB(res.ambient.rms).toFixed(1)} dBFS not ~ -26`);
+for (const [k, v] of Object.entries(res)) { chk(v.peak < 0.95, `${k} clips (peak ${v.peak.toFixed(2)})`); chk(v.centroid < 8000, `${k} harsh centroid`); }
+chk(res.sand.centroid < res.gravel.centroid, 'sand must be softer than gravel');
+const surf = ['dirt', 'gravel', 'mud', 'water', 'rock', 'sand'];
+for (const a of surf) for (const c of surf) if (a < c) { const d = Math.sqrt(res[a].bands.reduce((s, x, i) => s + (x - res[c].bands[i]) ** 2, 0)); chk(d > 0.05 || Math.abs(res[a].crest - res[c].crest) > 1.5, `${a}/${c} indistinguishable`); }
+console.log(fails.length ? 'ASSERTIONS FAILED:\n  ' + fails.join('\n  ') : 'audio-metrics assertions OK');
+await b.close(); if (fails.length) process.exit(1);

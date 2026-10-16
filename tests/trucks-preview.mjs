@@ -40,9 +40,11 @@ try {
     for (const view of (process.env.VIEWS ? process.env.VIEWS.split(',') :  ['ext', 'fp', 'mech', 'chase', 'mud'])) {
       await page.waitForFunction(() => typeof window.__show === 'function', null, { timeout: 60000 });
       const info = await page.evaluate(([i, v]) => window.__show(i, v), [i, view]);
+      // single source of truth: every painted number decal on this truck must equal spec.number
+      if (!info.numberDecals.length || info.numberDecals.some((n) => n !== info.number)) throw new Error(`decal number mismatch on ${info.id}: spec ${info.number}, decals ${JSON.stringify(info.numberDecals)}`);
       const file = `/tmp/claude-0/truck-${String(i).padStart(2, '0')}-${info.id}-${view}.png`;
       await page.locator('canvas').screenshot({ path: file });
-      if (view === 'ext' || view === 'far') report.push({ view, ...info });
+      if (view === 'ext' || view === 'far') report.push({ view, id: info.id, number: info.number, decals: info.numberDecals.length, lib: info.libLoaded, calls: info.calls, meshes: info.meshes });
     }
   }
   console.log(JSON.stringify(report, null, 1));

@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { tickTime, G } from './shared.js';
 import { getTier } from './quality.js';
+import { createSplatterSim } from './splatter.js';
 
 const MAXD = 32;
 const VS = /* glsl */`varying vec2 vUv; void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4( position.xy, 0.0, 1.0 ); }`;
@@ -180,36 +181,21 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     blurM.uniforms.tSrc.value = tmp.texture; blurM.uniforms.uDir.value.set(0, 1 / h); pass(blurM, dst);
   }
 
-  // ---------------- lens splatter ----------------
-  const drops = [];
-  const R = Math.random;
-  let lastSpeed = 0;
-  function addSplatter(type = 'mud', amount = 0.5) {
-    const mud = type === 'mud';
-    const n = Math.max(mud ? 3 : 1, Math.min(8, Math.round(1 + amount * (mud ? 7 : 7))));
-    const sp = Math.min(1, lastSpeed / 14);
-    for (let i = 0; i < n; i++) {
-      const big = R() < 0.18 + amount * 0.2;
-      const r = mud ? (big ? 0.06 + R() * 0.04 : 0.026 + R() * 0.03) : (big ? 0.022 + R() * 0.018 : 0.007 + R() * 0.013);
-      const life = mud ? 9 + R() * 7 : 6 + R() * 5;
-      // lower ~55% of the frame only, weighted to the bottom (wheel/road spray cannot reach the eye line)
-      drops.push({ x: 0.06 + R() * 0.88, y: 0.02 + 0.53 * Math.pow(R(), 1.6), r, age: 0, life, kind: mud ? 1 : 0, seed: R(), trail: 0, elong: 1 + sp * (mud ? 1.2 : 2.0) * (0.4 + R()), delay: 0.3 + R() * (mud ? 3.5 : 1.8), vy: (mud ? 0.005 : 0.025) + R() * (mud ? 0.012 : 0.03) });
-    }
-    while (drops.length > Math.min(10, MAXD, tier.maxDrops)) drops.shift();
+  // ---------------- lens splatter (see splatter.js: frame-rate independent) ----------------
+  const sim = createSplatterSim({ maxVisible: Math.min(10, MAXD, tier.maxDrops) });
+  const drops = sim.drops;
+  let lastAddT = -1;
+  /** Legacy/event API: addSplatter(type, intensity 0..1, wetSteps | { dt, wetSteps }).
+   *  Integrates over the sim time since the previous call (or opts.dt), so the drop rate is the same at any frame rate.
+   *  `intensity` must be an intensity, NOT an amount accumulated over the frame. Water is ignored unless wetSteps >= 2. */
+  function addSplatter(type = 'mud', amount = 0.5, opts) {
+    const o = typeof opts === 'number' ? { wetSteps: opts } : (opts || {});
+    const dt = o.dt ?? (lastAddT < 0 ? 1 / 60 : Math.min(0.5, Math.max(1 / 240, time - lastAddT)));
+    lastAddT = time;
+    return sim.contact(type, amount, dt, o.wetSteps);
   }
   function stepDrops(dt) {
-    for (let i = drops.length - 1; i >= 0; i--) {
-      const d = drops[i];
-      d.age += dt;
-      if (d.age > d.delay) {
-        const v = d.vy * Math.min(1, (d.age - d.delay) * 0.6) * (d.kind ? 0.35 : 1);
-        d.y -= v * dt; d.trail += v * dt;
-        d.elong = Math.max(1, d.elong - dt * 0.3); // streak relaxes into a round drop as it stops flying
-        d.r *= 1 - (d.kind ? 0.004 : 0.02) * dt;
-      }
-      const f = d.age / d.life;
-      if (f >= 1 || d.y < -0.15) drops.splice(i, 1);
-    }
+    sim.step(dt);
     for (let i = 0; i < MAXD; i++) {
       const d = drops[i];
       if (!d) continue;
@@ -270,16 +256,16 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
     G.gfxReflOn.value = enabled ? 1 : 0;
   }
 
-  let lastAuto = 0, time = 0;
+  let time = 0;
   function render(dt = 1 / 60, state = {}) {
     gfx.tick?.(dt);
     tickTime();
     time += dt;
     const { speed = 0, splatter } = state;
-    lastSpeed = speed;
+    sim.setSpeed(speed);
     if (splatter) {
       const spl = typeof splatter === 'number' ? { type: 'mud', amount: splatter } : splatter;
-      if (spl.amount > 0 && time - lastAuto > 0.14) { lastAuto = time; addSplatter(spl.type, spl.amount * (spl.type === 'mud' ? 0.7 : 0.35)); }
+      sim.contact(spl.type, spl.amount, dt, spl.wetSteps);
     }
     stepDrops(dt);
 
@@ -316,7 +302,8 @@ export function createPostFX(renderer, scene, camera, opts = {}) {
   return {
     render, setSize, addSplatter, setPlanarReflection,
     get reflectionTarget() { return refl.rt; },
-    clearSplatter() { drops.length = 0; finalM.uniforms.uDropN.value = 0; },
+    clearSplatter() { sim.clear(); finalM.uniforms.uDropN.value = 0; },
+    get splatterDrops() { return drops.length; },
     /** tweak at runtime: { bloom, bloomThreshold, vignette, grain, grade, motion } */
     setParams(o) { Object.assign(P, o); },
     params: P, drops,

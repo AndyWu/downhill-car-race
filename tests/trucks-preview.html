@@ -52,7 +52,7 @@ function show(i, view) {
   group.position.y = spec.wheelRadius; // wheels rest on the ground
   scene.add(group);
   group.updateMatrixWorld(true);
-  parts.driver.visible = view !== 'fp' && view !== 'fpmud';
+  parts.driver.visible = view !== 'fp' && view !== 'fpmud' && view !== 'fpdry';
   if (view === 'mech') { // exercise every articulated part
     parts.wheels[0].rotation.y = parts.wheels[1].rotation.y = -0.4;
     parts.wheels.forEach((w, n) => { w.rotation.x = 0.7 + n; });
@@ -64,11 +64,12 @@ function show(i, view) {
   if (view === 'far' || view === 'farmud') current.setLOD('far');
   if (view === 'farmud') current.setMudCoat(0.6);
   if (view === 'mud') current.setMudCoat(1);
-  if (view === 'fpmud') current.setMudCoat(0.6);
+  if (view === 'fpmud') current.setMudCoat(0.6, 1);
+  if (view === 'fpdry') current.setMudCoat(0.6, 0);
   if (view === 'chase' || view === 'far' || view === 'farmud') {
     cam.fov = 40; cam.aspect = W / H; cam.updateProjectionMatrix();
     cam.position.set(0, 1.9, 25); cam.lookAt(0, 0.4, 0);
-  } else if (view === 'fp' || view === 'fpmud') {
+  } else if (view === 'fp' || view === 'fpmud' || view === 'fpdry') {
     cam.fov = +(q.get('fov') || 65); cam.aspect = W / H; cam.updateProjectionMatrix();
     const p = new THREE.Vector3(); parts.driverEye.getWorldPosition(p);
     cam.position.copy(p); cam.lookAt(p.x, p.y - 0.05, p.z - 5);
@@ -81,7 +82,7 @@ function show(i, view) {
   renderer.render(scene, cam);
   renderer.render(scene, cam);
   const info = renderer.info.render;
-  return { id: spec.id, calls: info.calls, triangles: info.triangles, meshes: (() => { let n = 0; group.traverse((o) => { if (o.isMesh && o.visible) n++; }); return n; })() };
+  return { id: spec.id, number: spec.number, numberDecals: group.userData.numberDecals, libLoaded: !!materials, calls: info.calls, triangles: info.triangles, meshes: (() => { let n = 0; group.traverse((o) => { if (o.isMesh && o.visible) n++; }); return n; })() };
 }
 window.__show = show;
 window.__count = TRUCKS.length;

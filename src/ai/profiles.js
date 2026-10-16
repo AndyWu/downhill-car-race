@@ -30,7 +30,7 @@ const BASE = {
     stamina: { drain: 0.01, regen: 0.05, minFactor: 0.6 },
   },
   brake: { gain: 0.35, dead: 0.4, max: 1, tap: false },
-  aggression: 0, carAvoid: 0,
+  aggression: 0, carAvoid: 0, leaderEase: 0.5,
   draft: { range: 0, strength: 0, overtake: false },
 };
 
@@ -80,7 +80,7 @@ export const Buster = make({
 });
 
 export const Maeve = make({
-  id: 'maeve', truckId: 'rust-bucket', name: 'Maeve', tier: 4, title: 'Tactical',
+  id: 'maeve', truckId: 'crate-comet', name: 'Maeve', tier: 4, title: 'Tactical',
   description: 'Pre-computed minimum-curvature racing line, avoids drag terrain, metronomic paddling.',
   reactionTime: 0.12, steerGain: 1.0, steerNoise: 0.005,
   look: { min: 7, time: 0.6 },
@@ -90,7 +90,7 @@ export const Maeve = make({
   speed: { mu: 0.8, cornerFactor: 1.0, brakeDecel: 3.8, cap: 12.0, useSurface: true, streamV: 8 },
   paddle: { mode: 'rhythm', cadence: 2.8, strength: 1.0, jitter: 0, slopeMax: 0.12, stamina: { drain: 0.01, regen: 0.08, minFactor: 0.8 } },
   brake: { gain: 0.45, dead: 0.3 },
-  carAvoid: 0.8, pass: true,
+  carAvoid: 0.8, pass: true, leaderEase: 0.7,
 });
 
 export const Ace = make({
@@ -105,7 +105,7 @@ export const Ace = make({
   paddle: { mode: 'optimal', cadence: 2.8, strength: 1.0, jitter: 0, slopeMax: 0.08, stamina: { drain: 0.005, regen: 0.1, minFactor: 0.9 } },
   brake: { gain: 0.5, dead: 0.2, tap: true },
   draft: { range: 8, strength: 0.9, overtake: true },
-  carAvoid: 0.8, pass: true,
+  carAvoid: 0.8, pass: true, leaderEase: 1.0,
 });
 
 export const AI_PROFILES = [Barnaby, Clementine, Buster, Maeve, Ace];

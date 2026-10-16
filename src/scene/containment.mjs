@@ -52,6 +52,20 @@ for (const s0 of slowS) for (const side of [-1, 1]) for (const off of [0.9, 1.8,
   }
   if (tBack < 0 || tBack > 6 || minV < 2) bad.push(`slow start s=${s0} side=${side} off=${off}: back ${tBack < 0 ? 'never' : tBack.toFixed(1) + ' s'}, min speed ${minV.toFixed(1)}`);
 }
+// full-course coasting check: no input from the start ramp must reach the finish and never stall
+if (process.env.COAST !== '0') {
+  const body = createVehicleBody(spec, world), st0 = world.startTransform(0);
+  body.reset(st0.position, st0.quaternion);
+  let t = 0, stall = 0, worstStall = 0, stallAt = 0;
+  const idle = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false };
+  for (; t < 900 && body.state.s < 3200; t += 1 / 60) {
+    body.step(1 / 60, idle);
+    const st = body.state;
+    if (st.s > 40 && st.speed < 1.0) { stall += 1 / 60; if (stall > worstStall) { worstStall = stall; stallAt = st.s; } } else stall = 0;
+  }
+  console.log(`coast: reached s=${body.state.s.toFixed(0)} in ${t.toFixed(0)} s, longest stall ${worstStall.toFixed(1)} s at s=${stallAt.toFixed(0)}`);
+  if (body.state.s < 3200 || worstStall > 10) bad.push(`coast: stalled (s=${body.state.s.toFixed(0)}, longest stall ${worstStall.toFixed(1)} s at s=${stallAt.toFixed(0)})`);
+}
 console.log(rows.join('\n'));
 console.log(`WORST ${worst.toFixed(1)} m beyond edge (target <= 6)`);
 console.log(bad.length ? 'RECOVERY FAILURES:\n' + bad.join('\n') : 'recovery ok (back on road <= 6 s, >= 2 m/s)');

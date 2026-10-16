@@ -303,6 +303,7 @@ export class Collector {
 
   /** hand-painted decal quad, facing +Z by default. cell: DECAL.* */
   decal(cell, p, w, h, o = {}) {
+    (this.kit.decalCells ||= []).push(cell);
     return this.add(new THREE.PlaneGeometry(w, h), { grime: 0, v: 0, ...o, cell, p });
   }
 

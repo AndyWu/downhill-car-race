@@ -22,6 +22,8 @@ export const TRUCKS = DEFS.map((d) => ({
   suspension: { ...d.stats.suspension },
   flagColor: d.flagColor,
   number: d.number,
+  raceNumber: d.number,
+  flagNumber: d.number,
   wheelRadius: d.layout.R,
   wheelRadiusFront: d.layout.Rf,
   wheelBase: d.layout.WB,

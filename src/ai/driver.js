@@ -115,7 +115,15 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       else { ref = 0; for (const o of others) ref += o.s; ref /= others.length; }
       rb = 1 + 0.05 * rubberBand * clamp((ref - s) / 60, -1, 1);
     }
-    const vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (outBy > 0 ? 0.65 : 1);
+    // leader ease: a car >60 m clear of the AI pack lifts off a little (profile-aware via P.leaderEase) so races stay close
+    let easeK = 0;
+    if (rubberBand > 0 && P.leaderEase > 0 && others.length) {
+      const hs = typeof human === 'function' ? human() : null;
+      let sum = 0, cnt = 0;
+      for (const o of others) if (o !== hs) { sum += o.s; cnt++; }
+      if (cnt) easeK = clamp((s - sum / cnt - 60) / 60, 0, 1) * P.leaderEase * rubberBand;
+    }
+    const vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (1 - 0.1 * easeK) * (outBy > 0 ? 0.65 : 1);
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
     if (P.brake.tap && hbRaw > 0 && over < 1.2) hbRaw = ((t * 6) % 1) < 0.5 ? Math.min(0.4, hbRaw * 2) : 0; // light taps
@@ -153,7 +161,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const fat = PD.stamina.minFactor + (1 - PD.stamina.minFactor) * stamina;
     // physics gives dv ~ 1/(1+(v/5.5)^2) per stroke, so the pro bursts hardest when slowest
     const burst = PD.mode === 'optimal' ? Math.min(4.2 / PD.cadence, 1 + 0.4 * (1 - clamp(speed / 8, 0, 1))) : 1;
-    const cadence = PD.cadence * fat * burst * rb * (PD.mode === 'optimal' ? want : 1);
+    const cadence = PD.cadence * fat * burst * rb * (1 - 0.2 * easeK) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;

@@ -1,5 +1,6 @@
 // Diegetic UI: hand-painted plywood / chalk-on-barn-board menus. No HUD during the race.
 import { CSS } from './styles.js';
+import { createProjector } from './projection.js';
 
 export const AI_NAMES = ['Barnaby', 'Clementine', 'Buster', 'Maeve', 'Ace'];
 const SEAT_COLORS = ['#c63a24', '#2f7bbf', '#f2c230', '#3f7d3a', '#8a4fb0', '#e07a1f'];
@@ -185,7 +186,7 @@ export function createUI(root, opts = {}) {
   const glyphOff = () => { glyphs.classList.remove('on'); };
   // Idle flash is a newcomer hint only: before the first paddle stroke AND within the first 20 s of the race.
   let raceT0 = 0, stroke = false, dragStart = null;
-  const hintsAllowed = () => !stroke && performance.now() - raceT0 < 20000;
+  const hintsAllowed = () => !stroke && performance.now() - raceT0 < 8000; // idle flash is effectively off: the first one would be at 10 s
   function armIdle() { clearTimeout(idleTimer); if (hintsAllowed()) idleTimer = setTimeout(idleFlash, 10000); }
   function idleFlash() {
     if (current !== 'race' || !hintsAllowed()) return;
@@ -202,21 +203,14 @@ export function createUI(root, opts = {}) {
   window.addEventListener('keydown', noteInput, { passive: true });
 
   let standingsEl = null;
-  // Running rows are ranked by a smoothed projected finish: remaining distance / smoothed recent speed when the
-  // data has {s, speed} (optional trackLength), else an EMA of the supplied eta. Finished by time, DNF last.
-  let etaMem = new Map();
-  function projEta(e) {
-    const m = etaMem.get(e.name) || {};
-    if (e.s != null && e.speed != null) {
-      m.v = m.v == null ? e.speed : 0.85 * m.v + 0.15 * e.speed;
-      m.eta = Math.max(0, (e.trackLength || 3218) - 3 - e.s) / Math.max(2.5, m.v);
-    } else if (e.eta != null) m.eta = m.eta == null ? e.eta : 0.8 * m.eta + 0.2 * e.eta;
-    etaMem.set(e.name, m); return m.eta;
-  }
+  // Running rows: ranked by projection from a 20 s rolling-average speed (see projection.js). Finished by time, DNF last.
+  let projector = createProjector();
   function renderStandings(ul, list) {
+    const running = list.filter((e) => e.time == null && e.status !== 'dnf' && e.s != null);
+    const proj = new Map(projector(running, performance.now() / 1000, (performance.now() - raceT0) / 1000).map((r) => [r.e, r.eta]));
     const rows = list.map((e, i) => {
       const dnf = e.status === 'dnf', fin = e.time != null, run = !fin && !dnf;
-      return { e, i, fin, dnf, run, eta: run ? projEta(e) : null };
+      return { e, i, fin, dnf, run, eta: run ? (proj.has(e) ? proj.get(e) : e.eta) : null };
     });
     const key = (r) => (r.fin ? r.e.time : r.run ? 1e6 + (r.eta ?? 1e5) : 1e9);
     rows.sort((a, b) => key(a) - key(b) || (b.e.s ?? 0) - (a.e.s ?? 0) || a.i - b.i);
@@ -314,7 +308,7 @@ export function createUI(root, opts = {}) {
     updateFinish(standings) { if (standingsEl && standings) renderStandings(standingsEl, standings); },
     showFinish(info = {}) {
       const { place = 1, total = 6, time, standings } = info;
-      etaMem = new Map(); standingsEl = standings ? h('ul', { class: 'sbd-standings' }) : null; if (standings) renderStandings(standingsEl, standings);
+      projector = createProjector(); standingsEl = standings ? h('ul', { class: 'sbd-standings' }) : null; if (standings) renderStandings(standingsEl, standings);
       const card = h('div', { class: `sbd-ply sbd-placard p${place}` },
         h('div', { class: 'sbd-ribbon', html: `<svg viewBox="0 0 100 100"><path d="M30 50 L18 98 L38 86 L50 98 L50 60Z" fill="#c63a24"/><path d="M70 50 L82 98 L62 86 L50 98 L50 60Z" fill="#a42c19"/><circle cx="50" cy="38" r="30" fill="#f2c230" stroke="#2a170a" stroke-width="4"/><circle cx="50" cy="38" r="20" fill="none" stroke="#a87e10" stroke-width="3"/></svg>` }),
         h('div', { class: 'sbd-place' }, String(place), h('sup', {}, ordinal(place))),

@@ -168,13 +168,13 @@ function atlasTexture() {
   let [ox, oy] = cell(DECAL.plateA);
   g.fillStyle = '#e8c630'; g.fillRect(ox + 8, oy + 56, 240, 144);
   g.strokeStyle = '#2a2410'; g.lineWidth = 6; g.strokeRect(ox + 14, oy + 62, 228, 132);
-  outlined(g, 'KY 5-77', ox + 128, oy + 128, '900 64px Impact, sans-serif', '#1d1a0a', '#e8c630', 1);
+  outlined(g, 'HOMEMADE', ox + 128, oy + 128, '900 48px Impact, sans-serif', '#1d1a0a', '#e8c630', 1);
   [ox, oy] = cell(DECAL.plateB);
   g.fillStyle = '#e9ecef'; g.fillRect(ox + 8, oy + 56, 240, 144);
   g.fillStyle = '#1e4aa0'; g.fillRect(ox + 8, oy + 56, 240, 34);
   g.strokeStyle = '#1e4aa0'; g.lineWidth = 5; g.strokeRect(ox + 14, oy + 62, 228, 132);
   outlined(g, 'SOAP BOX', ox + 128, oy + 74, '700 26px Arial', '#fff', '#1e4aa0', 1);
-  outlined(g, 'DERBY 1', ox + 128, oy + 140, '900 62px Impact, sans-serif', '#15213d', '#e9ecef', 1);
+  outlined(g, 'DERBY', ox + 128, oy + 140, '900 56px Impact, sans-serif', '#15213d', '#e9ecef', 1);
   // hand-painted numbers (transparent bg)
   [ox, oy] = cell(DECAL.n7); paintNumber(g, ox, oy, '7', '#f4f1e6', '#1a1a1a');
   [ox, oy] = cell(DECAL.n42); paintNumber(g, ox, oy, '42', '#f2c200', '#1a1a1a', 130);

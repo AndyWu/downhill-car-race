@@ -56,8 +56,8 @@ const doorDasher = {
     // tail fin: a door stood on end and braced
     screenDoor(k, 0, 0.55, 1.14, 0.52, 1.0, { rx: -PI / 2 + 0.12, tone: 0x7ccf5a });
     for (const x of [-0.18, 0.18]) k.wood.bar([x, -0.04, 0.9], [x, 0.3, 1.1], 0.03, 0.03, { c: 0xa88e62 });
-    k.paint.decal(DECAL.n13, [0, 0.62, 1.188], 0.3, 0.3, { r: [0.12, 0, 0] });
-    k.paint.decal(DECAL.n13, [0, 0.62, 1.1], 0.3, 0.3, { r: [-0.12, PI, 0] });
+    k.withXf([0, 0.55, 1.14], [-PI / 2 + 0.12, 0, 0], () => k.paint.decal(DECAL['n' + this.number], [0, -0.038, 0.17], 0.3, 0.3, { r: [PI / 2, 0, 0] })); // single rear-facing number on the fin (pivoted with the door)
+
     // rope lashings joining the doors, bungee across the seat
     k.rope.lash([0, -0.06, -0.58], 'x', 0.04, 0.6, 12, { r: 0.007 });
     for (const x of [-0.3, 0.3]) k.rope.lash([x, -0.06, 0.0], 'z', 0.04, 0.1, 4);
@@ -90,7 +90,7 @@ const crateComet = {
     for (const sx of [-1, 1]) {
       k.paint.box([0.012, 0.17, 0.78], [sx * 0.296, -0.02, 0.2], { c: 0xf0ebe0, v: 0.02 });
       k.paint.decal(DECAL.comet, [sx * 0.303, 0.0, 0.24], 0.5, 0.25, { r: [0, sx * PI / 2, 0] });
-      k.paint.decal(DECAL.n21, [sx * 0.303, -0.02, -0.08], 0.14, 0.14, { r: [0, sx * PI / 2, 0] });
+      k.paint.decal(DECAL['n' + this.number], [sx * 0.303, -0.02, -0.08], 0.14, 0.14, { r: [0, sx * PI / 2, 0] });
       k.paint.box([0.012, 0.15, 0.5], [sx * 0.256, 0.0, -0.66], { c: 0xc1272d });
       k.paint.decal(DECAL.flames, [sx * 0.263, 0.0, -0.66], 0.4, 0.17, { r: [0, sx * PI / 2, 0] });
     }
@@ -116,8 +116,8 @@ const crateComet = {
     // tall flame billboard on the tail: red board with flames, readable from behind
     k.paint.box([0.7, 0.8, 0.02], [0, 0.5, 0.68], { c: 0xc1272d, r: [-0.1, 0, 0] });
     k.paint.box([0.7, 0.12, 0.022], [0, 0.82, 0.683], { c: 0xf0ebe0, r: [-0.1, 0, 0] });
-    k.paint.decal(DECAL.n21, [0, 0.58, 0.693], 0.4, 0.4, { r: [-0.1, 0, 0] });
-    k.paint.decal(DECAL.flames, [0, 0.28, 0.693], 0.5, 0.26, { r: [-0.1, 0, 0] });
+    k.withXf([0, 0.5, 0.68], [-0.1, 0, 0], () => { k.paint.decal(DECAL['n' + this.number], [0, 0.08, 0.0115], 0.4, 0.4); k.paint.decal(DECAL.flames, [0, -0.22, 0.0115], 0.5, 0.26); });
+
     for (const x of [-0.22, 0.22]) k.wood.bar([x, -0.03, 0.62], [x, 0.4, 0.68], 0.03, 0.03, { c: 0xa68c62 });
     // backrest crate lid
     k.wood.box([0.5, 0.3, 0.02], [0, 0.25, 0.63], { c: 0xc8b084, r: [-0.15, 0, 0] });
@@ -174,8 +174,8 @@ const tinLizzie = {
       const px = sx * LZ.R0 * Math.sin(th0), py = LZ.cy + LZ.R0 * Math.cos(th0);
       k.metal.cyl(0.013, 1.1, [px, py, 0.15], { axis: 'z', seg: 8, c: 0xc8b878 });
     }
-    k.paint.decal(DECAL.n88, [LZ.R0 + 0.003, LZ.cy - 0.0, 0.1], 0.24, 0.24, { r: [0, PI / 2, 0] });
-    k.paint.decal(DECAL.n88, [-LZ.R0 - 0.003, LZ.cy - 0.0, 0.1], 0.24, 0.24, { r: [0, -PI / 2, 0] });
+    k.paint.decal(DECAL['n' + this.number], [LZ.R0 + 0.003, LZ.cy - 0.0, 0.1], 0.24, 0.24, { r: [0, PI / 2, 0] });
+    k.paint.decal(DECAL['n' + this.number], [-LZ.R0 - 0.003, LZ.cy - 0.0, 0.1], 0.24, 0.24, { r: [0, -PI / 2, 0] });
     k.paint.decal(DECAL.plateB, [LZ.R0 + 0.003, LZ.cy - 0.08, 0.5], 0.2, 0.13, { r: [0, PI / 2, 0] });
     // tail
     hullSection(k, 'metal', tailR, 1.7, 1.2, 0x3ccfd0, { n: 6 });
@@ -186,8 +186,8 @@ const tinLizzie = {
     // fin
     const fin = new THREE.Shape([new THREE.Vector2(0.9, 0), new THREE.Vector2(1.7, 0.0), new THREE.Vector2(1.72, 0.2), new THREE.Vector2(1.5, 0.85), new THREE.Vector2(1.1, 0.88)]);
     k.paint.add(new THREE.ExtrudeGeometry(fin, { depth: 0.014, bevelEnabled: false }).translate(0, 0, -0.007).rotateY(-PI / 2), { p: [0, LZ.cy + 0.19, 0], c: 0x2fc2c4, v: 0.03 });
-    k.paint.decal(DECAL.n88, [0.009, LZ.cy + 0.6, 1.35], 0.3, 0.3, { r: [0, PI / 2, 0] });
-    k.paint.decal(DECAL.n88, [-0.009, LZ.cy + 0.6, 1.35], 0.3, 0.3, { r: [0, -PI / 2, 0] });
+    k.paint.decal(DECAL['n' + this.number], [0.009, LZ.cy + 0.6, 1.35], 0.3, 0.3, { r: [0, PI / 2, 0] });
+    k.paint.decal(DECAL['n' + this.number], [-0.009, LZ.cy + 0.6, 1.35], 0.3, 0.3, { r: [0, -PI / 2, 0] });
     k.metal.rivets([0, LZ.cy + 0.26, 1.15], [0, LZ.cy + 0.7, 1.45], 6, 0.008);
     spareWheel(k, [0, LZ.cy + 0.3, 1.52], 0.24, 'bike');
     // tub interior: floor boards and seat box
@@ -261,7 +261,7 @@ const ladderLarry = {
     for (let i = 0; i < 6; i++) k.paint.cyl(0.011, 0.4, [0, 0.1 + i * 0.19, 1.31 + i * 0.019], { axis: 'x', seg: 6, c: 0xc8ccd0 });
     k.paint.box([0.5, 0.3, 0.01], [0.08, 1.05, 1.44], { c: 0xe8352a, r: [0, 0, 0.05] });
     k.paint.box([0.5, 0.1, 0.012], [0.08, 1.0, 1.44], { c: 0xf2c200, r: [0, 0, 0.05] });
-    k.paint.decal(DECAL.n4, [0.08, 1.07, 1.452], 0.22, 0.22, { r: [0, 0, 0.05] });
+    k.withXf([0.08, 1.05, 1.44], [0, 0, 0.05], () => k.paint.decal(DECAL['n' + this.number], [0, 0.07, 0.0085], 0.22, 0.22));
     // paddle/lever mount planks
     k.wood.box([0.6, 0.03, 0.12], [0, -0.065, -0.4], { c: 0xb59c70 });
   },
@@ -325,7 +325,7 @@ const sledDog = {
       const a = -1.2 + i * 0.16; // fur tufts along the nose edge
       k.paint.sph(0.035, [Math.sin(a) * 0.3, bedY(-1.25) + 0.16, -1.31 + Math.cos(a) * 0.04], { seg: 5, c: i % 3 ? 0xe8e4dc : 0xb8b4aa, s: [1, 1, 0.8] });
     }
-    k.paint.decal(DECAL.n10, [0, bedY(-0.95) + 0.012, -0.95], 0.26, 0.26, { r: [-PI / 2 + Math.atan(-bedSlope(-0.95)) * 0, 0, 0] });
+    k.paint.decal(DECAL['n' + this.number], [0, bedY(-0.95) + 0.012, -0.95], 0.26, 0.26, { r: [-PI / 2 + Math.atan(-bedSlope(-0.95)) * 0, 0, 0] });
     k.paint.decal(DECAL.plateB, [0.322, 0.04, 0.5], 0.3, 0.19, { r: [0, PI / 2, 0] });
     // sheepskin seat pad and backrest sack
     k.paint.box([0.42, 0.04, 0.36], [0, 0.05, 0.36], { c: 0xe4dccc, v: 0.04 });
@@ -335,7 +335,7 @@ const sledDog = {
     for (const sx of [-1, 1]) k.paint.bar([sx * 0.28, 0.05, 0.9], [sx * 0.26, 0.95, 1.1], 0.045, 0.04, { c: 0x2f6fb5 });
     k.paint.box([0.64, 0.05, 0.05], [0, 0.95, 1.1], { c: 0x2f6fb5 });
     k.paint.box([0.5, 0.42, 0.02], [0, 0.72, 1.08], { c: 0x2f6fb5, r: [-0.12, 0, 0] });
-    k.paint.decal(DECAL.n10, [0, 0.72, 1.093], 0.34, 0.34, { r: [-0.12, 0, 0] });
+    k.withXf([0, 0.72, 1.08], [-0.12, 0, 0], () => k.paint.decal(DECAL['n' + this.number], [0, 0, 0.0115], 0.34, 0.34));
     k.rope.lash([0, 0.95, 1.1], 'x', 0.03, 0.4, 8);
     // lamp mount
     k.wood.box([0.14, 0.06, 0.26], [0, bedY(-1.15) + 0.1, -1.13], { c: 0xa68c62, r: [Math.atan(-bedSlope(-1.15)), 0, 0] });

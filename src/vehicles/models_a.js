@@ -39,7 +39,7 @@ const barrelBomber = {
     k.metal.cyl(0.032, 0.02, [-0.1, cy - 0.06, -1.172], { axis: 'z', seg: 8, c: 0x555048 });
     k.paint.decal(DECAL.bomber, [r + 0.002, cy + 0.01, cz - 0.04], 0.5, 0.22, { r: [0, PI / 2, 0] });
     k.paint.decal(DECAL.bomber, [-r - 0.002, cy + 0.01, cz - 0.04], 0.5, 0.22, { r: [0, -PI / 2, 0] });
-    k.paint.decal(DECAL.n7, [0, cy + r + 0.002, -0.5], 0.15, 0.15, { r: [-PI / 2, 0, 0] });
+    k.paint.decal(DECAL['n' + this.number], [0, cy + r + 0.002, -0.5], 0.15, 0.15, { r: [-PI / 2, 0, 0] });
     // dents/rust patches
     k.paint.tape([0.2, 0.2, -0.9], [0.04, 0.003, 0.14], { r: [0, 0, -0.55] });
     k.paint.tape([-0.17, 0.25, -0.62], [0.12, 0.003, 0.03], { r: [0, 0.1, 0.8] });
@@ -61,7 +61,7 @@ const barrelBomber = {
     k.wood.box([0.74, 0.12, 0.025], [0, 0.0, 1.0], { c: 0xc0a77a });
     k.paint.decal(DECAL.plateA, [0, 0.0, 1.016], 0.3, 0.19);
     spareWheel(k, [0, 0.2, 1.1], 0.27, 'tyre', 0xc83a28);
-    k.paint.decal(DECAL.n7, [r + 0.002, cy + 0.1, -0.2], 0.2, 0.2, { r: [0, PI / 2, 0] });
+    k.paint.decal(DECAL['n' + this.number], [r + 0.002, cy + 0.1, -0.2], 0.2, 0.2, { r: [0, PI / 2, 0] });
     // diagonal braces
     k.wood.bar([-0.2, -0.04, -0.3], [-0.22, 0.05, -0.55], 0.03, 0.03, { c: 0xa68c62 });
     k.wood.bar([0.2, -0.04, -0.3], [0.22, 0.05, -0.55], 0.03, 0.03, { c: 0xa68c62 });
@@ -103,7 +103,7 @@ const palletPounder = {
     for (const x of [-0.3, 0.3]) k.metal.rod([x, -0.04, -1.22], [x, -0.04, -0.9], 0.02, { seg: 6, c: 0x6a625a });
     // plate + painted number on the hood
     k.withXf([0, 0.147, -0.85], [-th, 0, 0], () => {
-      k.paint.decal(DECAL.n42, [-0.17, 0.004, 0.0], 0.24, 0.24, { r: [-PI / 2, 0, 0] });
+      k.paint.decal(DECAL['n' + this.number], [-0.17, 0.004, 0.0], 0.24, 0.24, { r: [-PI / 2, 0, 0] });
       k.paint.decal(DECAL.plateB, [0.18, 0.004, -0.04], 0.26, 0.17, { r: [-PI / 2, 0, 0] });
       k.paint.tape([0.0, 0.003, 0.2], [0.18, 0.003, 0.06], {});
     });
@@ -112,8 +112,8 @@ const palletPounder = {
     // tall yellow race-number billboard on posts: readable from far behind
     for (const x of [-0.22, 0.22]) k.wood.bar([x, -0.07, 0.8], [x, 0.9, 0.84], 0.05, 0.05, { c: 0xb59c70 });
     k.paint.box([0.62, 0.5, 0.025], [0, 0.82, 0.84], { c: 0xf2c200, v: 0.04 });
-    k.paint.decal(DECAL.n42, [0, 0.82, 0.8535], 0.44, 0.44);
-    k.paint.decal(DECAL.n42, [0, 0.82, 0.8265], 0.44, 0.44, { r: [0, PI, 0] });
+    k.paint.decal(DECAL['n' + this.number], [0, 0.82, 0.8535], 0.44, 0.44);
+    k.paint.decal(DECAL['n' + this.number], [0, 0.82, 0.8265], 0.44, 0.44, { r: [0, PI, 0] });
     k.paint.tape([0.2, 0.62, 0.857], [0.1, 0.05, 0.003], { r: [0, 0, 0.6] });
     // chain and padlock
     k.metal.tor(0.045, 0.006, [0.22, -0.02, 0.77], { r: [0, PI / 2, 0], seg: 10, rseg: 4, c: 0x3a3632 });
@@ -164,7 +164,7 @@ const rustBucket = {
     k.paint.box([0.2, 0.003, 0.16], [-0.12, 0.2, -0.7], { c: 0xc0c4c2, r: [-th, 0.15, 0] });
     k.paint.box([0.16, 0.003, 0.2], [0.12, 0.04, -1.0], { c: 0xb4b8b6, r: [-th, -0.1, 0] });
     k.paint.tape([0.02, 0.27, -0.55], [0.2, 0.003, 0.06], { r: [-th, 0.4, 0] });
-    k.paint.decal(DECAL.n9, [0.0, 0.185, -0.74], 0.26, 0.26, { r: [-PI / 2 - th, 0, 0] });
+    k.paint.decal(DECAL['n' + this.number], [0.0, 0.185, -0.74], 0.26, 0.26, { r: [-PI / 2 - th, 0, 0] });
     k.paint.decal(DECAL.plateA, [0.315 + 0.012, 0.06, 0.62], 0.3, 0.19, { r: [0, PI / 2, 0] });
     // curved tin backrest
     k.metal.corr(0.56, 0.5, [0, 0.3, 0.65], { r: [PI / 2 - 0.18, 0, 0], c: 0xa8c4de });
@@ -224,7 +224,7 @@ const wagonWheelWilly = {
     }
     k.wood.box([0.64, 0.18, 0.025], [0, -0.04, 0.93], { c: wd(0.85) }); // tailgate
     k.paint.box([0.62, 0.17, 0.004], [0, -0.04, 0.945], { c: 0xf2c200, v: 0.05 });
-    k.paint.decal(DECAL.n5, [0.0, -0.04, 0.9485], 0.16, 0.16);
+    k.paint.decal(DECAL['n' + this.number], [0.0, -0.04, 0.9485], 0.16, 0.16);
     k.paint.decal(DECAL.plateA, [0.2, -0.04, 0.9485], 0.18, 0.11);
     // toolbox hood with sloped lid
     k.wood.box([0.52, 0.28, 0.5], [0, 0.0, -0.74], { c: wd(0.8) }); // body (hidden mostly)
@@ -260,7 +260,7 @@ const wagonWheelWilly = {
     k.paint.add(new THREE.CylinderGeometry(0.4, 0.4, 0.5, 18, 1, true, -PI / 2, PI).scale(0.95, 1, 1.25).rotateX(-PI / 2), { p: [0, -0.02, 0.8], c: 0xf0e8d0, v: 0.04, grime: 0.5 });
     // canvas rear flap with the race number: closes the dome so it reads from behind
     k.paint.add(new THREE.CircleGeometry(0.4, 20, 0, PI).scale(0.95, 1.15, 1), { p: [0, -0.02, 1.06], c: 0xf0e8d0, v: 0.04, grime: 0.5 });
-    k.paint.decal(DECAL.n5, [0, 0.2, 1.064], 0.3, 0.3);
+    k.paint.decal(DECAL['n' + this.number], [0, 0.2, 1.064], 0.3, 0.3);
     // bucket hung from tailgate
     k.metal.cyl(0.07, 0.14, [0.17, 0.0, 1.0], { r2: 0.055, seg: 12, open: true, c: 0xbab6aa });
     k.rope.tube([[0.1, 0.07, 0.99], [0.17, 0.14, 0.99], [0.24, 0.07, 0.99]], 0.005, {});
@@ -317,7 +317,7 @@ const bathtubBetty = {
     k.rope.lash([0, fy + 0.0, fz + 0.06], 'x', 0.04, 0.1, 3);
     k.paint.decal(DECAL.betty, [sx * 0.99 + 0.0, y0 + 0.2, z0 + 0.12], 0.4, 0.2, { r: [0, PI / 2, 0], grime: 0 });
     k.paint.decal(DECAL.betty, [-sx * 0.99, y0 + 0.2, z0 + 0.12], 0.4, 0.2, { r: [0, -PI / 2, 0] });
-    k.paint.decal(DECAL.n3, [sx * 0.97, y0 + 0.23, z0 - 0.3], 0.18, 0.18, { r: [0, PI / 2, 0] });
+    k.paint.decal(DECAL['n' + this.number], [sx * 0.97, y0 + 0.23, z0 - 0.3], 0.18, 0.18, { r: [0, PI / 2, 0] });
     // drain chain and plug
     k.metal.tube([[0.1, 0.0, 0.3], [0.14, -0.04, 0.34], [0.2, -0.05, 0.4], [0.24, -0.02, 0.45]], 0.005, { c: 0xc0c0b8, uvScale: 1, rseg: 3 });
     k.rope.lash([-0.2, 0.0, 0.57], 'x', 0.02, 0.12, 2);
