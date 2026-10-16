@@ -1,0 +1,6 @@
+PASS host produced an offer code (88 chars)
+PASS client produced an answer code
+PASS client connected
+PASS both pages in race mode
+REALGAME {"seconds":10.01,"hostSentBytes":25380,"hostBps":2535,"snapshotsTx":300,"snapHz":30,"avgBytesPerSnapshot":84.6,"bytesPerCar6":14.1,"clientRxSnaps":300,"clientSentBytes":6680,"enc":{"full":240,"compact":2142,"unchanged":12}}
+errors []

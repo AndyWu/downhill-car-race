@@ -1,0 +1,16 @@
+PASS dt=0.017: visible drops <= 10 (max 10)
+PASS dt=0.017: drop radius capped (max 0.100)
+PASS dt=0.033: visible drops <= 10 (max 10)
+PASS dt=0.033: drop radius capped (max 0.100)
+PASS dt=0.250: visible drops <= 10 (max 10)
+PASS dt=0.250: drop radius capped (max 0.100)
+PASS spawned counts match across frame rates: {"0.016666666666666666":21,"0.03333333333333333":21,"0.25":21}
+PASS one 0.25 s frame spawns <= 4 (got 3)
+PASS water ignored with no wetSteps
+PASS water ignored with wetSteps = 1
+PASS water spawns with wetSteps >= 2 (got 15)
+PASS drops exist before clear
+PASS clear() empties drops immediately
+PASS no leftover budget fires after clear
+PASS no drops without contact
+ALL PASSED

@@ -1,0 +1,59 @@
+  [host] navigated http://127.0.0.1:5287/tests/net-harness.html
+  [client] navigated http://127.0.0.1:5287/tests/net-harness.html
+1) Serverless signaling (codes passed via page.evaluate)
+     offer : 78 B binary → 104 chars  candidates=[{"addr":"5e334c2e-e49a-4f72-a838-6993a0dc0a14.local","port":33111}]
+     answer: 78 B binary → 104 chars  candidates=[{"addr":"57fbae77-f6f2-430d-9441-c7bdcbc1d765.local","port":32947}]
+  ok   encoded payloads < 250 chars (104, 104)
+  ok   DataChannels open on both sides (open/open) in 448 ms
+  ok   fast channel unordered/maxRetransmits 0, ctrl reliable ordered; client slot=1
+2) 60 Hz inputs + 30 Hz snapshots, no world → FULL records (host steps at 60 Hz for 3 s)
+     host stepped 180 ticks, sent 90 snapshots (last 158 B, 4.65 KiB/s per client) in 2984 ms; client sent 180 inputs
+     host received 180 input frames (seq gaps 0); client received 90 snapshots; interpolator samples 179, last pos [0,65.39,-86.52]
+     clock: synced=true rtt=1.10 ms; bytes host tx=14411 client tx=2100
+  ok   ≥175/180 input frames delivered at 60 Hz (180)
+  ok   30 Hz snapshots: 90 sent, 90 delivered
+  ok   6-car snapshot stream × 5 clients < 25 KiB/s (23.3 KiB/s)
+  ok   interpolator produced samples
+  ok   clock ping/pong synced
+  ok   reliable control channel both ways
+2b) 5% loss, 20-80 ms jitter on the fast channel (8 s, v3 track-relative snapshots, prediction on)
+     host: 240 snapshots avg 84.2 B (2.47 KiB/s per client, 12.33 KiB/s ×5); records full/compact 144/1295; inputs repeated 10, merged 2 (latency trims 2)
+     client: 202 snapshots received; interp delay adapted to 123 ms (jitter 60 ms), extrapolated 12/2380 samples
+     interpolation error vs ground truth: max 5.6 cm, mean 2.3 cm
+     prediction: 165 reconciles, 16 corrections >1 cm, 144 inside deadband, max correction 49.4 cm, max visual pop 2.76 cm/frame; ack latency p50 165 ms, p95 205 ms
+     client upload: 0.67 KiB/s (inputs 30 Hz × 20 B + pings)
+  ok   client tx ≤ 1.5 KiB/s (681 B/s)
+  ok   interpolated remote cars stay within 0.5 m of truth (max 5.6 cm)
+  ok   own inputs reconciled: p50 165 ms < 200, p95 205 ms < 250 (link alone ≈ 145 ms p95)
+  ok   prediction smooth: max visual pop 2.76 cm/frame (< 10); largest pending correction 49.4 cm glides out at ≤ 2.5 m/s
+  ok   bandwidth 12.33 KiB/s for 5 clients
+2b) 15% loss, 20-80 ms jitter on the fast channel (8 s, v3 track-relative snapshots, prediction on)
+     host: 240 snapshots avg 84.1 B (2.46 KiB/s per client, 12.31 KiB/s ×5); records full/compact 144/1293; inputs repeated 11, merged 0 (latency trims 0)
+     client: 180 snapshots received; interp delay adapted to 130 ms (jitter 59 ms), extrapolated 0/2375 samples
+     interpolation error vs ground truth: max 5.6 cm, mean 2.3 cm
+     prediction: 148 reconciles, 38 corrections >1 cm, 106 inside deadband, max correction 87.9 cm, max visual pop 2.74 cm/frame; ack latency p50 168 ms, p95 213 ms
+     client upload: 0.67 KiB/s (inputs 30 Hz × 20 B + pings)
+  ok   client tx ≤ 1.5 KiB/s (681 B/s)
+  ok   interpolated remote cars stay within 0.5 m of truth (max 5.6 cm)
+  ok   own inputs reconciled: p50 168 ms < 200, p95 213 ms < 250 (link alone ≈ 145 ms p95)
+  ok   prediction smooth: max visual pop 2.74 cm/frame (< 10); largest pending correction 87.9 cm glides out at ≤ 2.5 m/s
+  ok   bandwidth 12.31 KiB/s for 5 clients
+3) Lobby state machine (host + 2 clients, fallback modal, manual codes, QR decode)
+  [client2] navigated http://127.0.0.1:5287/tests/net-harness.html
+  ok   host starts on the hotspot step with nothing pre-ticked (attttt)
+  ok   after "My hotspot is on": step 1 ticked, offer step active, camera NOT opened (getUserMedia calls: 0)
+  ok   host actions: Scan Player 2’s reply | New code | Can’t use the camera? Tap to paste the code
+     steps while scanning: done,done,active,todo
+  ok   "Scan reply" opens the camera only now (cameraOn=false, soft notice: "The camera isn’t available here, and that’s OK. Tap “paste the code” below instead.")
+  ok   slot 1: offer QR (37×37 modules, 495px) decodes back to the code
+  ok   unscanned client offers "Try again" after timeout → back to scanOffer
+  ok   first reply code was generated
+  ok   host rejects the stale reply politely: "That reply is for an older code. On that iPad tap “Try again” and scan the new code."
+  ok   client 1 connected in slot 1
+  ok   slot 2: offer QR (37×37 modules, 495px) decodes back to the code
+  ok   client 2 connected in slot 2
+  ok   host onReady with 2 peers: Dad, Kid1, Kid2
+4) Lobby driving the UI slot API (mock ui object)
+  ok   adapter called setLobbyRole, setLobbySteps, clearQR, setCaption, setPlayers, setStartEnabled, showQR
+
+all loopback checks passed

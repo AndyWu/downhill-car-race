@@ -1,0 +1,61 @@
+
+=== clean link ===
+PASS host produced an offer code (88 chars)
+PASS client produced an answer code
+PASS client connected
+PASS both pages in race mode
+  paddle strokes during the run: client made 125, host applied 125
+PASS every client paddle stroke applied on the host (±2 in flight)
+host {"cars":[[0,"local",211],[1,"remote",182.9],[2,"ai",157.3],[3,"ai",139.9],[4,"ai",154.4],[5,"ai",139.2]],"cd":0,"t":18.4666666666669}
+client {"cars":[[0,"proxy",209.8],[1,"local",183.1],[2,"proxy",156.5],[3,"proxy",139.1],[4,"proxy",153.5],[5,"proxy",138.4]],"cd":0,"t":17.850000000000268,"me":183.12959192049448}
+PASS six cars on both pages
+PASS host simulates the client car (remote input applied): s=182.9
+PASS client sees the host car moving via snapshots: s=209.8
+PASS client own car advances: s=183.12959192049448
+PASS client/host agree on client car position
+  host simulation rate 60.8 ticks/s (client estimate 60.0)
+  client car distance over the first 600 host ticks after GO (straight paddling): 87.6 m (host-simulated)
+  predictor visual correction per 60 Hz step: p95 2.50 cm, max 2.50 cm (1027 steps, snaps 0)
+PASS own-car visual correction ≤ 5 cm per step (max 2.50 cm)
+  bandwidth: client upload 649 B/s, client download 2613 B/s (host tx 2613 B/s to 1 client); snapshot records full/compact/unchanged 389/2935/0
+  host jitter buffer: repeated 94, merged 80, lost 56, strokes recovered 0
+  interpolation (client proxies vs host truth at the same tick, 4640 samples): p50 2.4 cm, p95 4.6 cm, max 5.5 cm
+  prediction (client-predicted own car vs host car for the same input seq, 844 samples): p50 1.1 cm, p95 11.4 cm, max 19.3 cm
+  predictor: 525 reconciles, 135 corrections >1 cm, 356 inside deadband, largest pending correction 85.0 cm
+PASS client upload ≤ 1.5 KiB/s (649 B/s)
+PASS interpolated remote cars within 0.5 m of host truth (p95 4.6 cm)
+PASS predicted own car within 0.5 m of host simulation for the same input (p95 11.4 cm)
+PASS no console errors []
+
+=== lossy link (15% loss, 20-80 ms jitter on 'fast') ===
+PASS host produced an offer code (88 chars)
+PASS client produced an answer code
+PASS client connected
+PASS both pages in race mode
+  paddle strokes during the run: client made 123, host applied 123
+PASS every client paddle stroke applied on the host (±2 in flight)
+host {"cars":[[0,"local",206],[1,"remote",181.9],[2,"ai",153.8],[3,"ai",135.5],[4,"ai",151],[5,"ai",134.6]],"cd":0,"t":18.133333333333585}
+client {"cars":[[0,"proxy",203.7],[1,"local",183.2],[2,"proxy",152.3],[3,"proxy",134.2],[4,"proxy",149.5],[5,"proxy",133.3]],"cd":0,"t":17.716666666666942,"me":183.2301584720753}
+PASS six cars on both pages
+PASS host simulates the client car (remote input applied): s=181.9
+PASS client sees the host car moving via snapshots: s=203.7
+PASS client own car advances: s=183.2301584720753
+PASS client/host agree on client car position
+  host simulation rate 60.8 ticks/s (client estimate 60.2)
+  client car distance over the first 600 host ticks after GO (straight paddling): 86.6 m (host-simulated)
+  predictor visual correction per 60 Hz step: p95 2.50 cm, max 2.50 cm (975 steps, snaps 0)
+PASS own-car visual correction ≤ 5 cm per step (max 2.50 cm)
+  bandwidth: client upload 651 B/s, client download 2270 B/s (host tx 2581 B/s to 1 client); snapshot records full/compact/unchanged 356/2908/0
+  host jitter buffer: repeated 107, merged 60, lost 60, strokes recovered 0
+  interpolation (client proxies vs host truth at the same tick, 4540 samples): p50 2.3 cm, p95 4.6 cm, max 5.4 cm
+  prediction (client-predicted own car vs host car for the same input seq, 816 samples): p50 2.0 cm, p95 21.7 cm, max 43.9 cm
+  predictor: 391 reconciles, 89 corrections >1 cm, 288 inside deadband, largest pending correction 115.3 cm
+PASS client upload ≤ 1.5 KiB/s (651 B/s)
+PASS interpolated remote cars within 0.5 m of host truth (p95 4.6 cm)
+PASS predicted own car within 0.5 m of host simulation for the same input (p95 21.7 cm)
+PASS no console errors []
+
+client car distance: lossy 86.6 m vs clean 87.6 m (98.9%)
+PASS under 15% loss + jitter the client covers within 10% of the no-loss distance (98.9%)
+
+all net-race checks passed

@@ -1,0 +1,10 @@
+clip      rms(dBFS) peak   crest  centroid  bands<250/800/2k/4k/8k/>8k
+dirt        -23.3   0.46    6.7      989  31  34  20  12   3   1
+gravel      -22.9   0.51    7.1     1992  19  17  23  27  12   2
+mud         -21.8   0.50    6.1      501  73  12   9   5   1   0
+water       -19.8   0.56    5.5     1180   7  24  59   7   2   1
+rock        -22.7   0.71    9.7     1203  37  21  18  20   4   1
+sand        -24.4   0.40    6.7     1223  35  24  22  14   5   1
+ambient     -26.5   0.24    5.0      527  43  32  23   2   0   0
+errors []
+audio-metrics assertions OK

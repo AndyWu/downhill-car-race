@@ -1,0 +1,19 @@
+seed 1: Barnaby 357.0s (m3 w6 r3 off5.2s) | Clementine 342.6s (m2 w5 r1 off1.0s STALL3s@135) | Buster 328.5s (m2 w5 r4 off3.1s RESCUE1 STALL6s@1898) | Maeve 305.8s (m4 w6 r4 off1.6s STALL3s@131) | Ace 274.6s (m4 w6 r4 off0.0s)
+   s@90: Ace 998 > Buster 887 > Maeve 827 > Clementine 756 > Barnaby 664   trucks: pallet-pounder,sled-dog,wagon-wheel-willy,crate-comet,door-dasher
+seed 2: Barnaby 363.1s (m3 w6 r4 off3.3s STALL3s@125) | Clementine 349.2s (m2 w5 r1 off0.0s) | Buster 342.0s (m2 w6 r4 off1.8s RESCUE1 STALL6s@550) | Maeve 292.7s (m4 w6 r4 off0.0s) | Ace 274.8s (m4 w6 r4 off0.0s)
+   s@90: Ace 996 > Maeve 933 > Clementine 750 > Buster 731 > Barnaby 691   trucks: pallet-pounder,sled-dog,wagon-wheel-willy,crate-comet,door-dasher
+seed 3: Barnaby 362.6s (m3 w6 r3 off3.5s STALL3s@134) | Clementine 346.1s (m1 w5 r1 off0.0s STALL4s@131) | Buster 333.7s (m2 w5 r4 off4.5s) | Maeve 311.4s (m4 w7 r5 off1.1s RESCUE1 STALL4s@74) | Ace 274.8s (m4 w6 r4 off0.0s)
+   s@90: Ace 994 > Maeve 803 > Buster 801 > Clementine 715 > Barnaby 662   trucks: pallet-pounder,sled-dog,wagon-wheel-willy,crate-comet,door-dasher
+lead changes (AI leader, per race): first 90 s avg 2.0, whole race avg 2.3; Maeve ahead of Buster at 90 s in 2/3
+
+Averages over 3 seeds (15.9s wall):
+name        time    mud  water  rock  total  off-road(s)
+Barnaby     360.9    3.0   6.0   3.3   12.3     4.0
+Clementine  346.0    1.7   5.0   1.0    7.7     0.3
+Buster      334.7    2.0   5.3   4.0   11.3     3.1
+Maeve       303.3    4.0   6.3   4.3   14.7     0.9
+Ace         274.7    4.0   6.0   4.0   14.0     0.0
+
+FAIL:
+ - fewer than 4 lead changes per race on average
+ - Maeve ahead of Buster at 90 s in too few seeds
