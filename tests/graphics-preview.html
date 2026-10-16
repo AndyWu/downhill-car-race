@@ -32,6 +32,7 @@ const mats = createMaterials(renderer);
 const matMs = performance.now() - t0;
 const light = setupLighting(scene, renderer);
 light.setTime(time, true);
+light.setWeather(q.get('weather') || 'clear', true);
 const post = createPostFX(renderer, scene, camera, { msaa: +(q.get('msaa') ?? 4) });
 post.setSize(W, H);
 window.__gfx = { renderer, scene, camera, mats, light, post };
@@ -209,7 +210,8 @@ let frame = 0;
 const v = new THREE.Vector3();
 function tick() {
   frame++;
-  light.update(1 / 30, camera);
+  if (frame === 7 && q.get('flash')) light.triggerLightning(800);
+  light.update(1 / 30, camera, 12);
   if (shot === 'headlight' || shot === 'beam') hl.update(1 / 30);
   post.render(1 / 30, { speed: shot === 'post' ? 22 : shot === 'headlight' ? 24 : 0 });
   for (const l of labels) {

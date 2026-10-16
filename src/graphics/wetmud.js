@@ -14,14 +14,15 @@ export function applyWetMud(material, { steps = 10, uvMetres = 2.4, depth = 0.05
     injectGlobals(shader);
     Object.assign(shader.uniforms, U);
     const pars = /* glsl */`
-uniform float gWet; uniform float gDepthUV; uniform sampler2D gMacroM; uniform float gfxTime;
+uniform float gWet; uniform float gDepthUV; float gWetE; uniform sampler2D gMacroM; uniform float gfxTime;
 vec2 gUv; vec2 gDx; vec2 gDy; float gPool; vec4 gORM; float gWl;
 float gHt( vec2 uv ) { return textureGrad( roughnessMap, uv, gDx, gDy ).a; }
 `;
     shader.fragmentShader = '#define MUD_STEPS ' + steps + '\n' + shader.fragmentShader
       .replace('#include <roughnessmap_pars_fragment>', '#include <roughnessmap_pars_fragment>\n' + pars)
       .replace('#include <map_fragment>', /* glsl */`
-	gWl = mix( 0.14, 0.40, gWet );
+	gWetE = max( gWet, gfxWet );
+	gWl = mix( 0.14, 0.40, gWetE );
 	gUv = vMapUv; gDx = dFdx( vMapUv ); gDy = dFdy( vMapUv );
 	#if MUD_STEPS > 0
 	{
@@ -50,19 +51,19 @@ float gHt( vec2 uv ) { return textureGrad( roughnessMap, uv, gDx, gDy ).a; }
 	vec4 sampledDiffuseColor = textureGrad( map, gUv, gDx, gDy );
 	float gMac = texture2D( gMacroM, vMapUv * 0.09 ).r;
 	sampledDiffuseColor.rgb *= 0.7 + 0.6 * gMac;
-	sampledDiffuseColor.rgb *= mix( 1.0, 0.55, gWet * gWetM ) * mix( 1.0, 0.8, gWet );
-	sampledDiffuseColor.rgb = mix( sampledDiffuseColor.rgb, vec3( 0.05, 0.045, 0.03 ), gPool * gWet * 0.85 );
+	sampledDiffuseColor.rgb *= mix( 1.0, 0.55, gWetE * gWetM ) * mix( 1.0, 0.8, gWetE );
+	sampledDiffuseColor.rgb = mix( sampledDiffuseColor.rgb, vec3( 0.05, 0.045, 0.03 ), gPool * gWetE * 0.85 );
 	diffuseColor *= sampledDiffuseColor;`)
       .replace('#include <roughnessmap_fragment>', /* glsl */`
-	float roughnessFactor = roughness * mix( gORM.g, 0.2, gWet * 0.8 * gWetM );
-	roughnessFactor = mix( roughnessFactor, roughnessFactor * 0.75, gWet * 0.4 );
-	roughnessFactor = mix( roughnessFactor, 0.04, gPool * gWet );`)
+	float roughnessFactor = roughness * mix( gORM.g, 0.2, gWetE * 0.8 * gWetM );
+	roughnessFactor = mix( roughnessFactor, roughnessFactor * 0.75, gWetE * 0.4 );
+	roughnessFactor = mix( roughnessFactor, 0.04, gPool * gWetE );`)
       .replace('#include <normal_fragment_maps>', /* glsl */`
 	#ifdef USE_NORMALMAP_TANGENTSPACE
 	{
 		vec3 mapN = textureGrad( normalMap, gUv, gDx, gDy ).xyz * 2.0 - 1.0;
-		mapN.xy *= normalScale * ( 1.0 - gPool * gWet * 0.9 );
-		vec2 rip = ( texture2D( normalMap, gUv * 3.0 + vec2( gfxTime * 0.03, - gfxTime * 0.02 ) ).xy * 2.0 - 1.0 ) * 0.3 * gPool * gWet;
+		mapN.xy *= normalScale * ( 1.0 - gPool * gWetE * 0.9 );
+		vec2 rip = ( texture2D( normalMap, gUv * 3.0 + vec2( gfxTime * 0.03, - gfxTime * 0.02 ) ).xy * 2.0 - 1.0 ) * 0.3 * gPool * gWetE;
 		mapN.xy += rip;
 		normal = normalize( tbn * normalize( mapN ) );
 	}

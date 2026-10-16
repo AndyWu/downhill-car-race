@@ -134,7 +134,7 @@ export function createMaterials(renderer, opts = {}) {
 		float ph = fract( t * 0.3 + hh * 3.7 );
 		float d = length( f - ctr );
 		float rr = ph * 0.5;
-		float ring = sin( ( d - rr ) * 42.0 ) * exp( - abs( d - rr ) * 16.0 ) * ( 1.0 - ph ) * step( 0.45, hh );
+		float ring = sin( ( d - rr ) * 42.0 ) * exp( - abs( d - rr ) * 16.0 ) * ( 1.0 - ph ) * step( mix( 0.45, 0.04, gfxRain ), hh );
 		rg += normalize( f - ctr + 1e-4 ) * ring * 0.7;
 		vec3 mapN = normalize( vec3( rg * normalScale, 1.0 ) );
 		normal = normalize( tbn * mapN );
@@ -191,7 +191,7 @@ export function createMaterials(renderer, opts = {}) {
     injectGlobals(shader);
     shader.uniforms.gWind = wind;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float gWind; uniform float gfxTime;')
+      .replace('#include <common>', '#include <common>\nuniform float gWind; uniform float gfxTime; uniform float gfxWind;')
       .replace('#include <begin_vertex>', /* glsl */`#include <begin_vertex>
 	{
 		#ifdef USE_INSTANCING
@@ -201,8 +201,8 @@ export function createMaterials(renderer, opts = {}) {
 		#endif
 		float gh = max( position.y, 0.0 );
 		float gp = gfxTime * 1.6 + ( gO.x + gO.y ) * 0.37;
-		transformed.x += ( sin( gp + gh * 1.7 ) + 0.5 * sin( gp * 2.3 + gh * 3.1 ) ) * 0.018 * gh * gWind;
-		transformed.z += cos( gp * 0.9 + gh * 1.3 ) * 0.014 * gh * gWind;
+		transformed.x += ( sin( gp + gh * 1.7 ) + 0.5 * sin( gp * 2.3 + gh * 3.1 ) ) * 0.018 * gh * ( gWind + gfxWind * 1.6 );
+		transformed.z += cos( gp * 0.9 + gh * 1.3 ) * 0.014 * gh * ( gWind + gfxWind * 1.6 );
 	}`);
     shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_end>', /* glsl */`#include <lights_fragment_end>
 	#if NUM_DIR_LIGHTS > 0
