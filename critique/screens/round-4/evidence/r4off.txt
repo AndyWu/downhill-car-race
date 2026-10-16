@@ -1,0 +1,13 @@
+[sw-manifest] precache ve50cad5baa5c: 17 files, 1145 KiB
+  real build: 17 precache entries, version e50cad5baa5c
+  ok   manifest is inlined into dist/sw.js
+  ok   manifest covers index.html and the main bundle
+  state log: installing· → installed· → activating· → activated· → <offline-ready>✓
+  ok   not ready during installing → installed → activating
+  ok   offline-ready fired after statechange → activated (worker state at event: activated)
+  ok   offline-ready detail: 17/17 cached, manifest has 17, version e50cad5baa5c
+  ok   every manifest entry is in sbd-precache-e50cad5baa5c (17/17)
+  ok   offline reload boots the game from cache (failed requests: 0)
+  ok   offline ?autostart deep link boots from cache (failed requests: 0)
+
+all offline checks passed

@@ -1,0 +1,48 @@
+
+=== clean link ===
+PASS host produced an offer code (88 chars)
+PASS client produced an answer code
+PASS client connected
+PASS both pages in race mode
+host {"cars":[[0,"local",162.9],[1,"remote",52.7],[2,"ai",52.9],[3,"ai",108.4],[4,"ai",111.5],[5,"ai",109]],"cd":0,"t":12.43333333333353}
+client {"cars":[[0,"proxy",160.9],[1,"local",52.9],[2,"proxy",52.1],[3,"proxy",107.2],[4,"proxy",110.3],[5,"proxy",107.8]],"cd":0,"t":12.43333333333353,"me":52.92452170028078}
+PASS six cars on both pages
+PASS host simulates the client car (remote input applied): s=52.7
+PASS client sees the host car moving via snapshots: s=160.9
+PASS client own car advances: s=52.92452170028078
+PASS client/host agree on client car position
+  host simulation rate 60.0 ticks/s (client estimate 60.0)
+  bandwidth: client upload 608 B/s, client download 3172 B/s (host tx 3172 B/s to 1 client); snapshot records full/compact/unchanged 582/1662/0
+  host jitter buffer: repeated 20, merged 36, lost 12, strokes recovered 0
+  interpolation (client proxies vs host truth at the same tick, 2975 samples): p50 2.1 cm, p95 4.6 cm, max 5.5 cm
+  prediction (client-predicted own car vs host car for the same input seq, 604 samples): p50 0.9 cm, p95 17.4 cm, max 2421.5 cm
+  predictor: 375 reconciles, 164 corrections >1 cm, 141 inside deadband, largest pending correction 2421.2 cm; visual pop p95 14.50 cm, max 16.91 cm per frame (604 frames)
+PASS client upload ≤ 1.5 KiB/s (608 B/s)
+PASS interpolated remote cars within 0.5 m of host truth (p95 4.6 cm)
+PASS predicted own car within 0.5 m of host simulation for the same input (p95 17.4 cm)
+PASS no console errors []
+
+=== lossy link (15% loss, 20-80 ms jitter on 'fast') ===
+PASS host produced an offer code (88 chars)
+PASS client produced an answer code
+PASS client connected
+PASS both pages in race mode
+host {"cars":[[0,"local",138.6],[1,"remote",28.3],[2,"ai",101.5],[3,"ai",96.4],[4,"ai",99.6],[5,"ai",97.5]],"cd":0,"t":11.166666666666801}
+client {"cars":[[0,"proxy",136.3],[1,"local",28.6],[2,"proxy",100.1],[3,"proxy",94.8],[4,"proxy",98],[5,"proxy",95.9]],"cd":0,"t":11.666666666666826,"me":28.56151145301007}
+PASS six cars on both pages
+PASS host simulates the client car (remote input applied): s=28.3
+PASS client sees the host car moving via snapshots: s=136.3
+PASS client own car advances: s=28.56151145301007
+PASS client/host agree on client car position
+  host simulation rate 59.0 ticks/s (client estimate 60.0)
+  bandwidth: client upload 596 B/s, client download 2596 B/s (host tx 2914 B/s to 1 client); snapshot records full/compact/unchanged 409/1764/11
+  host jitter buffer: repeated 51, merged 37, lost 33, strokes recovered 5
+  interpolation (client proxies vs host truth at the same tick, 2930 samples): p50 2.4 cm, p95 4.6 cm, max 5.3 cm
+  prediction (client-predicted own car vs host car for the same input seq, 569 samples): p50 4.3 cm, p95 28.3 cm, max 55.7 cm
+  predictor: 268 reconciles, 187 corrections >1 cm, 69 inside deadband, largest pending correction 62.7 cm; visual pop p95 19.34 cm, max 21.07 cm per frame (597 frames)
+PASS client upload ≤ 1.5 KiB/s (596 B/s)
+PASS interpolated remote cars within 0.5 m of host truth (p95 4.6 cm)
+PASS predicted own car within 0.5 m of host simulation for the same input (p95 28.3 cm)
+PASS no console errors []
+
+all net-race checks passed

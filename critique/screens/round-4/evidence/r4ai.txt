@@ -1,0 +1,16 @@
+seed 1: Barnaby 351.0s (m1 w6 r3 off4.2s) | Clementine 317.4s (m1 w5 r1 off0.0s) | Buster 306.6s (m2 w6 r4 off3.6s) | Maeve 294.4s (m4 w7 r5 off0.0s) | Ace 262.8s (m4 w6 r4 off3.4s)
+   s@90: Ace 1001 > Buster 950 > Maeve 897 > Clementine 882 > Barnaby 794   trucks: pallet-pounder,sled-dog,wagon-wheel-willy,rust-bucket,door-dasher
+seed 2: Barnaby 347.9s (m1 w5 r4 off8.9s) | Clementine 319.8s (m1 w5 r1 off3.0s) | Buster 313.8s (m2 w5 r4 off8.9s) | Maeve 288.0s (m4 w6 r4 off0.0s) | Ace 257.3s (m4 w6 r4 off0.0s)
+   s@90: Ace 1083 > Maeve 966 > Buster 912 > Clementine 853 > Barnaby 788   trucks: pallet-pounder,sled-dog,wagon-wheel-willy,rust-bucket,door-dasher
+seed 3: Barnaby 328.7s (m2 w6 r3 off3.0s) | Clementine 317.9s (m1 w5 r1 off0.0s) | Buster 303.7s (m2 w5 r4 off0.9s) | Maeve 305.3s (m4 w7 r5 off2.4s) | Ace 259.9s (m4 w6 r4 off0.0s)
+   s@90: Ace 1048 > Buster 957 > Clementine 876 > Barnaby 850 > Maeve 835   trucks: pallet-pounder,sled-dog,wagon-wheel-willy,rust-bucket,door-dasher
+
+Averages over 3 seeds (21.9s wall):
+name        time    mud  water  rock  total  off-road(s)
+Barnaby     342.5    1.3   5.7   3.3   10.3     5.4
+Clementine  318.3    1.0   5.0   1.0    7.0     1.0
+Buster      308.0    2.0   5.3   4.0   11.3     4.5
+Maeve       295.9    4.0   6.7   4.7   15.3     0.8
+Ace         260.0    4.0   6.0   4.0   14.0     1.1
+
+ALL ASSERTIONS PASSED

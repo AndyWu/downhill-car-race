@@ -1,0 +1,182 @@
+{
+  "glyphOpacitySeries": [
+    [
+      0,
+      0.32
+    ],
+    [
+      5,
+      0
+    ],
+    [
+      10,
+      0
+    ],
+    [
+      15,
+      0.26
+    ],
+    [
+      20,
+      0.26
+    ],
+    [
+      25,
+      0
+    ],
+    [
+      30,
+      0
+    ],
+    [
+      35,
+      0
+    ],
+    [
+      40,
+      0
+    ],
+    [
+      45,
+      0
+    ],
+    [
+      50,
+      0
+    ],
+    [
+      55,
+      0
+    ],
+    [
+      60,
+      0
+    ]
+  ],
+  "rendererInfo_q_default_ai5": {
+    "0": {
+      "calls": 221,
+      "triangles": 360191
+    },
+    "600": {
+      "calls": 103,
+      "triangles": 179814
+    },
+    "1500": {
+      "calls": 91,
+      "triangles": 136888
+    },
+    "3150": {
+      "calls": 74,
+      "triangles": 152628
+    }
+  },
+  "physics": {
+    "coast2s": [
+      12.01,
+      12.59
+    ],
+    "hb2s": [
+      11.92,
+      5.77
+    ],
+    "hbDecel": 3.07,
+    "padRuns": [
+      {
+        "ds": 105.7,
+        "minDs": 0
+      },
+      {
+        "ds": 111.5,
+        "minDs": 0
+      },
+      {
+        "ds": 111.5,
+        "minDs": 0
+      },
+      {
+        "ds": 111.5,
+        "minDs": 0
+      }
+    ],
+    "coast10s": {
+      "ds": 30.7,
+      "v": 3.93
+    },
+    "paddle10s": {
+      "ds": 111.5,
+      "v": 15.58
+    }
+  },
+  "headlightTap": {
+    "before": false,
+    "after": [
+      true,
+      false,
+      true
+    ],
+    "logs": [
+      "[input] down headlight R 861 656 touch",
+      "[input] up headlight inZone true held 4425 allowed 600 moved 0",
+      "[input] headlight -> true",
+      "[input] down headlight R 861 656 touch",
+      "[input] up headlight inZone true held 2445 allowed 4641 moved 0",
+      "[input] headlight -> false",
+      "[input] down headlight R 861 656 touch",
+      "[input] up headlight inZone true held 438 allowed 600 moved 0"
+    ]
+  },
+  "tilt": {
+    "hasMotionBefore": false,
+    "neutral": {
+      "raw": 0,
+      "steer": 0,
+      "wheelRotZ": 0,
+      "angVelY": -0.024
+    },
+    "upright": {
+      "raw": 0,
+      "steer": 0,
+      "wheelRotZ": 0,
+      "angVelY": -0.015
+    },
+    "tiltA": {
+      "raw": 28.6,
+      "steer": 0.61,
+      "wheelRotZ": -1.275,
+      "angVelY": 0.159
+    },
+    "tiltB": {
+      "raw": -28.6,
+      "steer": -0.61,
+      "wheelRotZ": 1.275,
+      "angVelY": 0.169
+    },
+    "screenAngle": 0,
+    "isTouch": true,
+    "hasMotion": true
+  },
+  "swipe": {
+    "noInput": [
+      0.37,
+      3.83
+    ],
+    "swipes": [
+      3.83,
+      11.29
+    ],
+    "strokePairs": 1
+  },
+  "handbrake": {
+    "before": 11.29,
+    "after1500ms": 0.02,
+    "leverRotX": 0.7
+  },
+  "glyphOpacityAfterControls": 0,
+  "zones": {
+    "headlightBefore": false,
+    "headlightAfterTap": true,
+    "reverseAfterGearDragDown": true
+  },
+  "errors": []
+}
