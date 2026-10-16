@@ -86,9 +86,9 @@ function applySway(m, wind, o) {
   const f = (n) => Number(n).toFixed(4);
   m.onBeforeCompile = (shader, renderer) => {
     if (prev) prev.call(m, shader, renderer);
-    shader.uniforms.uWindTime = wind.uTime;
+    shader.uniforms.uWindTime = wind.uTime; shader.uniforms.uWindAmp = wind.uAmp;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uWindTime;' + (o.attr ? '\nattribute float swayH;\nattribute vec2 swayO;' : ''))
+      .replace('#include <common>', '#include <common>\nuniform float uWindTime;\nuniform float uWindAmp;' + (o.attr ? '\nattribute float swayH;\nattribute vec2 swayO;' : ''))
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         ${o.attr ? 'vec2 swIp = swayO;' : `#ifdef USE_INSTANCING
           vec2 swIp = instanceMatrix[3].xz;
@@ -97,16 +97,47 @@ function applySway(m, wind, o) {
         #endif`}
         float swH = pow(max(${o.attr ? 'swayH' : 'position.y'} * ${f(o.hscale)}, 0.0), ${f(o.hpow)});
         float swP = uWindTime * ${f(o.freq)} + dot(swIp, vec2(0.37, 0.29));
-        transformed.x += (sin(swP) + 0.35 * sin(swP * 2.3 + 1.7)) * ${f(o.amp)} * swH;
-        transformed.z += cos(swP * 0.83 + 0.5) * ${f(o.amp * 0.6)} * swH;`);
+        transformed.x += (sin(swP) + 0.35 * sin(swP * 2.3 + 1.7)) * ${f(o.amp)} * uWindAmp * swH;
+        transformed.z += cos(swP * 0.83 + 0.5) * ${f(o.amp * 0.6)} * uWindAmp * swH;`);
   };
   const baseKey = m.customProgramCacheKey ? m.customProgramCacheKey.bind(m) : () => '';
   m.customProgramCacheKey = () => `${baseKey()}|sway${o.amp}_${o.freq}_${o.hpow}_${o.hscale}${o.attr ? 'A' : ''}`;
 }
 
+// per-material weather response: snow = max cover on upward faces, wet = darkening / gloss
+const WX = {
+  dirtRoad: { snow: 0.5, wet: 1 }, grass: { snow: 1, wet: 0.5 }, foliage: { snow: 0.6, wet: 0.3 }, blade: { snow: 0.55, wet: 0.2 },
+  metalRusted: { snow: 0.9, wet: 0.5 }, woodWeathered: { snow: 0.35, wet: 0.6 }, rock: { snow: 0.5, wet: 0.6 }, straw: { snow: 0.5, wet: 0.3 },
+  barnPaint: { snow: 0.45, wet: 0.4 }, field: { snow: 1, wet: 0.3 }, gravel: { snow: 0.5, wet: 0.8 }, sand: { snow: 0.7, wet: 0.7 }, mud: { snow: 0.4, wet: 0.2 },
+};
+function applyWeather(m, wx, o) {
+  const prev = m.onBeforeCompile;
+  m.onBeforeCompile = (shader, renderer) => {
+    if (prev) prev.call(m, shader, renderer);
+    shader.uniforms.uSnow = wx.uSnow; shader.uniforms.uWet = wx.uWet;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uSnow;\nuniform float uWet;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          #ifdef FLAT_SHADED
+            float wxUp = 0.8;
+          #else
+            float wxUp = dot(normalize(vNormal), normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz));
+          #endif
+          float wxSnow = uSnow * ${o.snow.toFixed(3)} * smoothstep(0.35, 0.8, wxUp);
+          diffuseColor.rgb = mix(diffuseColor.rgb * (1.0 - ${(0.32 * o.wet).toFixed(3)} * uWet), vec3(0.9, 0.94, 1.0), wxSnow);
+        }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, min(roughnessFactor, 0.32), uWet * ${o.wet.toFixed(3)} * 0.8);`);
+  };
+  const baseKey = m.customProgramCacheKey ? m.customProgramCacheKey.bind(m) : () => '';
+  m.customProgramCacheKey = () => `${baseKey()}|wx${o.snow}_${o.wet}`;
+}
+
 export function createMaterialLibrary(provided = {}) {
   const cache = new Map();
-  const wind = { uTime: { value: 0 } };
+  const wind = { uTime: { value: 0 }, uAmp: { value: 1 } };
+  const wx = { uSnow: { value: 0 }, uWet: { value: 0 } };
   const scrolling = [];
   function get(key, opts = {}) {
     const ck = key + JSON.stringify(opts);
@@ -122,11 +153,12 @@ export function createMaterialLibrary(provided = {}) {
     if (opts.polygonOffset) { m.polygonOffset = true; m.polygonOffsetFactor = opts.polygonOffset; m.polygonOffsetUnits = opts.polygonOffset; }
     if (opts.color !== undefined && m.color) m.color = new THREE.Color(opts.color);
     if (opts.sway) applySway(m, wind, { amp: 0.1, freq: 1.6, hpow: 1, hscale: 1, ...opts.sway });
+    if (WX[key] && !opts.noWeather) applyWeather(m, wx, WX[key]);
     m.needsUpdate = true;
     cache.set(ck, m);
     return m;
   }
-  return { get, wind, provided: !!(provided && Object.keys(provided).length) };
+  return { get, wind, wx, provided: !!(provided && Object.keys(provided).length) };
 }
 
 /** Text banner texture (falls back to a checker pattern with no DOM). */

@@ -14,7 +14,7 @@ const sun = new THREE.DirectionalLight(0xfff0d0, 2.6); sun.position.set(-120, 16
 sun.shadow.mapSize.set(2048, 2048); const sc = sun.shadow.camera; sc.left = -60; sc.right = 60; sc.top = 60; sc.bottom = -60; sc.far = 500;
 scene.add(sun); scene.add(sun.target);
 const world = await createWorld(scene, { seed: Number(q.get('seed') || 1) });
-window.__world = world;
+window.__world = world; world.setWeather(q.get('weather') || 'clear');
 const cam = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 2500);
 const s = Number(q.get('s') || 500), d = Number(q.get('d') || 0), h = Number(q.get('h') || 1.6), look = Number(q.get('look') || 40), yaw = Number(q.get('yaw') || 0);
 const f = world.track.sampleAt(s);

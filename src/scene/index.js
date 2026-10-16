@@ -48,7 +48,35 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
   const waterMats = [];
   if (!lib.provided) { const m = lib.get('waterPuddle', { vertexColors: true, transparent: true, polygonOffset: -2, direct: true }); if (m.map) waterMats.push(m.map); }
 
+  // ---- weather ----
+  const WEATHER = {
+    clear: { snow: 0, wet: 0, grip: 1, drag: 0, wind: 0.35, gust: 0 },
+    fog: { snow: 0, wet: 0.25, grip: 0.95, drag: 0, wind: 0.2, gust: 0 },
+    snow: { snow: 1, wet: 0.15, grip: 0.65, drag: 0.05, wind: 0.3, gust: 0 },
+    rain: { snow: 0, wet: 1, grip: 0.8, drag: 0, wind: 0.6, gust: 0.15 },
+    storm: { snow: 0, wet: 1, grip: 0.8, drag: 0, wind: 1.0, gust: 0.7 },
+  };
+  const ALIAS = { foggy: 'fog', heavyrain: 'rain', 'heavy rain': 'rain', stormy: 'storm', snowy: 'snow', sunny: 'clear' };
+  const weather = { name: 'clear', gripMul: 1, dragAdd: 0, snow: 0, wet: 0, wind: 0.35, gust: 0 };
+  let windBase = 1;
+  function setWeather(name = 'clear') {
+    const key = ALIAS[String(name).toLowerCase()] || (WEATHER[String(name).toLowerCase()] ? String(name).toLowerCase() : 'clear');
+    const w = WEATHER[key];
+    Object.assign(weather, { name: key, gripMul: w.grip, dragAdd: w.drag, snow: w.snow, wet: w.wet, wind: w.wind, gust: w.gust });
+    lib.wx.uSnow.value = w.snow; lib.wx.uWet.value = w.wet;
+    windBase = 0.55 + w.wind * 1.6;       // foliage sway multiplier (storm ~2.1x, clear ~1.1x)
+    lib.wind.uAmp.value = windBase;
+    for (const it of ground.rainItems) it.mesh.visible = false; // update() shows them in range
+    return { gripMul: weather.gripMul, dragAdd: weather.dragAdd };
+  }
+
   function surfaceAt(x, z) {
+    const r = surfaceAt0(x, z);
+    if (weather.gripMul !== 1 && r.type !== 'grass') r.friction = clamp(r.friction * weather.gripMul, 0.05, 1.2);
+    if (weather.dragAdd) r.drag += weather.dragAdd;
+    return r;
+  }
+  function surfaceAt0(x, z) {
     const i = terrain.roadInfo(x, z);
     const ad = Math.abs(i.d), hw = i.hw;
     if (i.ramp) return { type: 'dirt', friction: 0.92, drag: 0, bump: 0.04 };
@@ -74,9 +102,9 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
 
   const _f = new THREE.Vector3(), _x = new THREE.Vector3(), _n = new THREE.Vector3(), _mat = new THREE.Matrix4(), _pp = {};
   function startTransform(slot) {
-    slot = clamp(Math.floor(slot), 0, 5);
+    slot = clamp(Math.floor(slot), 0, 9);
     const row = slot >> 1, col = slot & 1;
-    const s = 9.5 - 4.2 * row - (col ? 1.9 : 0), d = col ? 1.3 : -1.3;
+    const s = 12.5 - 4.3 * row - (col ? 1.9 : 0), d = col ? 1.3 : -1.3;
     track.atS(s, _pp);
     const x = _pp.px + _pp.rhx * d, z = _pp.pz + _pp.rhz * d;
     const y = terrain.heightAt(x, z);
@@ -94,12 +122,14 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
   function update(dt, camera) {
     time += dt;
     lib.wind.uTime.value = time;
+    if (weather.gust) lib.wind.uAmp.value = windBase * (1 + weather.gust * (0.5 + 0.5 * Math.sin(time * 0.9) * Math.sin(time * 0.37 + 1.3)));
     for (const t of waterMats) t.offset.y = (time * 0.02) % 1;
     ground.update(time);
     if (!camera) return;
     camera.getWorldPosition(camPos);
     for (const ch of ground.chunks) { const v = gd(ch) < R.lod0; for (const m of ch.lod0) setVis(m, v); }
     for (const f of ground.farItems) { const v = f.chunks.some((ch) => { const d = gd(ch); return d >= R.lod0 - 40 && d < R.groundFar; }); for (const m of f.meshes) setVis(m, v); }
+    for (const it of ground.rainItems) setVis(it.mesh, weather.wet > 0.5 && gd(it) < R.deco);
     for (const it of decoItems) setVis(it.mesh || it.group, it.always || gd(it) < R.deco);
     for (const ch of scenery.chunks) {
       const d = gd(ch);
@@ -127,6 +157,7 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
     surfaceAt,
     hazards: field.hazards,
     startTransform,
+    setWeather, weather,
     update,
     // extras (not part of the contract)
     group: root, seed,
