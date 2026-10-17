@@ -99,7 +99,7 @@ export const CSS = `
 .sbd-view { position:absolute; pointer-events:auto; top: calc(var(--sat) + 1.4*var(--u)); left: calc(50% + 4.6*var(--u)); width: calc(6*var(--u)); height: calc(4.6*var(--u)); padding: calc(.6*var(--u)); border: none; border-radius: calc(1.2*var(--u)); background: rgba(20,14,8,.32); color: rgba(255,244,220,.72); cursor: pointer; touch-action: none; }
 .sbd-view-lbl { position:absolute; top: 105%; left: 50%; transform: translateX(-50%); white-space: nowrap; font-family: var(--hand); font-size: calc(1.8*var(--u)); color: var(--chalk); opacity: 0; transition: opacity .3s; text-shadow: 0 1px 2px #000; }
 .sbd-view.show .sbd-view-lbl { opacity: .9; }
-.sbd-tryhorn { display:inline-flex; align-items:center; gap:.5em; width:auto; align-self:flex-start; margin: 0; padding: .25em .9em; font-size: .85em; white-space: nowrap; }
+.sbd-tryhorn { position:absolute; left: calc(1.6*var(--u)); bottom: calc(1.6*var(--u)); z-index: 2; display:inline-flex; align-items:center; gap:.5em; width:auto; margin: 0; padding: .25em .9em; font-size: .85em; white-space: nowrap; }
 .sbd-tryhorn .lbl small { font-size: .7em; opacity: .75; margin-left: .55em; font-style: italic; }
 .sbd-tryhorn.hit { transform: scale(.95) rotate(-1deg); filter: brightness(1.2); }
 .sbd-horn.hit { background: rgba(240,200,90,.45); color: #fff; }
@@ -123,7 +123,7 @@ export const CSS = `
 .sbd-card p.desc { margin:0; font-size: calc(2*var(--u)); line-height:1.2; color:#4a2e14; margin-bottom: calc(1*var(--u)); }
 .sbd-stats { display:flex; flex-direction:column; gap: calc(.9*var(--u)); margin-top: auto; }
 .sbd-card > .sbd-stats { flex-shrink: 1; min-height: 0; justify-content: space-between; }
-@media (max-height: 900px) { .sbd-card { gap: calc(.8*var(--u)); padding-top: calc(2.2*var(--u)); } .sbd-stats { gap: calc(.4*var(--u)); } .sbd-stat { font-size: calc(1.9*var(--u)); } .sbd-card p.desc { font-size: calc(1.8*var(--u)); margin-bottom: 0; } }
+@media (max-height: 640px) { .sbd-card { gap: calc(.8*var(--u)); padding-top: calc(2.2*var(--u)); } .sbd-stats { gap: calc(.4*var(--u)); } .sbd-stat { font-size: calc(1.9*var(--u)); } .sbd-card p.desc { font-size: calc(1.8*var(--u)); margin-bottom: 0; } }
 .sbd-stat { display:grid; grid-template-columns: calc(14*var(--u)) 1fr; align-items:center; gap: calc(1.2*var(--u)); font-size: calc(2.2*var(--u)); }
 .sbd-tape { position:relative; height: calc(2.8*var(--u)); border-radius: .5vmin; background:
    repeating-linear-gradient(90deg, #1a1a1a 0 .18vmin, transparent .18vmin 1.2vmin),

@@ -130,8 +130,8 @@ export function createUI(root, opts = {}) {
       btn('Back', 'small chalk', () => api.show('title'))),
     h('div', { class: 'sbd-garage-body' },
       btn('‹', 'sbd-arrow', () => api.selectTruck(gi - 1)),
-      h('div', { class: 'sbd-preview' }, slot, h('div', { class: 'sbd-floor' }), gNum),
-      h('div', { class: 'sbd-ply sbd-card' }, gName, gDesc, gHorn, gStats),
+      h('div', { class: 'sbd-preview' }, slot, h('div', { class: 'sbd-floor' }), gNum, gHorn),
+      h('div', { class: 'sbd-ply sbd-card' }, gName, gDesc, gStats),
       btn('›', 'sbd-arrow', () => api.selectTruck(gi + 1))),
     h('div', { class: 'sbd-foot' }, gDots, makeWeather(true), btn('Pick this one', 'green', () => { cb('onSelectTruck', o.trucks[gi], gi); api.show('title'); })));
   // swipe in preview
