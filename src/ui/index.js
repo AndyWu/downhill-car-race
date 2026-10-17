@@ -120,13 +120,18 @@ export function createUI(root, opts = {}) {
   const slot = h('div', { class: 'sbd-slot' });
   const gNum = h('div', { class: 'sbd-num' });
   const gName = h('h3'), gDesc = h('p', { class: 'desc' }), gStats = h('div', { class: 'sbd-stats' }), gDots = h('div', { class: 'sbd-dots' });
+  // try the horn: every truck has its own
+  const HORN_NAMES = { 'barrel-bomber': 'bulb horn', 'pallet-pounder': 'two-tone truck horn', 'rust-bucket': 'awooga horn', 'wagon-wheel-willy': 'bicycle bell', 'bathtub-betty': 'duck call', 'door-dasher': 'kazoo', 'crate-comet': 'clown horn', 'tin-lizzie': 'steam whistle', 'ladder-larry': 'fire siren', 'sled-dog': 'sleigh bells' };
+  const gHornLbl = h('span', { class: 'lbl' });
+  const gHorn = h('button', { class: 'sbd-btn small sbd-tryhorn', 'aria-label': 'Try the horn' }, h('span', { class: 'ic', html: '<svg viewBox="0 0 64 40" width="1.6em" height="1em"><path d="M6 14h10l26-10v32L16 26H6z" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/><path d="M50 12q5 8 0 16" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/></svg>' }), gHornLbl);
+  gHorn.addEventListener('click', () => { gHorn.classList.add('hit'); setTimeout(() => gHorn.classList.remove('hit'), 200); cb('onTestHonk', o.trucks[gi], gi); });
   mk('garage', 'sbd-barn sbd-garage',
     h('div', { class: 'sbd-head' }, h('h2', { class: 'sbd-title sbd-chalk', style: 'color:var(--chalk)' }, 'The Garage'),
       btn('Back', 'small chalk', () => api.show('title'))),
     h('div', { class: 'sbd-garage-body' },
       btn('‹', 'sbd-arrow', () => api.selectTruck(gi - 1)),
       h('div', { class: 'sbd-preview' }, slot, h('div', { class: 'sbd-floor' }), gNum),
-      h('div', { class: 'sbd-ply sbd-card' }, gName, gDesc, gStats),
+      h('div', { class: 'sbd-ply sbd-card' }, gName, gDesc, gHorn, gStats),
       btn('›', 'sbd-arrow', () => api.selectTruck(gi + 1))),
     h('div', { class: 'sbd-foot' }, gDots, makeWeather(true), btn('Pick this one', 'green', () => { cb('onSelectTruck', o.trucks[gi], gi); api.show('title'); })));
   // swipe in preview
@@ -137,6 +142,7 @@ export function createUI(root, opts = {}) {
     const T = o.trucks; if (!T.length) { gName.textContent = 'No trucks'; return; }
     gi = (gi + T.length) % T.length; const t = T[gi];
     gName.textContent = t.name || t.id; gDesc.textContent = t.description || '';
+    gHornLbl.replaceChildren('Honk!', h('small', {}, HORN_NAMES[t.id] || 'horn'));
     gNum.textContent = String(gi + 1).padStart(2, '0');
     const ranges = statRanges(); gStats.replaceChildren();
     statDefs.forEach(([label, f], i) => {

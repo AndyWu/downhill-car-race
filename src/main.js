@@ -504,6 +504,7 @@ async function boot() {
       onFamilyPass: onFamilyPass,
       onFamilyPassAction: onFamilyPass,
       onHonk: () => { if (input && input.honk) input.honk(); },
+      onTestHonk: (t) => testHonk(t && t.id),
       onView: () => cycleView(),
       onPause: () => { if (game.state.role === 'solo') game.state.paused = true; },
       onResume: () => { game.state.paused = false; },
@@ -566,6 +567,14 @@ async function boot() {
     if (!cockpit || !cockpit.views) return;
     const vw = cockpit.views, i = vw.indexOf(cockpit.mode);
     setView(vw[(i + 1) % vw.length]);
+  }
+  // garage: try a truck's horn. The first tap also unlocks audio, which finishes asynchronously, so retry briefly.
+  function testHonk(id, tries = 0) {
+    if (!audio || !audio.honk || !id) return;
+    if (!audio.ready && audio.unlock) safe(() => audio.unlock(), 'audio.unlock');
+    const running = audio.ready && (!audio.context || audio.context.state === 'running');
+    if (running) safe(() => audio.honk(id, null), 'audio.honk');
+    else if (tries < 10) setTimeout(() => testHonk(id, tries + 1), 100);
   }
   function honkCar(v) {
     v.honkTick = true;
