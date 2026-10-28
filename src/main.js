@@ -299,6 +299,12 @@ async function boot() {
     const sOverride = o.s ?? null;
     if (sOverride != null && role !== 'client') vs.forEach((v, i) => teleportVehicle(v, sOverride - Math.floor(i / 2) * 5, (i % 2 ? 1 : -1) * (i === 0 ? 0 : 1.6), o.v ?? 10));
     if (ui && ui.show) safe(() => ui.show('race'), 'ui.show(race)');
+    if (ui && ui.setMapTrack && world && world.track) safe(() => {
+      const L = world.track.length, pts = [];
+      for (let s = 0; s <= L; s += 12) { const p = world.track.sampleAt(Math.min(s, L)).position; pts.push([p.x, p.z]); }
+      ui.setMapTrack(pts);
+    }, 'ui.setMapTrack');
+    mapTimer = 1;
     audioOnce('go0');
     for (const v of vs) { v.prevPos.copy(v.body.state.position); v.prevQuat.copy(v.body.state.quaternion); }
     readyFrames = 0;
@@ -723,7 +729,17 @@ async function boot() {
     }
     return place;
   }
+  // race map: every cart's position ~10x a second, coloured by its flag
+  var mapTimer = 0; // var: startRace may run (autostart) before this line is reached
+  const cssColor = (c) => (typeof c === 'number' ? '#' + c.toString(16).padStart(6, '0') : c || '#ddd');
+  function updateMap(dt) {
+    mapTimer += dt; if (mapTimer < 0.1) return; mapTimer = 0;
+    const m = game.state.mode;
+    if (!ui || !ui.setMapCars || (m !== 'race' && m !== 'finish')) return;
+    safe(() => ui.setMapCars(game.vehicles.map((v) => ({ x: v.group.position.x, z: v.group.position.z, color: cssColor(v.spec && (v.spec.flagColor ?? v.spec.color)), me: v === playerV }))), 'ui.setMapCars');
+  }
   function updateRank(dt) {
+    updateMap(dt);
     rankTimer += dt; if (rankTimer < 0.25) return; rankTimer = 0;
     const m = game.state.mode;
     if (ui && ui.setRank && (m === 'race' || m === 'finish')) safe(() => ui.setRank(livePlace(), game.vehicles.length), 'ui.setRank');

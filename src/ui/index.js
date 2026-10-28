@@ -203,7 +203,40 @@ export function createUI(root, opts = {}) {
   const viewLbl = h('span', { class: 'sbd-view-lbl' });
   viewBtn.appendChild(viewLbl);
   viewBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); cb('onView'); });
-  mk('race', '', glyphs, pegBtn, toast, rankEl, hornBtn, viewBtn);
+  // race map: the whole road from above, start at the top; a dot per cart (yours ringed). M key or tap to hide/show.
+  const mapCv = h('canvas', { class: 'sbd-map', 'aria-hidden': 'true' });
+  const map = { pts: null, minX: 0, maxX: 1, minZ: 0, maxZ: 1, cars: [], on: true };
+  try { map.on = localStorage.getItem('sbd-map') !== 'off'; } catch (e) {}
+  function mapToggle() { map.on = !map.on; try { localStorage.setItem('sbd-map', map.on ? 'on' : 'off'); } catch (e) {} drawMap(); }
+  mapCv.addEventListener('pointerdown', (e) => { e.preventDefault(); mapToggle(); });
+  window.addEventListener('keydown', (e) => { if ((e.key || '').toLowerCase() === 'm' && !e.repeat && current === 'race') mapToggle(); });
+  function drawMap() {
+    mapCv.classList.toggle('off', !map.on);
+    if (!map.pts) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cw = mapCv.clientWidth, ch = mapCv.clientHeight; if (!cw || !ch) return;
+    if (mapCv.width !== Math.round(cw * dpr) || mapCv.height !== Math.round(ch * dpr)) { mapCv.width = Math.round(cw * dpr); mapCv.height = Math.round(ch * dpr); }
+    const c = mapCv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, cw, ch);
+    if (!map.on) return;
+    const pad = 9, sx = (cw - 2 * pad) / Math.max(1, map.maxX - map.minX), sz = (ch - 2 * pad) / Math.max(1, map.maxZ - map.minZ), k = Math.min(sx, sz);
+    const ox = pad + ((cw - 2 * pad) - (map.maxX - map.minX) * k) / 2, oz = pad + ((ch - 2 * pad) - (map.maxZ - map.minZ) * k) / 2;
+    const X = (x) => ox + (x - map.minX) * k, Y = (z) => oz + (map.maxZ - z) * k;
+    c.lineJoin = c.lineCap = 'round';
+    c.beginPath(); map.pts.forEach(([x, z], i) => (i ? c.lineTo(X(x), Y(z)) : c.moveTo(X(x), Y(z))));
+    c.strokeStyle = 'rgba(30,20,10,.55)'; c.lineWidth = 6; c.stroke();
+    c.strokeStyle = 'rgba(245,232,205,.9)'; c.lineWidth = 2.5; c.stroke();
+    const [sx0, sz0] = map.pts[0], [fx, fz] = map.pts[map.pts.length - 1];
+    c.fillStyle = '#7fd36b'; c.fillRect(X(sx0) - 4, Y(sz0) - 2, 8, 4);
+    for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? '#111' : '#fff'; c.fillRect(X(fx) - 6 + i * 3, Y(fz) - 2, 3, 4); }
+    const cars = map.cars.slice().sort((a, b) => (a.me ? 1 : 0) - (b.me ? 1 : 0)); // draw yours last (on top)
+    for (const car of cars) {
+      const r = car.me ? 5 : 3.4;
+      c.beginPath(); c.arc(X(car.x), Y(car.z), r, 0, Math.PI * 2);
+      c.fillStyle = car.color || '#ddd'; c.fill();
+      c.lineWidth = car.me ? 2.2 : 1; c.strokeStyle = car.me ? '#fff' : 'rgba(0,0,0,.7)'; c.stroke();
+    }
+  }
+  mk('race', '', glyphs, pegBtn, toast, rankEl, hornBtn, viewBtn, mapCv);
   paintWx();
 
   const pauseScr = mk('pause', 'sbd-center', h('div', { class: 'sbd-ply sbd-pause' }, h('h2', {}, 'Paused'),
@@ -344,6 +377,15 @@ export function createUI(root, opts = {}) {
       viewLbl.textContent = names[name] || name; viewBtn.classList.add('show'); clearTimeout(viewBtn._t);
       viewBtn._t = setTimeout(() => viewBtn.classList.remove('show'), 1400);
     },
+    /** Race map. pts: [[x, z], ...] along the road (start first). Call once per race. */
+    setMapTrack(pts) {
+      map.pts = pts && pts.length > 1 ? pts : null; if (!map.pts) return;
+      map.minX = Math.min(...pts.map((p) => p[0])); map.maxX = Math.max(...pts.map((p) => p[0]));
+      map.minZ = Math.min(...pts.map((p) => p[1])); map.maxZ = Math.max(...pts.map((p) => p[1]));
+      drawMap();
+    },
+    /** cars: [{ x, z, color: css, me: bool }] — call ~10x a second. */
+    setMapCars(cars) { map.cars = cars || []; drawMap(); },
     setRank(place, total) {
       if (!place) { rankEl.classList.remove('on'); return; }
       rankEl.firstChild.textContent = String(place); rankEl.lastChild.textContent = `/${total || ''}`;
