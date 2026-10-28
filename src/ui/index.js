@@ -203,7 +203,7 @@ export function createUI(root, opts = {}) {
   const viewLbl = h('span', { class: 'sbd-view-lbl' });
   viewBtn.appendChild(viewLbl);
   viewBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); cb('onView'); });
-  // race map: the whole road from above, start at the top; a dot per cart (yours ringed). M key or tap to hide/show.
+  // race map: the whole road from above, start at the bottom and finish at the top; a dot per cart (yours ringed). M key or tap to hide/show.
   const mapCv = h('canvas', { class: 'sbd-map', 'aria-hidden': 'true' });
   const map = { pts: null, minX: 0, maxX: 1, minZ: 0, maxZ: 1, cars: [], on: true };
   try { map.on = localStorage.getItem('sbd-map') !== 'off'; } catch (e) {}
@@ -220,7 +220,7 @@ export function createUI(root, opts = {}) {
     if (!map.on) return;
     const pad = 9, sx = (cw - 2 * pad) / Math.max(1, map.maxX - map.minX), sz = (ch - 2 * pad) / Math.max(1, map.maxZ - map.minZ), k = Math.min(sx, sz);
     const ox = pad + ((cw - 2 * pad) - (map.maxX - map.minX) * k) / 2, oz = pad + ((ch - 2 * pad) - (map.maxZ - map.minZ) * k) / 2;
-    const X = (x) => ox + (x - map.minX) * k, Y = (z) => oz + (map.maxZ - z) * k;
+    const X = (x) => ox + (x - map.minX) * k, Y = (z) => oz + (z - map.minZ) * k; // downhill (-Z) points up the screen
     c.lineJoin = c.lineCap = 'round';
     c.beginPath(); map.pts.forEach(([x, z], i) => (i ? c.lineTo(X(x), Y(z)) : c.moveTo(X(x), Y(z))));
     c.strokeStyle = 'rgba(30,20,10,.55)'; c.lineWidth = 6; c.stroke();

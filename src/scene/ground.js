@@ -150,6 +150,12 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
   }
   const decals = [];
   const up = new THREE.Vector3(0, 1, 0);
+  // road height with hazard shaping (puddle dips, mud, stream cuts) removed: the surface water should never rise above
+  const _pq = {}, _zq = {};
+  const undipped = (x, z) => {
+    track.project2(x, z, _pq); field.query(_pq.s, _pq.d, _zq);
+    return terrain.heightAt(x, z) - _zq.lift + _zq.cut;
+  };
   for (const g of groups.values()) {
     const Pa = [], Na = [], UVa = [], Ca = [], Ia = [];
     const tri = (p, q2, r2) => {
@@ -170,7 +176,9 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
         for (let k = 0; k <= rings; k++) for (let j = 0; j < (k ? seg : 1); j++) {
           const an = k ? (j / seg) * Math.PI * 2 : 0, rr = (k / rings) * (k ? outline(an) : 0);
           const lx = Math.cos(an) * rr * rx, lz = Math.sin(an) * rr * rz;
-          Pa.push(cx + Tx * lx + pp.rhx * lz, level, cz + Tz * lx + pp.rhz * lz);
+          const vx = cx + Tx * lx + pp.rhx * lz, vz = cz + Tz * lx + pp.rhz * lz;
+          // water lies flat at its level but never hovers: on the downhill side of the slope it hugs the ground
+          Pa.push(vx, Math.min(level, undipped(vx, vz) + 0.025), vz);
           Na.push(0, 1, 0); UVa.push(lx, lz);
           const t = k / rings, alpha = t < 0.6 ? 1 : 1 - ((t - 0.6) / 0.4) ** 1.2, dk = 0.55 + 0.45 * t;
           Ca.push(dk, dk, dk, Math.max(0, alpha));
@@ -244,14 +252,15 @@ export function buildGround({ track, terrain, field, lib, parent, L, seed }) {
       if (!per.has(key)) per.set(key, { Pa: [], Na: [], UVa: [], Ca: [], Ia: [] });
       const g = per.get(key), Pa = g.Pa, base = Pa.length / 3, rings = 4, seg = 20;
       const cx = pp.px + pp.rhx * lat, cz = pp.pz + pp.rhz * lat, Tx = pp.rhz, Tz = -pp.rhx;
-      let level = -1e9;
-      for (const [ox, oz] of [[0, 0], [a, 0], [-a, 0], [0, b], [0, -b]]) level = Math.max(level, terrain.heightAt(cx + Tx * ox + pp.rhx * oz, cz + Tz * ox + pp.rhz * oz));
-      level += 0.02;
+      let level = 1e9;
+      for (const [ox, oz] of [[0, 0], [a * 0.5, 0], [-a * 0.5, 0], [0, b * 0.5], [0, -b * 0.5]]) level = Math.min(level, terrain.heightAt(cx + Tx * ox + pp.rhx * oz, cz + Tz * ox + pp.rhz * oz));
+      level += 0.03;
       const ph = rr() * 6;
       for (let k = 0; k <= rings; k++) for (let j = 0; j < (k ? seg : 1); j++) {
         const an = k ? (j / seg) * Math.PI * 2 : 0, o2 = 1 + 0.16 * Math.sin(an * 2 + ph) + 0.09 * Math.sin(an * 3 + ph * 2), r2 = (k / rings) * (k ? o2 : 0);
         const lx = Math.cos(an) * r2 * a, lz = Math.sin(an) * r2 * b;
-        Pa.push(cx + Tx * lx + pp.rhx * lz, level, cz + Tz * lx + pp.rhz * lz); g.Na.push(0, 1, 0); g.UVa.push(lx, lz);
+        const vx = cx + Tx * lx + pp.rhx * lz, vz = cz + Tz * lx + pp.rhz * lz;
+        Pa.push(vx, Math.min(level, undipped(vx, vz) + 0.02), vz); g.Na.push(0, 1, 0); g.UVa.push(lx, lz);
         const t = k / rings, al = t < 0.55 ? 1 : 1 - ((t - 0.55) / 0.45) ** 1.2, dk = 0.55 + 0.45 * t;
         g.Ca.push(dk, dk, dk, Math.max(0, al));
       }
