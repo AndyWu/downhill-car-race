@@ -51,9 +51,68 @@ const TEX = {
   field: () => makeTex(128, (u, v) => { const row = 0.7 + 0.3 * Math.sin(u * 6.2832 * 16); const n = fb(u, v, 6, 3, 131); const k = row * (0.8 + 0.4 * n); return [200 * k, 200 * k, 200 * k]; }),
   leaf: () => makeTex(128, (u, v) => { const n = fb(u, v, 10, 4, 141), s = tn(u, v, 40, 3); const c = mix([42, 78, 30], [92, 128, 52], n); const k = 0.8 + 0.4 * s; return [c[0] * k, c[1] * k, c[2] * k]; }),
   brick: () => makeTex(128, (u, v) => { const row = Math.floor(v * 12), o = (row % 2) * 0.5; const n = ihash(Math.floor(u * 6 + o), row, 151); const m = ((v * 12) % 1 < 0.1 || ((u * 6 + o) % 1) < 0.07) ? 1 : 0; return m ? [170, 165, 155] : mix([110, 50, 38], [150, 76, 54], n); }),
+
+  cobble: () => makeTex(256, (u, v) => {
+    const N = 8, row = Math.floor(v * N), o = (row % 2) * 0.5, cu = u * N + o, cell = Math.floor(cu);
+    const fu = cu - cell, fv = v * N - row;
+    const h = ihash(((cell % N) + N) % N, row, 301), edge = Math.min(fu, 1 - fu, fv, 1 - fv);
+    const m = edge < 0.09 ? 0.45 : 1;
+    const base = mix([104, 98, 90], [158, 150, 138], h), g = 0.88 + 0.2 * tn(u, v, 40, 303);
+    return [base[0] * m * g, base[1] * m * g, base[2] * m * g];
+  }),
+  asphalt: () => makeTex(256, (u, v) => { const n = fb(u, v, 6, 3, 311), sp = tn(u, v, 90, 313) > 0.82 ? 1.35 : 1; const c = mix([58, 58, 60], [88, 88, 90], n); return [c[0] * sp, c[1] * sp, c[2] * sp]; }),
+  asphaltLines: () => {
+    const W = 512, Hh = 256, data = new Uint8Array(W * Hh * 4);
+    for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
+      const u = x / W, v = y / Hh, n = fb(u, v, 6, 3, 311), sp = tn(u, v, 90, 313) > 0.82 ? 1.35 : 1;
+      let c = mix([58, 58, 60], [88, 88, 90], n); c = [c[0] * sp, c[1] * sp, c[2] * sp];
+      const edge = Math.abs(u - 0.154) < 0.008 || Math.abs(u - 0.846) < 0.008;
+      const dash = Math.abs(u - 0.5) < 0.006 && v < 0.5;
+      if (edge || dash) c = [226, 226, 218];
+      const i = (y * W + x) * 4; data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = 255;
+    }
+    const t = new THREE.DataTexture(data, W, Hh, THREE.RGBAFormat);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = 4; t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
+    return t;
+  },
+  plaster: () => makeTex(256, (u, v) => { const n = fb(u, v, 5, 4, 321), st = tn(u * 3 % 1, v, 12, 323); const c = mix([196, 186, 168], [226, 218, 200], n); const k = 0.9 + 0.12 * st; return [c[0] * k, c[1] * k, c[2] * k]; }),
+  brickwall: () => makeTex(256, (u, v) => {
+    const N = 10, row = Math.floor(v * N * 1.4), o = (row % 2) * 0.5, cu = u * 6 + o, cell = Math.floor(cu), fu = cu - cell, fv = v * N * 1.4 - row;
+    const h = ihash(((cell % 6) + 6) % 6, row % 14, 331), mortar = fu < 0.07 || fv < 0.12;
+    if (mortar) return [172, 166, 152];
+    const c = mix([120, 52, 38], [168, 84, 58], h), g = 0.9 + 0.2 * tn(u, v, 30, 333); return [c[0] * g, c[1] * g, c[2] * g];
+  }),
+  roofTile: () => makeTex(256, (u, v) => {
+    const row = Math.floor(v * 12), o = (row % 2) * 0.5, cu = u * 8 + o, cell = Math.floor(cu), fu = cu - cell, fv = v * 12 - row;
+    const h = ihash(((cell % 8) + 8) % 8, row % 12, 341), sh = 0.7 + 0.3 * smoothstepJS(0, 0.8, fv) * (1 - 0.25 * Math.abs(fu - 0.5));
+    const c = mix([132, 62, 40], [182, 96, 60], h); return [c[0] * sh, c[1] * sh, c[2] * sh];
+  }),
+  concrete: () => makeTex(128, (u, v) => { const n = fb(u, v, 6, 4, 351); const c = mix([128, 128, 124], [176, 174, 168], n); return c; }),
+  cornwall: () => makeTex(256, (u, v) => {
+    const st = tn(u * 2 % 1, v, 40, 361), leaf = fb(u, v, 12, 3, 363);
+    const c = mix([58, 92, 34], [150, 160, 64], clamp(0.35 + 0.5 * leaf + 0.25 * v, 0, 1)); const k = 0.75 + 0.35 * st; return [c[0] * k, c[1] * k, c[2] * k];
+  }),
+  cornCard: () => {
+    const S = 128, data = new Uint8Array(S * S * 4);
+    const disc = (cx, cy, r, col) => { for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(S - 1, Math.ceil(cy + r)); y++) for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(S - 1, Math.ceil(cx + r)); x++) if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r) { const i = (y * S + x) * 4; data[i] = col[0]; data[i + 1] = col[1]; data[i + 2] = col[2]; data[i + 3] = 255; } };
+    for (let y = 0; y < S; y++) disc(S / 2 + Math.sin(y * 0.05) * 1.5, y, 2.2, [96, 118, 46]);
+    for (let k = 0; k < 7; k++) for (const sg of [-1, 1]) {
+      const y0 = S * (0.88 - k * 0.11), len = S * (0.30 - k * 0.012);
+      for (let t = 0; t <= 1; t += 0.02) {
+        const x = S / 2 + sg * t * len, y = y0 - t * S * 0.16 + t * t * S * 0.26, r = 3.4 * (1 - t * 0.85) + 0.6;
+        disc(x, y, r, k % 2 ? [70, 112, 38] : [92, 134, 48]);
+      }
+    }
+    for (let t = 0; t < 14; t++) disc(S / 2 + (t % 2 ? 4 : -4) * (t / 14), 3 + t, 1.6, [196, 168, 72]);
+    const tt = new THREE.DataTexture(data, S, S, THREE.RGBAFormat);
+    tt.wrapS = tt.wrapT = THREE.ClampToEdgeWrapping; tt.magFilter = THREE.LinearFilter; tt.minFilter = THREE.LinearMipmapLinearFilter; tt.generateMipmaps = true; tt.flipY = false; tt.colorSpace = THREE.SRGBColorSpace; tt.needsUpdate = true;
+    return tt;
+  },
+  kerb: () => makeTex(64, (u, v) => (Math.floor(v * 4) % 2 ? [220, 220, 214] : [196, 36, 30])),
   checker: () => makeTex(64, (u, v) => ((Math.floor(u * 8) + Math.floor(v * 8)) % 2 ? [240, 240, 235] : [24, 24, 24])),
 };
 export function textureOf(name) { return (TEX[name] && (TEX[name].cache ||= TEX[name]())) || null; }
+const smoothstepJS = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 function tex(name, rep = 1) { const t = textureOf(name); return t; }
 
 const std = (o) => new THREE.MeshStandardMaterial(o);
@@ -75,6 +134,16 @@ const FALLBACK = {
   shingle: () => std({ map: tex('shingle'), roughness: 0.9, metalness: 0 }),
   field: () => std({ map: tex('field'), roughness: 1, metalness: 0 }),
   brick: () => std({ map: tex('brick'), roughness: 0.95, metalness: 0 }),
+  cobbles: () => std({ map: tex('cobble'), roughness: 0.9, metalness: 0 }),
+  asphalt: () => std({ map: tex('asphalt'), roughness: 0.82, metalness: 0 }),
+  asphaltLines: () => std({ map: tex('asphaltLines'), roughness: 0.8, metalness: 0 }),
+  plaster: () => std({ map: tex('plaster'), roughness: 0.95, metalness: 0 }),
+  brickwall: () => std({ map: tex('brickwall'), roughness: 0.95, metalness: 0 }),
+  roofTile: () => std({ map: tex('roofTile'), roughness: 0.85, metalness: 0 }),
+  concrete: () => std({ map: tex('concrete'), roughness: 0.92, metalness: 0 }),
+  cornwall: () => std({ map: tex('cornwall'), roughness: 0.95, metalness: 0, side: THREE.DoubleSide }),
+  cornCard: () => std({ map: tex('cornCard'), alphaTest: 0.5, roughness: 0.85, metalness: 0, side: THREE.DoubleSide }),
+  kerb: () => std({ map: tex('kerb'), roughness: 0.7, metalness: 0 }),
   glass: () => std({ color: 0x1c2428, roughness: 0.15, metalness: 0.3 }),
   dark: () => std({ color: 0xffffff, roughness: 0.7, metalness: 0.05 }),
   checker: () => std({ map: tex('checker'), roughness: 0.8, metalness: 0 }),
@@ -108,7 +177,7 @@ function applySway(m, wind, o) {
 const WX = {
   dirtRoad: { snow: 0.5, wet: 1 }, grass: { snow: 1, wet: 0.5 }, foliage: { snow: 0.6, wet: 0.3 }, blade: { snow: 0.55, wet: 0.2 },
   metalRusted: { snow: 0.9, wet: 0.5 }, woodWeathered: { snow: 0.35, wet: 0.6 }, rock: { snow: 0.5, wet: 0.6 }, straw: { snow: 0.5, wet: 0.3 },
-  barnPaint: { snow: 0.45, wet: 0.4 }, field: { snow: 1, wet: 0.3 }, gravel: { snow: 0.5, wet: 0.8 }, sand: { snow: 0.7, wet: 0.7 }, mud: { snow: 0.4, wet: 0.2 },
+  barnPaint: { snow: 0.45, wet: 0.4 }, cobbles: { snow: 0.55, wet: 1 }, asphalt: { snow: 0.5, wet: 1 }, asphaltLines: { snow: 0.5, wet: 1 }, plaster: { snow: 0.25, wet: 0.4 }, brickwall: { snow: 0.2, wet: 0.5 }, roofTile: { snow: 0.9, wet: 0.5 }, concrete: { snow: 0.4, wet: 0.5 }, cornwall: { snow: 0.6, wet: 0.3 }, cornCard: { snow: 0.6, wet: 0.3 }, field: { snow: 1, wet: 0.3 }, gravel: { snow: 0.5, wet: 0.8 }, sand: { snow: 0.7, wet: 0.7 }, mud: { snow: 0.4, wet: 0.2 },
 };
 function applyWeather(m, wx, o) {
   const prev = m.onBeforeCompile;

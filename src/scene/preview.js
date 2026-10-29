@@ -13,7 +13,7 @@ const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x6b5a3c, 1.1); scene.add(hemi)
 const sun = new THREE.DirectionalLight(0xfff0d0, 2.6); sun.position.set(-120, 160, 60); sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048); const sc = sun.shadow.camera; sc.left = -60; sc.right = 60; sc.top = 60; sc.bottom = -60; sc.far = 500;
 scene.add(sun); scene.add(sun.target);
-const world = await createWorld(scene, { seed: Number(q.get('seed') || 1) });
+const world = await createWorld(scene, { seed: Number(q.get('seed') || 1), trackId: q.get('track') || 'country' });
 window.__world = world; world.setWeather(q.get('weather') || 'clear');
 const cam = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 2500);
 const s = Number(q.get('s') || 500), d = Number(q.get('d') || 0), h = Number(q.get('h') || 1.6), look = Number(q.get('look') || 40), yaw = Number(q.get('yaw') || 0);

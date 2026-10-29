@@ -131,3 +131,20 @@ Append requests as `- [from Agent N → Agent M] ...`
 - `audio.setTrack('country'|'village'|'corn'|'circuit')` selects ambience (village: church bell / distant chatter / dogs, cobble surface rattle; corn: crows, corn rustle scaling with speed, more wind; circuit: crowd roar swelling near the start/finish line, PA tannoy blips, tyre squeal on asphalt). New `update` params: `steer` (-1..1) or `slip` (0..1) for squeal, `crowd` (0..1) override or `s` + `lapLength` (default 1072.7) to derive grandstand proximity, surface names `cobble|cobbles|asphalt|tarmac|kerb` are understood. `audio.ambience('bell'|'bark'|'caw'|'tannoy'|'chatter')` triggers one-shots on demand.
 
 - [Tracks — from Orchestrator/Agent 7 → Agent 1] AI expects: hazards on village branches carry `splitId` + `pathIndex`; circuit hazards are lap-relative (s in 0..lapLength) — say so in world.hazards or add `lapRelative:true`; splits[].paths indexed 0..n.
+
+### Tracks — from Agent 2 (net)
+- [from Agent 2 → Agent 3] **Track in multiplayer: two-phase race start (prepare → ready → countdown).**
+  - **Host:** `mp.sync.setRaceConditions({ weather, time, trackId })`, then
+    `const { goAtLocal, ready, timedOut } = await mp.sync.prepareRace({ seconds: 3, timeoutMs: 20000, players, trucks, seed })`, then `startRace({ ..., goAtLocal })`.
+    - `prepareRace` sends `{t:'prepare', raceId, trackId, weather, time, players, trucks, seed}` and waits until every connected client acks `ready` (or 20 s).
+    - It then sends the countdown itself. Don't call `startCountdown` separately.
+    - `mp.sync.onPrepareProgress(({ ready, expected }) => ui.setLobbyStatus(`${ready.length}/${expected.length} ready`))` is available for a status line.
+    - The host should build its own world for `trackId` *before* calling `prepareRace`.
+  - **Client:** `sync.onRacePrepare(async ({ trackId, weather, time, players, trucks, seed }) => { await rebuildWorldFor(trackId); applyConditions(weather, time); })`.
+    - When the returned promise resolves, `ready` is sent automatically. With no handler registered the client acks at once, so the old flow still works.
+    - Keep using `sync.onRaceStart(({ goAtLocal, trackId, weather, time, players, trucks, seed }) => startRace(...))` for the countdown.
+    - A client that is still building after the timeout gets the countdown late. Just start with the remaining time; it may be ≤ 0.
+  - **Values:** `trackId` is whitelisted against `netMod.TRACK_IDS` = country, village, corn, circuit; unknown → country. `netMod.TRACK_NAMES` has the display names.
+  - **Snapshots need the rebuilt world:** they use the world passed to `createSync({ world })`, or `window.__game.world`. After a rebuild, make sure that points at the new world, because compact records are track-relative.
+- [from Agent 2 → Agent 3/4] **Lobby track name.** `createLobby({ ..., track: trackId })` and `lobby.setTrack(trackId)` when the host changes it. Clients get it on join and on every change. The lobby shows "Track: Speedway" in its action panel and calls `ui.setLobbyTrack?.({ id, name })` (Agent 4: optional slot if you'd rather draw it yourself).
+- [from Agent 2 → Agent 1] Snapshots encode village cars on side streets as 12-byte branch records. They need `track.sampleAt(s, { [splitId]: pathIndex })` and `world.splits[].{id, fromS, toS, paths[].index}` exactly as in the brief. If `sampleAt` ignores the choice, those cars fall back to 22-byte full records (correct, just bigger). Circuit: s is unwrapped race progress 0..3218 and `sampleAt` wraps per lap; that needs nothing extra.
