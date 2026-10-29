@@ -31,12 +31,15 @@ const BASE = {
   },
   brake: { gain: 0.35, dead: 0.4, max: 1, tap: false },
   aggression: 0, carAvoid: 0, leaderEase: 0.3,
+  route: { time: 1 }, // village street choice weights: time, len (shortest), width (widest), risk (fewest hazards), random
+  patience: 0.5,     // 0..1 how long to sit behind a car on a lane too narrow to pass before honking/forcing
   draft: { range: 0, strength: 0, overtake: false },
 };
 
-const make = (o) => Object.freeze(merge(BASE, o));
+const make = (o) => { const r = merge(BASE, o); if (o.route) r.route = o.route; return Object.freeze(r); };
 
 export const Barnaby = make({
+  route: { random: true },
   id: 'barnaby', truckId: 'pallet-pounder', name: 'Barnaby', tier: 1, title: 'Rookie',
   description: 'Oversteers, weaves, misses rocks, forgets to paddle, brakes late.',
   reactionTime: 0.15, steerGain: 0.95, yawDamp: 0.15, steerNoise: 0.03, steerNoiseTau: 0.5, steerTau: 0.1,
@@ -51,6 +54,7 @@ export const Barnaby = make({
 });
 
 export const Clementine = make({
+  route: { width: 1, risk: 1, time: 0.2 },
   id: 'clementine', truckId: 'sled-dog', name: 'Clementine', tier: 2, title: 'Cautious',
   description: 'Long look-ahead, wide hazard margins, slow paddling, over-brakes every turn.',
   reactionTime: 0.15, steerGain: 0.9, steerNoise: 0.008, steerTau: 0.1,
@@ -61,10 +65,11 @@ export const Clementine = make({
   speed: { mu: 0.8, cornerFactor: 0.56, brakeDecel: 2.6, cap: 9.2, useSurface: true, streamV: 6 },
   paddle: { mode: 'slow', cadence: 2.3, strength: 0.85, jitter: 0.1 },
   brake: { gain: 0.5, dead: 0.2 },
-  carAvoid: 1, pass: true,
+  carAvoid: 1, pass: true, patience: 0.95,
 });
 
 export const Buster = make({
+  route: { len: 1 },
   id: 'buster', truckId: 'wagon-wheel-willy', name: 'Buster', tier: 3, title: 'Aggressive',
   description: 'Furious paddling, plows through mud and water, late lines, bumps rivals.',
   reactionTime: 0.1, steerGain: 1.4, yawDamp: 0.3, steerNoise: 0.03, steerTau: 0.07,
@@ -76,10 +81,11 @@ export const Buster = make({
   paddle: { mode: 'furious', cadence: 2.9, strength: 1.0, jitter: 0.04,
     stamina: { drain: 0.05, regen: 0.05, minFactor: 0.7 } },
   brake: { gain: 0.5, dead: 0.7 },
-  aggression: 0.8, pass: true, leaderEase: 0.4,
+  aggression: 0.8, pass: true, leaderEase: 0.4, patience: 0.05,
 });
 
 export const Maeve = make({
+  route: { time: 0.8, width: 0.4, risk: 0.5 },
   id: 'maeve', truckId: 'crate-comet', name: 'Maeve', tier: 4, title: 'Tactical',
   description: 'Pre-computed minimum-curvature racing line, avoids drag terrain, metronomic paddling.',
   reactionTime: 0.12, steerGain: 1.0, steerNoise: 0.005,
@@ -94,6 +100,7 @@ export const Maeve = make({
 });
 
 export const Ace = make({
+  route: { time: 1, risk: 0.3 },
   id: 'ace', truckId: 'door-dasher', name: 'Ace', tier: 5, title: 'Pro',
   description: 'Racing line + grip-limited speed profile, drafting, dry-dirt preference, optimal paddle timing.',
   reactionTime: 0.06, steerGain: 1.0, steerNoise: 0.003, steerTau: 0.06,
@@ -119,9 +126,10 @@ const blend = (lo, hi, t) => {
   }
   return t < 0.5 ? lo : hi; // strings / booleans: take the nearer neighbour
 };
-const between = (lo, hi, t, over) => Object.freeze(merge(blend({ ...lo }, { ...hi }, t), over));
+const between = (lo, hi, t, over) => { const r = merge(blend({ ...lo }, { ...hi }, t), over); if (over.route) r.route = over.route; return Object.freeze(r); };
 
 export const Tilly = between(Barnaby, Clementine, 0.5, {
+  route: { random: true },
   id: 'tilly', truckId: 'bathtub-betty', name: 'Tilly', tier: 1.5, skill: 0.18, title: 'Daydreamer',
   description: 'Drifts across the road, paddles in bursts, honks at nothing in particular.',
   steerNoise: 0.07, look: { min: 6 }, speed: { cap: 8.8 },
@@ -129,12 +137,14 @@ export const Tilly = between(Barnaby, Clementine, 0.5, {
   honk: { p: 0.25, gap: 14, idle: 0.02 },
 });
 export const Dot = between(Clementine, Buster, 0.5, {
+  route: { time: 0.5, width: 0.5 },
   id: 'dot', truckId: 'crate-comet', name: 'Dot', tier: 2.5, skill: 0.4, title: 'Steady Eddie',
   description: 'Even-tempered and tidy; brakes for corners but paddles with purpose.',
   speed: { cap: 9.6 }, paddle: { mode: 'rhythm', slopeMax: 0.08 }, carAvoid: 0.6, pass: true,
   honk: { p: 0.35, gap: 10, idle: 0 },
 });
 export const Rosco = between(Buster, Maeve, 0.5, {
+  route: { len: 1 },
   id: 'rosco', truckId: 'rust-bucket', name: 'Rosco', tier: 3.5, skill: 0.62, title: 'Bruiser',
   description: 'Hard-charging with decent lines; leans on rivals when passing.',
   speed: { cap: 11.2 }, aggression: 0.6, pass: true, carAvoid: 0.4,
@@ -142,6 +152,7 @@ export const Rosco = between(Buster, Maeve, 0.5, {
   honk: { p: 0.8, gap: 4, idle: 0 },
 });
 export const Vance = between(Maeve, Ace, 0.5, {
+  route: { time: 1, risk: 0.3 },
   id: 'vance', truckId: 'tin-lizzie', name: 'Vance', tier: 4.5, skill: 0.84, title: 'Slipstreamer',
   description: 'Lives in other cars slipstreams and picks the moment to slingshot.',
   speed: { cap: 12.3 }, draft: { range: 8, strength: 0.85, overtake: true }, pass: true,

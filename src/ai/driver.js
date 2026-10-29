@@ -22,7 +22,24 @@ export function forwardXZ(q) {
 export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, human, headlight } = {}) {
   const P = profile;
   rng = rng || createRng(1);
-  const plan = buildPlan(world, P, rng, spec);
+  // ---- village: pick a street through every split according to personality (progress-s plan, sampleAt(s, choice)) ----
+  let choice;
+  const splits = world.splits || [];
+  if (splits.length) {
+    choice = {};
+    const R = P.route || { time: 1 };
+    for (const sp of splits) {
+      if (R.random) { choice[sp.id] = Math.floor(rng() * sp.paths.length) % sp.paths.length; continue; }
+      let best = 0, bestScore = Infinity;
+      for (const pa of sp.paths) {
+        const m = buildPlan(world, P, () => 0, spec, { ...choice, [sp.id]: pa.index }).metrics(sp.fromS, sp.toS);
+        const score = (R.time || 0) * m.time + (R.len || 0) * (m.len / 10) + (R.width || 0) * Math.max(0, 6 - m.minW) * 6 + (R.risk || 0) * m.risk * 0.05;
+        if (score < bestScore - 1e-9) { bestScore = score; best = pa.index; }
+      }
+      choice[sp.id] = best;
+    }
+  }
+  const plan = buildPlan(world, P, rng, spec, choice);
   const WB = spec?.wheelBase ?? 1.7, LOCK = spec?.steerLock ?? 0.5;
   const L = plan.length;
 
@@ -47,6 +64,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     let ahead = null, aheadDs = Infinity, alongside = null;
     for (const o of others) {
       if (!o || o === self) continue;
+      if (o.splitId != null && o.splitId === self.splitId && o.pathIndex != null && self.pathIndex != null && o.pathIndex !== self.pathIndex) continue; // other street
       const dsO = o.s - s, dl = o.lateral - self.lateral;
       if (dsO === 0 && dl === 0) continue;
       if (dsO > 0.5 && dsO < aheadDs && Math.abs(dl) < 3) { ahead = o; aheadDs = dsO; }
@@ -91,7 +109,9 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (launch === null) { launch = { s0: s, off: clamp(self.lateral - plan.offsetAt(s), -3, 3) }; } // grid slot is rarely on the planned line
     const launchOff = launch.off * Math.max(0, 1 - (sT - launch.s0) / 90); // fade the grid offset into the plan over 90 m
     const [rxT, rzT] = plan.rightAt(sT);
-    const tx = plan.xAt(sT) + (extra + launchOff) * rxT, tz = plan.zAt(sT) + (extra + launchOff) * rzT;
+    const hwT = plan.widthAt(sT) / 2;
+    const offT = clamp(eT + extra + launchOff, -(hwT - 0.6), hwT - 0.6) - eT; // never aim outside the lane (narrow corn lanes)
+    const tx = plan.xAt(sT) + offT * rxT, tz = plan.zAt(sT) + offT * rzT;
     const dx = tx - px, dz = tz - pz;
     const xl = dx * fx + dz * fz, yl = -dx * fz + dz * fx;
     const dist = Math.max(1, Math.hypot(dx, dz));
@@ -126,6 +146,9 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       if (gapB < Infinity) easeK = clamp((gapB - 20) / 40, 0, 1) * P.leaderEase * rubberBand;
     }
     let vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (outBy > 0 ? 0.65 : 1);
+    if (plan.narrow && ahead && aheadDs < 7 && Math.abs(ahead.lateral - self.lateral) < 1.4 && P.aggression < 0.5) {
+      vt = Math.min(vt, (ahead.speed || 0) + 0.4 + (1 - (P.patience ?? 0.5)) * 1.6); // patient on a lane too narrow to pass
+    }
     vt *= 1 - 0.04 * easeK; // lift off a touch (and paddle less, below) when clear of the AI behind
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
@@ -211,7 +234,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const trig = passedNow || blockedT > 0.6;
     let honk = false;
     if (t >= honkReady) {
-      if (trig && (!trigPrev || t >= honkRoll)) { honkRoll = t + 3; if (rng() < H.p) honk = true; }
+      if (trig && (!trigPrev || t >= honkRoll)) { honkRoll = t + 3; if (rng() < Math.min(1, H.p * (plan.narrow ? 1.6 : 1))) honk = true; }
       else if (H.idle > 0 && rng() < H.idle * dt) honk = true;
       if (honk) honkReady = t + H.gap * (0.7 + 0.6 * rng());
     }
@@ -227,7 +250,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       reverse,
     };
   }
-  return { think, profile: P, plan, get recoveries() { return recoveries; },
+  return { think, profile: P, plan, get choice() { return choice; }, get recoveries() { return recoveries; },
     /** seconds continuously below 1.5 m/s (recovery manoeuvres didn't free the car). Host should call body.recover(~8) when needsRescue. */
     get stuckFor() { return stuckTotal; }, get needsRescue() { return stuckTotal > 3.5; },
     clearStuck() { stuckTotal = 0; stuckT = 0; consec = 0; } };

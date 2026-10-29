@@ -2,7 +2,8 @@
 import { chromium } from 'playwright';
 import { execSync, spawn } from 'node:child_process';
 const PORT = 4391, DIST = '/tmp/ai-game-dist';
-const trucks = (process.argv[2] || '0').split(',').map(Number); // player truck(s); AI i gets truck (T+1+i)%10 in main.js
+const trackArg = (process.argv.find((a) => a.startsWith('--track=')) || '--track=country').split('=')[1];
+const trucks = (process.argv.slice(2).find((a) => !a.startsWith('--')) || '0').split(',').map(Number); // player truck(s); AI i gets truck (T+1+i)%10 in main.js
 import fs from 'node:fs';
 // If main.js doesn't yet use profile.truckId, build a temporary patched copy (never touches src/main.js).
 let root = process.cwd();
@@ -24,7 +25,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 try {
   for (const truck of trucks) {
     const page = await browser.newPage();
-    await page.goto(`http://localhost:${PORT}/?autostart=1&truck=${truck}&ai=9&q=low`);
+    await page.goto(`http://localhost:${PORT}/?autostart=1&truck=${truck}&ai=9&q=low&track=${trackArg}`);
     await page.waitForFunction(() => window.__game && window.__game.state.mode === 'race', null, { timeout: 60000 });
     const out = await page.evaluate((full) => {
       const g = window.__game; const names = g.vehicles.map((v, i) => (i ? v.name || ('AI' + i) : 'You'));

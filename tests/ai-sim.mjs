@@ -4,11 +4,13 @@
 import * as THREE from 'three';
 import { AI_ROSTER, createAIDriver, createRng, forwardXZ } from '../src/ai/index.js';
 
+const TRACKARG = process.argv.find((a) => a.startsWith('--track='));
+const TRACK = TRACKARG ? TRACKARG.split('=')[1] : 'country';
 const worldCache = new Map();
 async function getWorld(seed) {
   if (!worldCache.has(seed)) {
     const { createWorld } = await import('../src/scene/index.js');
-    const w = await createWorld(new THREE.Scene(), { seed });
+    const w = await createWorld(new THREE.Scene(), { seed, trackId: TRACK });
     // Scene extends startTransform to slots 0..9 in parallel; stub the extra rows here if it is not there yet.
     const probe = w.startTransform(9), p5 = w.startTransform(5);
     if (probe.position.distanceTo(p5.position) < 0.01) {
@@ -30,7 +32,7 @@ async function getWorld(seed) {
   return worldCache.get(seed);
 }
 
-async function race(seed, { profiles = AI_ROSTER, maxT = 800, truck = null, rubberBand = Number(process.env.RB ?? 1), trace = false, snapAt = 90, player = true } = {}) {
+async function race(seed, { profiles = AI_ROSTER, maxT = 1100, truck = null, rubberBand = Number(process.env.RB ?? 1), trace = false, snapAt = 90, player = true } = {}) {
   const { createVehicleBody, collideBodies, draftFactor } = await import('../src/core/physics.js');
   const { TRUCKS } = await import('../src/vehicles/index.js');
   const world = await getWorld(1);
@@ -64,12 +66,14 @@ async function race(seed, { profiles = AI_ROSTER, maxT = 800, truck = null, rubb
       inp.draft = draftFactor(c.body, bodies);
       c.body.step(dt, inp);
       if (racing && c.finished == null) {
-        const st = c.body.state, w = world.track.sampleAt(Math.max(0, st.s)).width;
+        const st = c.body.state, w = world.track.sampleAt(Math.max(0, st.s), c.driver.choice).width;
         if (Math.abs(st.lateral) > w / 2) c.offroad += dt;
         for (const h of world.hazards) {
-          if (Math.abs(h.s - st.s) > 20 || !(h.type === 'mud' || h.type === 'water' || h.type === 'rock')) continue;
+          if (h.splitId != null && (c.driver.choice?.[h.splitId] ?? 0) !== h.pathIndex) continue;
+          const sh = world.flags?.closed && world.track.lapLength ? st.s % world.track.lapLength : st.s;
+          if (Math.abs(h.s - sh) > 20 || !(h.type === 'mud' || h.type === 'water' || h.type === 'rock')) continue;
           const ra = (h.halfLength ?? h.radius) + 0.4, rb = (h.halfWidth ?? h.radius) + 0.4;
-          const hit = ((h.s - st.s) / ra) ** 2 + ((h.lateral - st.lateral) / rb) ** 2 < 1;
+          const hit = ((h.s - sh) / ra) ** 2 + ((h.lateral - st.lateral) / rb) ** 2 < 1;
           if (hit && !c.inHaz.has(h)) { c.inHaz.add(h); c.hits[h.type]++; } else if (!hit) c.inHaz.delete(h);
         }
         if (st.s > 20 && st.speed < 1.5) { c.stall += dt; if (c.stall > c.maxStall) { c.maxStall = c.stall; c.stallS = st.s; } } else c.stall = 0;
@@ -88,7 +92,7 @@ async function race(seed, { profiles = AI_ROSTER, maxT = 800, truck = null, rubb
     if (trace && racing && Math.round((t - CD) / dt) % 1200 === 0) console.log(`t${(t - CD).toFixed(0)} ` + cars.map((c) => `${c.name.slice(0, 3)}:${c.body.state.s.toFixed(0)}`).join(' '));
     t += dt;
   }
-  return cars.map((c) => ({ name: c.name, skill: c.p.skill, truck: c.truck, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, snap: c.snap, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets, honks: c.honks, lead90, leadAll }));
+  return cars.map((c) => ({ choice: c.driver.choice, name: c.name, skill: c.p.skill, truck: c.truck, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, snap: c.snap, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets, honks: c.honks, lead90, leadAll }));
 }
 
 // ---------------- run ----------------
@@ -107,15 +111,16 @@ const rank = (a) => { const o = a.map((v, i) => [v, i]).sort((x, y) => x[0] - y[
 const spearman = (x, y) => { const rx = rank(x), ry = rank(y), n = x.length; let d = 0; for (let i = 0; i < n; i++) d += (rx[i] - ry[i]) ** 2; return 1 - (6 * d) / (n * (n * n - 1)); };
 for (const sd of seeds) {
   const res = await race(sd, { truck: TRUCK, trace: process.argv.includes('--trace') });
-  const times = res.map((r) => Math.min(r.time, 800));
+  const times = res.map((r) => Math.min(r.time, 1100));
   const rho = spearman(times.map((x) => -x), res.map((r) => r.skill)); // faster == higher skill
   rhos.push(rho); rhos90.push(spearman(res.map((r) => r.snap), res.map((r) => r.skill))); leads.push([res[0].lead90, res[0].leadAll]);
   const order = res.map((r, i) => i).sort((a, b) => times[a] - times[b]);
+  if (res[0].choice) console.log('   routes: ' + res.map((r) => r.name + JSON.stringify(r.choice)).join(' '));
   console.log(`seed ${sd} (rho ${rho.toFixed(2)}): ` + order.map((i) => `${res[i].name} ${res[i].time === Infinity ? 'DNF' : res[i].time.toFixed(0)}`).join(' < '));
   res.forEach((r, i) => { const a = agg[i]; if (r.time === Infinity) a.dnf++; a.time += times[i]; a.hits += r.hits.mud + r.hits.water + r.hits.rock; a.off += r.offroad; a.honks += r.honks; a.maxStall = Math.max(a.maxStall, r.maxStall); a.resets += r.resets; });
 }
 const n = seeds.length;
-console.log(`\nAverages over ${n} seeds (${((Date.now() - t0) / 1000).toFixed(0)} s wall):`);
+console.log(`\nTrack: ${TRACK}\nAverages over ${n} seeds (${((Date.now() - t0) / 1000).toFixed(0)} s wall):`);
 console.log('driver      skill  time   hazards  off-road  honks/race  maxStall  rescues');
 for (const a of agg) console.log(`${a.name.padEnd(10)} ${a.skill.toFixed(2).padStart(6)} ${(a.time / n).toFixed(1).padStart(6)} ${(a.hits / n).toFixed(1).padStart(8)} ${(a.off / n).toFixed(1).padStart(9)} ${(a.honks / n).toFixed(1).padStart(11)} ${a.maxStall.toFixed(1).padStart(9)} ${a.resets}`);
 const T = agg.map((a) => a.time / n);
@@ -126,11 +131,12 @@ console.log(`\nSpearman rho (skill vs finish) avg ${meanRho.toFixed(2)}  | slowe
 const fails = [];
 const ok = (c, m) => { if (!c) fails.push(m); };
 ok(forwardOk, 'forwardXZ disagrees with THREE');
-ok(meanRho >= 0.85, `mean Spearman ${meanRho.toFixed(2)} < 0.85`);
+const RHO_MIN = TRACK === 'country' ? 0.85 : 0.8, RATIO_MAX = TRACK === 'country' ? 1.45 : 1.5, STALL_MAX = TRACK === 'country' ? 7 : 6;
+ok(meanRho >= RHO_MIN, `mean Spearman ${meanRho.toFixed(2)} < ${RHO_MIN}`);
 ok(top3 + 5 < bot3, `top-3 (${top3.toFixed(0)}) not clearly faster than bottom-3 (${bot3.toFixed(0)})`);
-ok(Math.max(...T) / Math.min(...T) <= 1.45, 'worst/best ratio > 1.45');
+ok(Math.max(...T) / Math.min(...T) <= RATIO_MAX, `worst/best ratio > ${RATIO_MAX}`);
 ok(agg.every((a) => a.dnf === 0), 'all should finish');
-ok(agg.every((a) => a.maxStall <= 7), 'stall longer than 7 s');
+ok(agg.every((a) => a.maxStall <= STALL_MAX), `stall longer than ${STALL_MAX} s`);
 ok(agg.every((a) => a.honks > 0) || n < 3, 'some driver never honked');
 ok(agg[4].honks > agg[2].honks || agg[4].honks >= 0, '');
 ok(agg.find((a) => a.name === 'Buster').honks > agg.find((a) => a.name === 'Clementine').honks, 'Buster should honk more than Clementine');
