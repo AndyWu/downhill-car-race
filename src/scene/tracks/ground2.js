@@ -101,7 +101,9 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
         net.project2(x, z, q); q.road.params(q.idx, pq);
         const off = Math.max(0, Math.abs(q.d) - pq.hw); OFF[k] = off;
         const sink = (T.tileSink ?? 0.45) * (1 - smoothstep(1.0, 4.5, off));
-        P[k * 3] = x; P[k * 3 + 1] = terrain.heightAt(x, z) - sink; P[k * 3 + 2] = z;
+        let hy = terrain.heightAt(x, z) - sink;
+        if (T.tileNear) { const w = smoothstep(T.tileNear.reach - 3, T.tileNear.reach, off); hy = (pq.py - T.tileNear.drop) * (1 - w) + (terrain.heightAt(x, z) - sink) * w; }
+        P[k * 3] = x; P[k * 3 + 1] = hy; P[k * 3 + 2] = z;
         const nrm = terrain.normalAt(x, z, 2.2); Nn[k * 3] = nrm.x; Nn[k * 3 + 1] = nrm.y; Nn[k * 3 + 2] = nrm.z;
         UV[k * 2] = x / (T.terrUV || 6); UV[k * 2 + 1] = z / (T.terrUV || 6);
         T.terrColor(x, z, off, q.s, q.d, cnz, rnz, col); C[k * 3] = col[0]; C[k * 3 + 1] = col[1]; C[k * 3 + 2] = col[2];
@@ -125,7 +127,7 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
         const m = new THREE.Mesh(g, mat); m.receiveShadow = true; m.name = nm + '_' + tx + '_' + tz; parent.add(m); meshes.push(m);
       };
       mk(idxOut, grassMat, 'tile'); mk(idxIn, innerMat, 'tile_in');
-      chunks.push({ meshes, center: new THREE.Vector3(cx, terrain.gridBil(terrain.H, cx, cz), cz), radius: TS * 0.72, kind: 'ground' });
+      chunks.push({ meshes, center: new THREE.Vector3(cx, terrain.gridBil(terrain.H, cx, cz), cz), radius: TS * (T.tileRadius || 0.72), kind: 'ground' });
     }
   }
   // ---- branch roads ----

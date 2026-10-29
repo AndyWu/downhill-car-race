@@ -34,14 +34,14 @@ export function planCircuit(seed) {
   const verge = (road, s, d, hw) => {
     const ad = Math.abs(d), r = ad - (hw + 3.4);
     if (r < -0.4) return 0;
-    const wall = 1.4 * smoothstep(0, 0.55, r) * (1 - smoothstep(1.4, 5.0, r));
-    return wall;
+    const kap = Math.abs(road.tables.kap[Math.round(road.idxOf(s)) % road.TN]), lip = 1.5 + 1.0 * Math.min(1, kap / 0.01);
+    return lip * smoothstep(0, 0.55, r) * (1 - smoothstep(1.4, 5.0, r));
   };
   const terrainOpts = { hillAmp: 2.5, hillFar: 7, hillNear: 60, rutScale: 0, noiseScale: 0.15, crown: 0.05, sideSlope: 0.04, shoulderOut: 10, verge };
 
   const hash = (a) => { const x = Math.sin(a * 12.9898) * 43758.5453; return x - Math.floor(x); };
   const theme = {
-    roadMat: 'asphaltLines', rowStep: 2, terrRow: 6,
+    roadMat: 'asphaltLines', rowStep: 2, terrRow: 6, tileRadius: 0.55,
     roadUV: (road, s, d, hwe, o) => { o[0] = (d / hwe + 1) / 2; o[1] = s / 8; },
     roadColor: (road, s, d, p, rnz, o) => {
       const ad = Math.abs(d), n = 0.93 + 0.1 * (rnz.n2(s * 0.5, d * 0.7) * 0.5 + 0.5);
@@ -62,7 +62,7 @@ export function planCircuit(seed) {
     const ad = Math.abs(info.d), hw = info.hw;
     if (ad <= hw + 0.05) return { type: 'asphalt', friction: 1.0, drag: 0, bump: 0.02 };
     if (ad <= hw + 1.5) return { type: 'asphalt', friction: 0.85, drag: 0.02, bump: 0.1 };      // kerbs
-    if (ad < hw + 3.35) return { type: 'grass', friction: 0.6, drag: 0.55, bump: 0.3 };         // run-off
+    if (ad < hw + 3.35) return { type: 'grass', friction: 0.55, drag: 0.3, bump: 0.3 };         // run-off
     return { type: 'wall', friction: 0.3, drag: 1.4, bump: 0.5 };
   };
   const startPos = (slot) => ({ s: -(5.5 + 5.6 * (slot >> 1) + ((slot & 1) ? 2.4 : 0)), d: (slot & 1) ? 2.0 : -2.0 });
@@ -79,20 +79,14 @@ export function planCircuit(seed) {
     for (let c = 0; c * 120 < LAP; c++) {
       const s0 = c * 120, s1 = Math.min(LAP, s0 + 120), rows = Math.round((s1 - s0) / 3) + 1;
       const Pa = [], Na = [], Ua = [], Ca = [], Ia = [];
+      const rowPts = (s, sg) => { main.atS(s, pp); const out = []; for (const [dd, hh] of [[hw3(pp), 0], [hw3(pp), 1.4], [hw3(pp) + 0.35, 1.4]]) { const d = sg * dd, x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d; out.push([x, terrain.heightAt(x, z) + hh - (hh === 0 ? 0.3 : 0.05), z, hh]); } return out; };
       for (const sg of [-1, 1]) {
-        const base = Pa.length / 3;
-        for (let r = 0; r < rows; r++) {
-          const s = s0 + ((s1 - s0) * r) / (rows - 1);
-          main.atS(s, pp);
-          const paint = Math.floor(s / 9) % 3, col = paint === 0 ? [2.0, 0.4, 0.35] : paint === 1 ? [1.9, 1.9, 1.85] : [1.1, 1.1, 1.1];
-          for (const [dd, hh] of [[hw3(pp) , 0], [hw3(pp), 1.4], [hw3(pp) + 0.35, 1.4]]) {
-            const d = sg * dd, x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, yb = terrain.heightAt(x, z);
-            Pa.push(x, yb + hh - (hh === 0 ? 0.3 : 0.05), z); Na.push(0, 1, 0); Ua.push(s / 3, hh); Ca.push(...col);
-          }
-        }
-        for (let r = 0; r < rows - 1; r++) for (let q = 0; q < 2; q++) {
-          const a = base + r * 3 + q, b = a + 1, c2 = a + 3, d2 = c2 + 1;
-          Ia.push(a, c2, b, b, c2, d2);
+        for (let r = 0; r < rows - 1; r++) {
+          const sa = s0 + ((s1 - s0) * r) / (rows - 1), sb = s0 + ((s1 - s0) * (r + 1)) / (rows - 1);
+          const paint = Math.floor((sa + 0.01) / 9) % 3, col = paint === 0 ? [2.0, 0.4, 0.35] : paint === 1 ? [1.9, 1.9, 1.85] : [1.1, 1.1, 1.1];
+          const A = rowPts(sa, sg), B = rowPts(sb, sg), base = Pa.length / 3;
+          for (const row of [A, B]) for (const v of row) { Pa.push(v[0], v[1], v[2]); Na.push(0, 1, 0); Ua.push(sa / 3, v[3]); Ca.push(...col); }
+          for (let q = 0; q < 2; q++) { const a = base + q, b2 = a + 1, c2 = a + 3, d2 = c2 + 1; Ia.push(a, c2, b2, b2, c2, d2); }
         }
       }
       const g = new THREE.BufferGeometry();
@@ -109,7 +103,7 @@ export function planCircuit(seed) {
     const zones = [{ a: 300, b: 620, side: 'out' }, { a: 640, b: 780, side: 'both' }, { a: 880, b: 1060, side: 'out' }];
     zones.forEach((z, zi) => {
       const ms = [], cols = [];
-      for (let s = z.a; s < z.b; s += 0.62) {
+      for (let s = z.a; s < z.b; s += 1.0) {
         main.atS(s, pp);
         const sides = z.side === 'both' ? [-1, 1] : [pp.kap > 0 || (pp.kap === 0 && false) ? -1 : 1];
         const k = pp.kap;
@@ -123,7 +117,7 @@ export function planCircuit(seed) {
         }
       }
       if (!ms.length) return;
-      const geo = new THREE.CylinderGeometry(0.34, 0.34, 0.42, 7, 1); geo.rotateX(0);
+      const geo = new THREE.CylinderGeometry(0.34, 0.34, 0.42, 6, 1); geo.rotateX(0);
       const im = new THREE.InstancedMesh(geo, lib.get('dark', {}), ms.length);
       ms.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, cols[i]); });
       im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.castShadow = false; im.name = 'tyres_' + zi;
@@ -152,17 +146,17 @@ export function planCircuit(seed) {
         for (let t = 0; t < tiers; t++) {
           const q = P(sCenter, side * (hw + 6.3 + t * 1.5));
           const yaw = q.ry;
-          b.add('concrete', boxG(len, 0.9 + t * 0.9, 1.5, 2), xf(q.x, q.y + (0.9 + t * 0.9) / 2 + 1.2, q.z, 0, yaw, 0), [0.95, 0.95, 0.92]);
-          b.add('dark', boxG(len - 0.4, 0.12, 0.5, 1), xf(q.x - q.rhx * side * 0.2, q.y + 1.2 + 0.9 + t * 0.9 + 0.06, q.z - q.rhz * side * 0.2, 0, yaw, 0), t % 2 ? [0.85, 0.2, 0.15] : [0.2, 0.3, 0.7]);
+          b.add('concrete', boxG(len, 0.9 + t * 0.9, 1.5, 2), xf(q.x, q.y + (0.9 + t * 0.9) / 2, q.z, 0, yaw, 0), [0.95, 0.95, 0.92]);
+          b.add('dark', boxG(len - 0.4, 0.12, 0.5, 1), xf(q.x - q.rhx * side * 0.2, q.y + 0.9 + t * 0.9 + 0.06, q.z - q.rhz * side * 0.2, 0, yaw, 0), t % 2 ? [0.85, 0.2, 0.15] : [0.2, 0.3, 0.7]);
         }
         const top = P(sCenter, side * (hw + 6.3 + (tiers - 1) * 1.5 - 0.6));
-        b.add('metalRusted', boxG(len + 1, 0.25, tiers * 1.5 + 2.6, 2), xf(top.x, top.y + 1.2 + tiers * 0.9 + 3.4, top.z, 0, top.ry, 0), [0.95, 0.55, 0.45]);
-        for (const e of [-1, 1]) for (const dd of [hw + 6.0, hw + 6.3 + tiers * 1.5]) { const pq = P(sCenter + e * (len / 2 - 0.3), side * dd); b.add('metalRusted', boxG(0.25, tiers * 0.9 + 3.4, 0.25, 1), xf(pq.x, pq.y + 1.2 + (tiers * 0.9 + 3.4) / 2, pq.z, 0, pq.ry, 0), [0.8, 0.8, 0.85]); }
+        b.add('metalRusted', boxG(len + 1, 0.25, tiers * 1.5 + 2.6, 2), xf(top.x, top.y + tiers * 0.9 + 3.4, top.z, 0, top.ry, 0), [0.95, 0.55, 0.45]);
+        for (const e of [-1, 1]) for (const dd of [hw + 6.0, hw + 6.3 + tiers * 1.5]) { const pq = P(sCenter + e * (len / 2 - 0.3), side * dd); b.add('metalRusted', boxG(0.25, tiers * 0.9 + 3.4, 0.25, 1), xf(pq.x, pq.y + (tiers * 0.9 + 3.4) / 2, pq.z, 0, pq.ry, 0), [0.8, 0.8, 0.85]); }
         // crowd
-        for (let t = 0; t < tiers; t++) for (let i = 0; i < len / 1.15; i++) {
-          if (rnd() < 0.18) continue;
+        for (let t = 0; t < tiers; t++) for (let i = 0; i < len / 1.4; i++) {
+          if (rnd() < 0.42) continue;
           const sc = sCenter - len / 2 + 0.6 + i * 1.15 + (rnd() - 0.5) * 0.5, q = P(sc, side * (hw + 6.7 + t * 1.5 + 0.1));
-          figure(b, rnd, q.x, q.y + 1.2 + 0.9 + t * 0.9 + 0.0, q.z, q.ry - side * Math.PI / 2 + (rnd() - 0.5) * 0.5, 0.75 + rnd() * 0.25, true);
+          figure(b, rnd, q.x, q.y + 0.9 + t * 0.9, q.z, q.ry - side * Math.PI / 2 + (rnd() - 0.5) * 0.5, 0.75 + rnd() * 0.25, true);
         }
       };
       stand(-40, 60, -1, 5); stand(55, 70, -1, 6);

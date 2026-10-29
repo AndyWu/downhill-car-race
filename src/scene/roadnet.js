@@ -148,7 +148,7 @@ export function buildNetwork({ main, branches = [], length, lapLength }) {
       const c = gz * hcx + gx;
       for (let e = counts[c]; e < counts[c + 1]; e++) {
         const r = roads[entRoad[e]], i = entIdx[e], dx = r.tables.px[i] - x, dz = r.tables.pz[i] - z, dist = Math.sqrt(dx * dx + dz * dz);
-        const sc = dist - r.tables.width[i] * 0.5;           // distance outside the road surface
+        const hwS = r.tables.width[i] * 0.5, sc = dist < hwS ? dist - 100 : dist - hwS;   // inside a road surface: closest centreline wins; else nearest edge
         if (sc < bs - 1e-6 || (Math.abs(sc - bs) <= 1e-6 && dist < bdist)) { bs = sc; bdist = dist; best = i; bestRoad = entRoad[e]; }
       }
     };

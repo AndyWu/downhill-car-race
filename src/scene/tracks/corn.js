@@ -121,7 +121,7 @@ export function planCorn(seed) {
       g.setIndex(idx); g.computeBoundingSphere(); return g;
     })();
     const cardMat = lib.get('cornCard', { sway: { amp: 0.16, freq: 1.7, hpow: 1.4, hscale: 0.37 } });
-    const wallMat = lib.get('cornwall', { vertexColors: true });
+    const wallMat = lib.get('cornwall', { vertexColors: true, side: THREE.FrontSide });
     const q4 = new THREE.Quaternion(), e4 = new THREE.Euler();
     const CH = 100;
     for (let c = 0; c * CH < LEN + 40; c++) {
@@ -146,7 +146,7 @@ export function planCorn(seed) {
     // wall + canopy strips, 300 m each
     for (let c = 0; c * 300 < LEN + 40; c++) {
       const s0 = c * 300, s1 = Math.min(LEN + 40, s0 + 300), Pa = [], Na = [], Ua = [], Ca = [], Ia = [];
-      const cols = [5, 12, 22, 34], K = cols.length + 2, rows = Math.round((s1 - s0) / 4) + 1;
+      const cols = [5, 12, 22, 34, 48, 64], K = cols.length + 2, rows = Math.round((s1 - s0) / 4) + 1;
       for (const side of [-1, 1]) {
         const base = Pa.length / 3, rowOK = [];
         for (let r = 0; r < rows; r++) {
@@ -158,7 +158,7 @@ export function planCorn(seed) {
             Pa.push(x, y, z); Na.push(0, 1, 0); Ua.push(s / 3, k * 0.35); const sh = 0.8 + 0.3 * nz.n2(s / 7 + k, side * 3 + k * 5); Ca.push(0.9 * sh, 1.0 * sh, 0.75 * sh);
           });
         }
-        for (let r = 0; r < rows - 1; r++) { if (!rowOK[r] || !rowOK[r + 1]) continue; for (let k = 0; k < K - 1; k++) { const a = base + r * K + k, b = a + 1, d = a + K, e = d + 1; Ia.push(a, d, b, b, d, e); } }
+        for (let r = 0; r < rows - 1; r++) { if (!rowOK[r] || !rowOK[r + 1]) continue; for (let k = 0; k < K - 1; k++) { const a = base + r * K + k, b = a + 1, d = a + K, e = d + 1; Ia.push(a, d, b, b, d, e, a, b, d, b, e, d); } }
       }
       if (!Ia.length) continue;
       const g = new THREE.BufferGeometry();
@@ -178,7 +178,7 @@ export function planCorn(seed) {
       if (cl.kind === 'pumpkin') {
         const ms = [], cs = [], n = 190;
         for (let i = 0; i < n; i++) {
-          const s = cl.s0 + 4 + rnd() * (len - 8), d = hwOf(s) + 3 + rnd() * 20, p = cx(s, d), y = terrain.heightAt(p.x, p.z), r = 0.28 + Math.pow(rnd(), 2) * 0.4;
+          const s = cl.s0 + 4 + rnd() * (len - 8), d = hwOf(s) + 3 + rnd() * 20, p = cx(s, d), y = terrain.heightAt(p.x, p.z), r = 0.38 + Math.pow(rnd(), 2) * 0.45;
           e4.set(0, rnd() * 6.28, 0); q4.setFromEuler(e4);
           ms.push(new THREE.Matrix4().compose(new THREE.Vector3(p.x, y + r * 0.62, p.z), q4.clone(), new THREE.Vector3(r, r * 0.78, r)));
           const t = rnd(); cs.push(t < 0.12 ? new THREE.Color(0.9, 0.78, 0.15) : t < 0.2 ? new THREE.Color(0.55, 0.62, 0.25) : new THREE.Color(1.0, 0.42 + rnd() * 0.2, 0.08));
