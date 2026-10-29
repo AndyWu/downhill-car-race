@@ -92,3 +92,58 @@ export function followTrack(world, body, wobble = 0) {
   let he = st.yaw - Math.atan2(-smp.tangent.x, -smp.tangent.z); he = Math.atan2(Math.sin(he), Math.cos(he));
   return Math.max(-1, Math.min(1, -he * 3 + lat * 0.15 + wobble));
 }
+
+/** Closed 3-lap circuit: progress s in 0..3218 wraps every lapLength (1072.7 m) on a flat-ish loop. */
+export function createFakeCircuit() {
+  const lapLength = 1072.7, R = lapLength / (2 * Math.PI);
+  const heightAt = (x, z) => 0.4 * Math.sin(x / 40) + 0.3 * Math.cos(z / 55);
+  return {
+    trackId: 'circuit', flags: { closed: true, laps: 3 }, splits: [], heightAt,
+    track: {
+      length: 3218, lapLength,
+      sampleAt(s) {
+        const u = (((s % lapLength) + lapLength) % lapLength) / R;
+        const x = R * Math.sin(u), z = -R * (1 - Math.cos(u));
+        const t = v3(Math.cos(u), 0, -Math.sin(u)); // d/du normalised (travel direction)
+        return { position: v3(x, heightAt(x, z), z), tangent: t, right: v3(-t.z, 0, t.x), up: v3(0, 1, 0), width: 12, camber: 0 };
+      },
+    },
+  };
+}
+
+/** Village: the fake country road plus 2 splits where 2 side streets bulge 25-40 m away and rejoin. */
+export function createFakeVillage({ honourChoice = true } = {}) {
+  const base = createFakeWorld();
+  const splits = [
+    { id: 'market', fromS: 600, toS: 820, paths: [{ index: 0, name: 'Main Street' }, { index: 1, name: 'Market Square' }, { index: 2, name: 'Back Alley' }] },
+    { id: 'river', fromS: 1700, toS: 1950, paths: [{ index: 0, name: 'Main Street' }, { index: 1, name: 'Riverside Lane' }] },
+  ];
+  const OFF = { market: [0, 28, -40], river: [0, 35] };
+  return {
+    ...base, trackId: 'village', splits,
+    track: {
+      length: 3218, lapLength: 3218,
+      sampleAt(s, choice) {
+        const m = base.track.sampleAt(s);
+        const sp = honourChoice && choice ? splits.find((x) => s >= x.fromS && s <= x.toS && choice[x.id]) : null;
+        if (!sp) return m;
+        const off = OFF[sp.id][choice[sp.id]] || 0;
+        const L = sp.toS - sp.fromS, k = (s - sp.fromS) / L;
+        const bump = Math.sin(Math.PI * k) ** 2, dbump = (2 * Math.PI / L) * Math.sin(Math.PI * k) * Math.cos(Math.PI * k);
+        const x = m.position.x + m.right.x * off * bump, z = m.position.z + m.right.z * off * bump;
+        let tx = m.tangent.x + m.right.x * off * dbump, tz = m.tangent.z + m.right.z * off * dbump;
+        const tl = Math.hypot(tx, tz); tx /= tl; tz /= tl;
+        return { ...m, position: v3(x, base.heightAt(x, z), z), tangent: v3(tx, 0, tz), right: v3(-tz, 0, tx) };
+      },
+    },
+  };
+}
+
+/** Car on any of the fake tracks at progress s (optionally on a branch), heading along the road. */
+export function carOnTrack(world, id, s, { lateral = 0, choice, speed = 15 } = {}) {
+  const smp = world.track.sampleAt(s, choice);
+  const x = smp.position.x + smp.right.x * lateral, z = smp.position.z + smp.right.z * lateral;
+  const yaw = Math.atan2(-smp.tangent.x, -smp.tangent.z);
+  const q = quatFromEuler(yaw, 0.02, -0.01);
+  return [id, x, world.heightAt(x, z) + 0.45, z, ...q, smp.tangent.x * speed, 0, smp.tangent.z * speed, s, 0, -1, 1];
+}

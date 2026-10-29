@@ -119,6 +119,18 @@ async function main() {
   check(cRx.synced && cRx.rtt < 50, 'clock ping/pong synced');
   check(cRx.ctrl.some((m) => m.t === 'seed' && m.seed === 99) && hRx.ctrl.some((m) => m.t === 'truck'), 'reliable control channel both ways');
 
+  // ---------------- 2a. race-start handshake over the real ctrl channel ----------------
+  await client.evaluate(() => {
+    window.hs2 = { prepared: null, started: null };
+    cs.onRacePrepare(async (info) => { hs2.prepared = { trackId: info.trackId, at: performance.now() }; await new Promise((r) => setTimeout(r, 700)); hs2.builtAt = performance.now(); });
+    cs.onRaceStart((r) => { hs2.started = { trackId: r.trackId, weather: r.weather, at: performance.now(), goIn: r.goAtLocal - performance.now() }; });
+  });
+  const hsRes = await host.evaluate(async () => { hs.setRaceConditions({ weather: 'rain', time: 'dusk', trackId: 'corn' }); const t0 = performance.now(); const r = await hs.prepareRace({ timeoutMs: 5000 }); return { ...r, waited: performance.now() - t0 }; });
+  await client.waitForFunction(() => window.hs2.started, null, { timeout: 5000 });
+  const hs2 = await client.evaluate(() => window.hs2);
+  check(hsRes.ready.length === 1 && hsRes.timedOut.length === 0 && hsRes.waited >= 700 && hs2.prepared.trackId === 'corn' && hs2.started.trackId === 'corn' && hs2.started.weather === 'rain' && hs2.started.at >= hs2.builtAt,
+    `prepare → client rebuilt (700 ms) → ready → countdown: host waited ${hsRes.waited.toFixed(0)} ms, client got track ${hs2.started.trackId}/${hs2.started.weather}, GO in ${hs2.started.goIn.toFixed(0)} ms`);
+
   // ---------------- 2b. Lossy, jittery link: interpolation + prediction smoothness ----------------
   for (const [loss, jMin, jMax] of [[0.05, 20, 80], [0.15, 20, 80]]) {
     console.log(`2b) ${Math.round(loss * 100)}% loss, ${jMin}-${jMax} ms jitter on the fast channel (8 s, 10 cars, v4 track-relative snapshots, prediction on)`);
@@ -229,7 +241,7 @@ async function main() {
   await host.evaluate(() => {
     window.gumCalls = 0;
     if (navigator.mediaDevices) { const orig = navigator.mediaDevices.getUserMedia?.bind(navigator.mediaDevices); navigator.mediaDevices.getUserMedia = (c) => { window.gumCalls++; return orig ? orig(c) : Promise.reject(new Error('none')); }; }
-    window.lobby = net.createLobby({ role: 'host', name: 'Dad' }); // camera enabled: must stay off until asked
+    window.lobby = net.createLobby({ role: 'host', name: 'Dad', track: 'circuit' }); // camera enabled: must stay off until asked
     window.peerLog = []; lobby.onPeer((p) => { window.peerLog.push('open ' + p.id); p.on('state', (st) => window.peerLog.push(p.id + ':' + st + ':' + p.pc.connectionState)); });
     window.lobbyReady = null;
     lobby.onReady((info) => { window.lobbyReady = { n: info.peers.length, players: info.players, lineup: info.lineup }; });
@@ -290,6 +302,11 @@ async function main() {
   }
   await host.waitForFunction(() => lobby.peers.size === 2 && lobby.state.peers.filter((p) => p.name.startsWith('Kid')).length === 2, null, { timeout: 10000 });
   if (process.env.NET_SHOT) await host.screenshot({ path: process.env.NET_SHOT }).catch(() => {});
+  const tr1 = await client.evaluate(() => lobby.state.track);
+  await host.evaluate(() => lobby.setTrack('village'));
+  const tr2 = await client.waitForFunction(() => lobby.state.track.id === 'village' && lobby.state.track, null, { timeout: 5000 }).then((h) => h.jsonValue()).catch(() => null);
+  const shown = await client.evaluate(() => document.querySelector('.sbd-net-actions .note.track')?.textContent || document.querySelector('.track')?.textContent || '');
+  check(tr1.name === 'Speedway' && tr2?.name === 'Hill Village', `client lobby shows the host's track: "${tr1.name}" → "${tr2?.name}" after setTrack (on screen: "${shown}")`);
   const seats = await host.evaluate(() => lobby.state.seatList.map((p) => `${p.slot}:${p.kind}:${p.name}`));
   check(seats.length === 10 && seats.filter((x) => x.includes(':ai:')).length === 7 && seats.some((x) => /Tilly|Rosco|Vance|Dot/.test(x)), `lobby shows 10 seats, 3 humans + 7 AI from AI_ROSTER: ${seats.join(', ')}`);
   await host.evaluate(() => lobby.startRace());

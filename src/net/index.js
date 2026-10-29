@@ -6,8 +6,8 @@
 //   licensing = { init(), provisionSeat(name), seats(), verify(), … }
 
 export { registerServiceWorker, injectPWAHead, isStandalone, applyUpdate, offlineReady, onOfflineReady, getOfflineStatus } from './pwa.js';
-export { createLobby, seatList, RACE_SEATS, MAX_HUMANS } from './lobby.js';
-export { createSync, normalizeConditions, WEATHERS, TIMES_OF_DAY } from './sync.js';
+export { createLobby, seatList, trackInfo, RACE_SEATS, MAX_HUMANS } from './lobby.js';
+export { createSync, normalizeConditions, WEATHERS, TIMES_OF_DAY, TRACK_IDS, TRACK_NAMES } from './sync.js';
 export { createInterpolator } from './interpolator.js';
 export { createPredictor } from './predictor.js';
 export { licensing, MAX_SEATS } from './licensing.js';

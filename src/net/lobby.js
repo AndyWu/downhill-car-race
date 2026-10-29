@@ -21,6 +21,7 @@ import { unpackSdp } from './sdpPack.js';
 import { createScanner } from './qr.js';
 import { LOBBY_COPY, computeSteps } from './lobbyCopy.js';
 import { createLobbyView } from './lobbyView.js';
+import { normalizeConditions, TRACK_NAMES } from './sync.js';
 import { isAgent4UI, createUiAdapter } from './lobbyUiAdapter.js';
 
 const CONNECT_TIMEOUT_MS = 20000;
@@ -41,7 +42,14 @@ export function seatList(humans, { seats = RACE_SEATS, aiNames = FALLBACK_AI_NAM
   return list;
 }
 
-export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Player', camera = true, root, slowMs = CLIENT_SLOW_MS, seats = RACE_SEATS, aiNames } = {}) {
+/** {id, name} for a track id / {id, name} / undefined (→ country). */
+export function trackInfo(t) {
+  const id = normalizeConditions({ trackId: typeof t === 'object' && t ? t.id : t }).trackId;
+  const name = (typeof t === 'object' && t && t.name) || TRACK_NAMES[id];
+  return { id, name };
+}
+
+export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Player', camera = true, root, slowMs = CLIENT_SLOW_MS, seats = RACE_SEATS, aiNames, track } = {}) {
   maxPeers = Math.min(maxPeers, MAX_HUMANS - 1);
   const isHost = role === 'host';
   const tag = isHost ? (crypto.getRandomValues(new Uint16Array(1))[0]) : null;
@@ -63,6 +71,7 @@ export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Playe
     radioConfirmed: false, scanning: false, cameraOn: false, slow: false,
     peers: [], steps: [], copy: LOBBY_COPY,
     seats, aiNames: aiNames || FALLBACK_AI_NAMES, seatList: [],
+    track: trackInfo(track),
   };
 
   const actions = {
@@ -161,7 +170,7 @@ export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Playe
     peer.opened.then(() => {
       clearTimeout(to);
       peers.set(peer.id, peer);
-      peer.sendCtrl({ t: 'welcome', slot: peer.id, tag });
+      peer.sendCtrl({ t: 'welcome', slot: peer.id, tag, trackId: state.track.id, trackName: state.track.name });
       peerCbs.forEach((cb) => cb(peer));
       render();
     }).catch(() => {
@@ -223,6 +232,9 @@ export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Playe
     clearTimeout(slowTimer);
     slowTimer = setTimeout(() => { if (my === attempt && state.phase === 'showAnswer') { state.slow = true; render(); } }, slowMs);
     peer.on('state', render);
+    peer.on('ctrl', (m) => { // host tells us which track is chosen (and when it changes)
+      if (m && (m.t === 'welcome' || m.t === 'lobby-track') && m.trackId) { state.track = trackInfo({ id: m.trackId, name: m.trackName }); render(); }
+    });
     try { await peer.opened; } catch {
       if (my !== attempt || closed) return;
       clearTimeout(slowTimer);
@@ -268,8 +280,16 @@ export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Playe
     adapter?.render({ ...state, phase: 'closed' }, actions);
   }
 
+  /** Host: choose the track (id from TRACK_IDS, optional display name); shown in every lobby. */
+  function setTrack(t, name) {
+    state.track = trackInfo(typeof t === 'object' ? t : { id: t, name });
+    if (isHost) peers.forEach((p) => p.sendCtrl({ t: 'lobby-track', trackId: state.track.id, trackName: state.track.name }));
+    render();
+    return state.track;
+  }
+
   return {
-    role, tag, peers, state, actions,
+    role, tag, peers, state, actions, setTrack,
     start, begin: confirmRadio, confirmRadio, submitCode, startRace, retry, refreshOffer, scanAnswer, scanOffer, stopScan,
     onPeer(cb) { peerCbs.add(cb); return () => peerCbs.delete(cb); },
     onReady(cb) { readyCbs.add(cb); return () => readyCbs.delete(cb); },
