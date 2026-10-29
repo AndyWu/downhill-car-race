@@ -317,7 +317,7 @@ async function boot() {
       }
     }
     chaseT = null; lastRespawns = 0;
-    cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam });
+    cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam, heightAt: () => (world && world.heightAt ? world.heightAt.bind(world) : null) });
     setView(params.get('cam') || savedView());
     const cd = o.countdown ?? 3;
     Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });

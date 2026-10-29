@@ -4,7 +4,7 @@ import * as THREE from 'three';
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const _eye = new THREE.Vector3(), _gq = new THREE.Quaternion(), _off = new THREE.Vector3(), _e = new THREE.Euler(), _lq = new THREE.Quaternion();
 
-export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit' } = {}) {
+export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit', heightAt = null } = {}) {
   const base = {};
   for (const k of ['steeringWheel', 'paddleL', 'paddleR', 'handbrakeLever', 'gearLever']) {
     if (parts && parts[k]) base[k] = parts[k].rotation.clone();
@@ -71,9 +71,9 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
     side:  { back: 1.2, up: 1.1, side: 4.2, aheadLook: 1.5, lookUp: 0.5, stiff: 5 },
   };
   // chase target: the player's group by default; main may point it at the pack leader while the player sits still
-  let chaseTarget = group;
+  let chaseTarget = group, sideFlip = false;
   const _cf = new THREE.Vector3(), _cr = new THREE.Vector3(), _cw = new THREE.Vector3(), _lookP = new THREE.Vector3();
-  const _lookS = new THREE.Vector3(), lookInit = { v: false };
+  const _o = new THREE.Vector3(), _alt = new THREE.Vector3(), _lookS = new THREE.Vector3(), lookInit = { v: false };
   function outside(dt, state) {
     const V = VIEWS[camMode] || VIEWS.chase;
     const tg = chaseTarget || group;
@@ -83,6 +83,31 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
     _cr.set(-_cf.z, 0, _cf.x); // right of travel
     _cw.copy(tg.position).addScaledVector(_cf, -V.back).addScaledVector(_cr, V.side); _cw.y += V.up;
     _lookP.copy(tg.position).addScaledVector(_cf, V.aheadLook); _lookP.y += V.lookUp;
+    // occlusion: walls / houses are heightfield bumps. March from the cart to the wanted camera spot; if terrain rises above the
+    // line, pull the camera in to the last clear point, then keep it above the ground (smoothed by the follow below)
+    const hf = typeof heightAt === 'function' ? heightAt() : heightAt;
+    if (hf && camMode !== 'hood') {
+      _o.copy(tg.position); _o.y += 0.9;
+      const clearT = (c) => {
+        for (let i = 1; i <= 16; i++) {
+          const t = i / 16, h = hf(_o.x + (c.x - _o.x) * t, _o.z + (c.z - _o.z) * t);
+          if (Number.isFinite(h) && _o.y + (c.y - _o.y) * t < h + 0.55) return (i - 1) / 16;
+        }
+        return 1;
+      };
+      let tClear = clearT(_cw);
+      if (V.side) {   // side view blocked by a wall: try the other side of the cart (sticky, flips only when clearly better)
+        _alt.copy(tg.position).addScaledVector(_cf, -V.back).addScaledVector(_cr, -V.side); _alt.y += V.up;
+        const tAlt = clearT(_alt);
+        if (!sideFlip ? tAlt > tClear + 0.3 : tClear > tAlt + 0.3) sideFlip = !sideFlip;
+        if (sideFlip) { _cw.copy(_alt); tClear = tAlt; }
+      }
+      if (V.side && tClear < 0.5) {   // boxed in on both sides (narrow street): fall back to a chase-style spot behind the cart
+        _cw.copy(tg.position).addScaledVector(_cf, -5.2); _cw.y += 2.3; tClear = clearT(_cw);
+      }
+      if (tClear < 1) { const t = Math.max(0.05, tClear); _cw.set(_o.x + (_cw.x - _o.x) * t, _o.y + (_cw.y - _o.y) * t, _o.z + (_cw.z - _o.z) * t); }
+      const hc = hf(_cw.x, _cw.z); if (Number.isFinite(hc) && _cw.y < hc + 0.6) _cw.y = hc + 0.6;
+    }
     if (!chaseInit.v) { chasePos.copy(_cw); _lookS.copy(_lookP); chaseInit.v = true; }
     // exponential follow; a big jump (teleport / target switch / long advance() step) snaps instead of crawling
     if (chasePos.distanceToSquared(_cw) > 400 || dt >= 0.09) { chasePos.copy(_cw); _lookS.copy(_lookP); }
