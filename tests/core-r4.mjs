@@ -120,7 +120,7 @@ for (let run = 1; run <= 3; run++) {
   const { W, H } = await p.evaluate(() => ({ W: innerWidth, H: innerHeight }));
   const decel = (dbg) => p.evaluate((dbg) => { const g = window.__game; g.setDebugInput(dbg); g.teleport(430, 11.5); g.advance(0.3); const v0 = g.state.speed; g.advance(1.5); const r = { d: (v0 - g.state.speed) / 1.5, hb: g.input.read(1 / 60).handbrake }; g.setDebugInput(null); return r; }, dbg);
   const dbg = await decel({ handbrake: 1 });
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 60, y: Math.round(0.62 * H), id: 7 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 60, y: Math.round(0.76 * H), id: 7 }] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 60, y: Math.round(0.95 * H), id: 7 }] });
   const touch = await decel(null);
   console.log('debug', JSON.stringify(dbg), 'touch', JSON.stringify(touch));

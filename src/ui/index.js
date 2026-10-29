@@ -236,7 +236,12 @@ export function createUI(root, opts = {}) {
       c.lineWidth = car.me ? 2.2 : 1; c.strokeStyle = car.me ? '#fff' : 'rgba(0,0,0,.7)'; c.stroke();
     }
   }
-  mk('race', '', glyphs, pegBtn, toast, rankEl, hornBtn, viewBtn, mapCv);
+  // touch paddle boxes (touch devices only): translucent, always shown during the race, flash on each stroke
+  const padBox = (side) => h('div', { class: 'sbd-padbox ' + side, html: '<svg viewBox="0 0 24 40" width="1.3em" height="2.2em"><path d="M12 3v34M5 10l7-7 7 7M5 30l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Paddle</span>' });
+  const padL = padBox('l'), padR = padBox('r');
+  const isTouchDev = typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0);
+  if (!isTouchDev) { padL.style.display = padR.style.display = 'none'; }
+  mk('race', '', glyphs, pegBtn, toast, rankEl, hornBtn, viewBtn, mapCv, padL, padR);
   paintWx();
 
   const pauseScr = mk('pause', 'sbd-center', h('div', { class: 'sbd-ply sbd-pause' }, h('h2', {}, 'Paused'),
@@ -376,6 +381,14 @@ export function createUI(root, opts = {}) {
       const names = { cockpit: 'Cockpit', hood: 'Hood', chase: 'Chase', far: 'Far', side: 'Side' };
       viewLbl.textContent = names[name] || name; viewBtn.classList.add('show'); clearTimeout(viewBtn._t);
       viewBtn._t = setTimeout(() => viewBtn.classList.remove('show'), 1400);
+    },
+    /** Position the paddle boxes from the input zones ({paddleL:{x0,x1,y0,y1}, paddleR:...}, viewport fractions). */
+    setTouchZones(Z) {
+      for (const [el, z] of [[padL, Z && Z.paddleL], [padR, Z && Z.paddleR]]) if (z) Object.assign(el.style, { left: z.x0 * 100 + '%', width: (z.x1 - z.x0) * 100 + '%', top: z.y0 * 100 + '%', height: (z.y1 - z.y0) * 100 + '%' });
+    },
+    /** Brief highlight of a paddle box when a stroke registers ('L' | 'R'). */
+    flashPaddle(side) {
+      const el = side === 'L' ? padL : padR; el.classList.add('hit'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('hit'), 140);
     },
     /** Race map. pts: [[x, z], ...] along the road (start first). Call once per race. */
     setMapTrack(pts) {

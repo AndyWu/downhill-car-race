@@ -2,7 +2,7 @@
 // Real modules are used end to end; fallbacks only kick in when a module genuinely fails.
 import * as THREE from 'three';
 import { createVehicleBody, collideBodies, placeOnGround, draftFactor } from './core/physics.js';
-import { createInput } from './core/input.js';
+import { createInput, ZONES } from './core/input.js';
 import { createFlag } from './core/flag.js';
 import { createCockpitCamera } from './core/camera.js';
 import { FALLBACK_TRUCKS, createFallbackWorld, buildFallbackTruck } from './core/fallback.js';
@@ -527,6 +527,7 @@ async function boot() {
       },
     }), 'createUI');
     game.ui = ui;
+    if (ui && ui.setTouchZones) safe(() => ui.setTouchZones(ZONES), 'ui.setTouchZones');
     if (ui && ui.setAINames) safe(() => ui.setAINames(ROSTER), 'setAINames');
     if (ui && ui.setWeather && (P.weather || P.timeUrl)) safe(() => ui.setWeather({ weather: normWx(P.weather || (ui.getWeather() || {}).weather), time: P.timeUrl ? P.time : (ui.getWeather() || {}).time }), 'ui.setWeather');
     if (ui && game.state.offlineReady && ui.setOfflineReady) ui.setOfflineReady(true);
@@ -608,6 +609,7 @@ async function boot() {
       if (inp.honk) honkCar(playerV);
       if (inp.view) cycleView();
       frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
+      if (ui && ui.flashPaddle) { if (inp.paddleL > 0) ui.flashPaddle('L'); if (inp.paddleR > 0) ui.flashPaddle('R'); }
       playerV.lastInp = inp;
       inp.draft = 0;
       const seq = netSeq++;
@@ -629,6 +631,7 @@ async function boot() {
         if (inp.honk) honkCar(v);
         if (inp.view) cycleView();
         frameImpulse.l = Math.max(frameImpulse.l, inp.paddleL); frameImpulse.r = Math.max(frameImpulse.r, inp.paddleR);
+        if (ui && ui.flashPaddle) { if (inp.paddleL > 0) ui.flashPaddle('L'); if (inp.paddleR > 0) ui.flashPaddle('R'); }
       } else if (v.kind === 'remote') {
         inp = remoteInput(v.slot);
         if (cd > 0) inp = { ...idle, steer: inp.steer, handbrake: 1 };

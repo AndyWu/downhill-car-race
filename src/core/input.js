@@ -1,10 +1,14 @@
 // Input: wheel-like device-tilt steering, split-screen swipe paddles, thumb zones, keyboard fallback.
 // Zone layout (fractions of viewport), exported so UI can draw glyphs:
+// Paddling only counts for swipes that START inside a paddle box; the handbrake / gear / headlight sit in the bottom
+// corners with a clear gap below the boxes, so a hurried paddle swipe on a small phone can't grab a lever by mistake.
 export const ZONES = {
-  handbrake: { x0: 0, x1: 0.26, y0: 0.58, y1: 1 },   // lower-left: press & drag down
-  headlight: { x0: 0.66, x1: 0.80, y0: 0.58, y1: 1 }, // lower-right: tap
-  honk: { x0: 0.42, x1: 0.58, y0: 0, y1: 0.16 },      // top-centre: tap = horn
-  gear: { x0: 0.80, x1: 1, y0: 0.50, y1: 1 },        // lower-right corner: drag up = forward, down = reverse
+  paddleL: { x0: 0.03, x1: 0.33, y0: 0.17, y1: 0.64 }, // left paddle box: swipe up/down
+  paddleR: { x0: 0.56, x1: 0.85, y0: 0.17, y1: 0.64 }, // right paddle box (left of the race map)
+  handbrake: { x0: 0, x1: 0.22, y0: 0.74, y1: 1 },     // bottom-left corner: press & drag down
+  headlight: { x0: 0.60, x1: 0.76, y0: 0.80, y1: 1 },  // bottom-right: tap
+  honk: { x0: 0.42, x1: 0.58, y0: 0, y1: 0.16 },       // top-centre: tap = horn
+  gear: { x0: 0.80, x1: 1, y0: 0.74, y1: 1 },          // bottom-right corner: drag up = forward, down = reverse
 };
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -110,10 +114,12 @@ export function createInput(dom) {
     if (ignoreTarget(e.target)) { if (DEBUG) console.log('[input] down ignored: target', e.target && (e.target.tagName + '.' + e.target.className)); return; }
     const nx = e.clientX / W(), ny = e.clientY / H();
     if (inZone(ZONES.honk, nx, ny)) { S.honkPend = true; e.preventDefault && e.preventDefault(); return; }
-    const p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientY * 0 + e.clientX, y: e.clientY, t0: e.timeStamp, tl: e.timeStamp, role: 'swipe', side: nx < 0.5 ? 'L' : 'R', accum: 0, dir: 0, moved: 0 };
-    if (nx < 0.5 && inZone(ZONES.handbrake, nx, ny)) p.role = 'handbrake';
-    else if (nx >= 0.5 && inZone(ZONES.gear, nx, ny)) p.role = 'gear';
-    else if (nx >= 0.5 && inZone(ZONES.headlight, nx, ny)) p.role = 'headlight';
+    const p = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientY * 0 + e.clientX, y: e.clientY, t0: e.timeStamp, tl: e.timeStamp, role: 'none', side: nx < 0.5 ? 'L' : 'R', accum: 0, dir: 0, moved: 0 };
+    if (inZone(ZONES.paddleL, nx, ny)) { p.role = 'swipe'; p.side = 'L'; }
+    else if (inZone(ZONES.paddleR, nx, ny)) { p.role = 'swipe'; p.side = 'R'; }
+    else if (inZone(ZONES.handbrake, nx, ny)) p.role = 'handbrake';
+    else if (inZone(ZONES.gear, nx, ny)) p.role = 'gear';
+    else if (inZone(ZONES.headlight, nx, ny)) p.role = 'headlight';
     p.stall0 = S.stallMs; p.frames0 = S.frames;
     ptrs.set(e.pointerId, p);
     if (DEBUG) console.log('[input] down', p.role, p.side, Math.round(e.clientX), Math.round(e.clientY), e.pointerType);

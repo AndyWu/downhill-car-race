@@ -104,6 +104,8 @@ export const CSS = `
 .sbd-tryhorn.hit { transform: scale(.95) rotate(-1deg); filter: brightness(1.2); }
 .sbd-map { position:absolute; pointer-events:auto; right: calc(var(--sar) + 1.6*var(--u)); top: calc(var(--sat) + 10*var(--u)); width: calc(13*var(--u)); height: calc(36*var(--u)); border-radius: calc(1.4*var(--u)); background: rgba(20,14,8,.30); touch-action: none; cursor: pointer; }
 .sbd-map.off { background: transparent; width: calc(5*var(--u)); height: calc(5*var(--u)); border: 2px dashed rgba(255,244,220,.35); }
+.sbd-padbox { position:absolute; pointer-events:none; box-sizing:border-box; border: 2px dashed rgba(255,244,220,.38); border-radius: calc(2*var(--u)); background: rgba(255,244,220,.07); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.3em; color: rgba(255,244,220,.5); font-family: var(--hand); font-size: calc(2*var(--u)); transition: background .12s, border-color .12s; }
+.sbd-padbox.hit { background: rgba(240,200,90,.22); border-color: rgba(255,226,140,.75); color: rgba(255,240,200,.85); }
 .sbd-horn.hit { background: rgba(240,200,90,.45); color: #fff; }
 .sbd-rank b { font-size: 1.35em; font-family: var(--stencil); letter-spacing:.04em; }
 .sbd-rank span { font-size: .75em; opacity:.85; margin-left:.1em; }
