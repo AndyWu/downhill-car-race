@@ -43,6 +43,11 @@ export function buildPlan(world, P, rng, spec = null, choice = undefined) {
     if (!seen || W <= 0) continue;
     // real hazards are ellipses (halfLength along s, halfWidth across); mock/simple ones are circles
     const ra = (h.halfLength ?? h.radius) + CAR_HALF, rb = (h.halfWidth ?? h.radius) + CAR_HALF;
+    if (h.kind === 'stall' || h.obstacles) {
+      // market stall: a slalom of solid mounds either side of the street; only a central lane (|lat| < ~0.4) is clear
+      hz.push({ s: h.s, lat: h.lateral, ra: (h.halfLength ?? 5) + 1, rb, rm: 1, W, bar: true, gap: 0.4 });
+      continue;
+    }
     hz.push({ s: h.s, lat: h.lateral, ra, rb, rm: Math.min(ra, rb), W });
   }
   const stretch = P.hazardStretch, margin = narrow ? P.hazardMargin * 0.6 : P.hazardMargin;
@@ -61,6 +66,7 @@ export function buildPlan(world, P, rng, spec = null, choice = undefined) {
       if (Math.abs(lat) > wd[i] / 2 - edge && j !== J) { hc[i * K + j] = BIG; continue; }
       let c = 0;
       for (const h of near) {
+        if (h.bar) { if (Math.abs(s - h.s) < h.ra - 1 && Math.abs(lat - h.lat) > h.gap) c += h.W * 3; continue; }
         const ds_ = (s - h.s) / stretch, dl = lat - h.lat;
         const ra = h.ra, rb = h.rb;
         const e2 = (ds_ / ra) ** 2 + (dl / rb) ** 2, ee = Math.sqrt(e2);
@@ -152,6 +158,9 @@ export function buildPlan(world, P, rng, spec = null, choice = undefined) {
   for (let i = 0; i < n; i++) {
     const fr = S.useSurface ? surfFric[i * K + slot[i]] : 1;
     v[i] = Math.min(S.cap, Math.sqrt((S.mu * gripK * Math.min(1, fr) * G) / Math.max(1e-5, kS[i])) * S.cornerFactor * (narrow ? 0.88 : 1));
+  }
+  if (S.hazV) { // the planned line still goes through a hazard (it cannot be avoided): slow down for it
+    for (let i = 0; i < n; i++) if (hc[i * K + slot[i]] >= 12 && hc[i * K + slot[i]] < BIG) v[i] = Math.min(v[i], S.hazV);
   }
   if (S.streamV) { // road-wide water crossings: slow down and cross squarely
     for (const h of world.hazards || []) {

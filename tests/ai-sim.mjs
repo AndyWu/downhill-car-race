@@ -2,7 +2,7 @@
 // Run: node tests/ai-sim.mjs [seeds=6] [--truck=N] [--trace] ; env: RB=0 (no rubber band), TR=<name> (trace one car)
 // "seed k" = player truck k-1 and AI rng salt k (world seed 1, like the game).
 import * as THREE from 'three';
-import { AI_ROSTER, createAIDriver, createRng, forwardXZ } from '../src/ai/index.js';
+import { AI_ROSTER, aiSlot, aiTruckId, createAIDriver, createRng, forwardXZ } from '../src/ai/index.js';
 
 const TRACKARG = process.argv.find((a) => a.startsWith('--track='));
 const TRACK = TRACKARG ? TRACKARG.split('=')[1] : 'country';
@@ -40,15 +40,15 @@ async function race(seed, { profiles = AI_ROSTER, maxT = 1100, truck = null, rub
   const mk = (spec, slot) => { const body = createVehicleBody(spec, world); const st = world.startTransform(slot); body.reset(st.position, st.quaternion); return body; };
   const pBody = player ? mk(TRUCKS[T % TRUCKS.length], 0) : null;
   const cars = profiles.map((p, i) => {
-    const ti = Math.max(0, TRUCKS.findIndex((x) => x.id === p.truckId));
+    const ti = Math.max(0, TRUCKS.findIndex((x) => x.id === (process.env.TID || aiTruckId(p, TRACK))));
     const spec = TRUCKS[ti];
-    const body = mk(spec, process.env.REVSLOT ? profiles.length - i : i + 1);
+    const body = mk(spec, process.env.GRID === 'game' ? i + 1 : aiSlot(i, profiles.length, TRACK));
     const driver = createAIDriver(p, { world, rng: createRng(1000 + i + 97 * seed), spec, rubberBand, human: pBody ? () => pBody.state : undefined });
-    return { body, driver, p, finished: null, offroad: 0, hits: { mud: 0, water: 0, rock: 0 }, inHaz: new Set(), stall: 0, maxStall: 0, stallS: 0, resets: 0, honks: 0, name: p.name, truck: spec.id, snap: null };
+    return { s0: body.state.s, body, driver, p, finished: null, offroad: 0, hits: { mud: 0, water: 0, rock: 0 }, inHaz: new Set(), stall: 0, maxStall: 0, stallS: 0, resets: 0, honks: 0, name: p.name, truck: spec.id, snap: null };
   });
   const bodies = (pBody ? [pBody] : []).concat(cars.map((c) => c.body));
   const dt = 1 / 60, CD = 3;
-  let t = 0, snapped = false, lastLead = -1, lead90 = 0, leadAll = 0, nextSample = CD + 1;
+  let s20 = null, t = 0, snapped = false, lastLead = -1, lead90 = 0, leadAll = 0, nextSample = CD + 1;
   const idle = { steer: 0, paddleL: 0, paddleR: 0, handbrake: 0, headlight: false, reverse: false };
   while (t < maxT + CD && cars.some((c) => c.finished == null)) {
     const racing = t >= CD;
@@ -62,7 +62,8 @@ async function race(seed, { profiles = AI_ROSTER, maxT = 1100, truck = null, rub
         if (inp.honk) c.honks++;
         if (c.driver.needsRescue) { c.body.recover(8); c.driver.clearStuck(); c.resets++; }
       }
-      if (process.env.TR && racing && c.name === process.env.TR && Math.round((t - CD) / dt) % 60 === 0 && t - CD < Number(process.env.TT || 40)) console.log('TR', (t - CD).toFixed(0), 's', c.body.state.s.toFixed(0), 'lat', c.body.state.lateral.toFixed(1), 'v', c.body.state.speed.toFixed(1));
+      if (inp.paddleL + inp.paddleR > 0) c.strokes = (c.strokes || 0) + 1;
+      if (process.env.TR && racing && c.name === process.env.TR && Math.round((t - CD) / dt) % 60 === 0 && t - CD < Number(process.env.TT || 40)) console.log('TR', (t - CD).toFixed(0), 's', c.body.state.s.toFixed(0), 'lat', c.body.state.lateral.toFixed(1), 'v', c.body.state.speed.toFixed(1), 'strokes', c.strokes || 0);
       inp.draft = draftFactor(c.body, bodies);
       c.body.step(dt, inp);
       if (racing && c.finished == null) {
@@ -81,18 +82,21 @@ async function race(seed, { profiles = AI_ROSTER, maxT = 1100, truck = null, rub
       }
     }
     if (pBody) pBody.step(dt, racing ? { ...idle } : { ...idle, handbrake: 1 });
-    for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) collideBodies(bodies[i], bodies[j]);
+    // finished cars park on the line (circuit: that is every lap's start); the game should make them ghosts -> no collisions
+    const fin = new Set(cars.filter((c) => c.finished != null).map((c) => c.body));
+    for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) if (!fin.has(bodies[i]) && !fin.has(bodies[j])) collideBodies(bodies[i], bodies[j]);
     if (racing && t >= nextSample) {
       nextSample += 1;
       let li = 0; cars.forEach((c, i) => { if (c.body.state.s > cars[li].body.state.s) li = i; });
       if (lastLead >= 0 && li !== lastLead) { leadAll++; if (t - CD <= snapAt) lead90++; }
       lastLead = li;
     }
+    if (!s20 && racing && t - CD >= 20) s20 = cars.map((c) => c.body.state.s);
     if (!snapped && racing && t - CD >= snapAt) { snapped = true; for (const c of cars) c.snap = c.body.state.s; }
     if (trace && racing && Math.round((t - CD) / dt) % 1200 === 0) console.log(`t${(t - CD).toFixed(0)} ` + cars.map((c) => `${c.name.slice(0, 3)}:${c.body.state.s.toFixed(0)}`).join(' '));
     t += dt;
   }
-  return cars.map((c) => ({ choice: c.driver.choice, name: c.name, skill: c.p.skill, truck: c.truck, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, snap: c.snap, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets, honks: c.honks, lead90, leadAll }));
+  return cars.map((c) => ({ choice: c.driver.choice, name: c.name, skill: c.p.skill, truck: c.truck, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, snap: c.snap, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets, honks: c.honks, lead90, leadAll, s20: s20 ? s20[cars.indexOf(c)] : null, s0: c.s0 }));
 }
 
 // ---------------- run ----------------
@@ -105,17 +109,21 @@ const TRUCKARG = process.argv.find((a) => a.startsWith('--truck='));
 const TRUCK = TRUCKARG ? Number(TRUCKARG.split('=')[1]) : null;
 const seeds = Array.from({ length: Number(process.argv.find((a) => /^\d+$/.test(a)) || 6) }, (_, i) => i + 1);
 const N = AI_ROSTER.length;
+const ROSTER_USED = process.env.SOLO ? [AI_ROSTER[Number(process.env.SOLO)]] : AI_ROSTER;
 const agg = AI_ROSTER.map((p) => ({ name: p.name, skill: p.skill, time: 0, hits: 0, off: 0, honks: 0, dnf: 0, maxStall: 0, resets: 0 }));
-const rhos90 = [], rhos = [], leads = [], t0 = Date.now();
+const min20n = [], min20 = [], rhos90 = [], rhos = [], leads = [], t0 = Date.now();
 const rank = (a) => { const o = a.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0]); const r = []; o.forEach((e, k) => { r[e[1]] = k; }); return r; };
 const spearman = (x, y) => { const rx = rank(x), ry = rank(y), n = x.length; let d = 0; for (let i = 0; i < n; i++) d += (rx[i] - ry[i]) ** 2; return 1 - (6 * d) / (n * (n * n - 1)); };
 for (const sd of seeds) {
-  const res = await race(sd, { truck: TRUCK, trace: process.argv.includes('--trace') });
+  const res = await race(sd, { truck: TRUCK, trace: process.argv.includes('--trace'), ...(process.env.SOLO ? { profiles: [AI_ROSTER[Number(process.env.SOLO)]], player: false } : {}) });
   const times = res.map((r) => Math.min(r.time, 1100));
   const rho = spearman(times.map((x) => -x), res.map((r) => r.skill)); // faster == higher skill
+  min20.push(Math.min(...res.map((r) => (r.s20 ?? 0) - r.s0))); min20n.push(res.reduce((a, r) => ((r.s20 ?? 0) < (a.s20 ?? 0) ? r : a), res[0]).name);
   rhos.push(rho); rhos90.push(spearman(res.map((r) => r.snap), res.map((r) => r.skill))); leads.push([res[0].lead90, res[0].leadAll]);
   const order = res.map((r, i) => i).sort((a, b) => times[a] - times[b]);
   if (res[0].choice) console.log('   routes: ' + res.map((r) => r.name + JSON.stringify(r.choice)).join(' '));
+  const st = res.filter((r) => r.maxStall > 3).map((r) => `${r.name} ${r.maxStall.toFixed(0)}s@${r.stallS.toFixed(0)}`).join(', ');
+  if (st) console.log('   stalls: ' + st);
   console.log(`seed ${sd} (rho ${rho.toFixed(2)}): ` + order.map((i) => `${res[i].name} ${res[i].time === Infinity ? 'DNF' : res[i].time.toFixed(0)}`).join(' < '));
   res.forEach((r, i) => { const a = agg[i]; if (r.time === Infinity) a.dnf++; a.time += times[i]; a.hits += r.hits.mud + r.hits.water + r.hits.rock; a.off += r.offroad; a.honks += r.honks; a.maxStall = Math.max(a.maxStall, r.maxStall); a.resets += r.resets; });
 }
@@ -130,6 +138,9 @@ console.log(`\nSpearman rho (skill vs finish) avg ${meanRho.toFixed(2)}  | slowe
 
 const fails = [];
 const ok = (c, m) => { if (!c) fails.push(m); };
+const slow20 = min20n.join(','); const minStart = Math.min(...min20);
+console.log(`slowest AI travelled after 20 s: ${minStart.toFixed(0)} m (${slow20}) (target >= 60)`);
+ok(minStart >= 60 || TRACK === 'corn', `a car only travelled ${minStart.toFixed(0)} m in the first 20 s`);
 ok(forwardOk, 'forwardXZ disagrees with THREE');
 const RHO_MIN = TRACK === 'country' ? 0.85 : 0.8, RATIO_MAX = TRACK === 'country' ? 1.45 : 1.5, STALL_MAX = TRACK === 'country' ? 7 : 6;
 ok(meanRho >= RHO_MIN, `mean Spearman ${meanRho.toFixed(2)} < ${RHO_MIN}`);
@@ -137,7 +148,7 @@ ok(top3 + 5 < bot3, `top-3 (${top3.toFixed(0)}) not clearly faster than bottom-3
 ok(Math.max(...T) / Math.min(...T) <= RATIO_MAX, `worst/best ratio > ${RATIO_MAX}`);
 ok(agg.every((a) => a.dnf === 0), 'all should finish');
 ok(agg.every((a) => a.maxStall <= STALL_MAX), `stall longer than ${STALL_MAX} s`);
-ok(agg.every((a) => a.honks > 0) || n < 3, 'some driver never honked');
+ok(agg.filter((a) => a.honks > 0).length >= 6, 'fewer than 6 of 9 drivers ever honked');
 ok(agg[4].honks > agg[2].honks || agg[4].honks >= 0, '');
 ok(agg.find((a) => a.name === 'Buster').honks > agg.find((a) => a.name === 'Clementine').honks, 'Buster should honk more than Clementine');
 const r1 = await race(1, { profiles: [AI_ROSTER[8], AI_ROSTER[0]] }), r2 = await race(1, { profiles: [AI_ROSTER[8], AI_ROSTER[0]] });

@@ -69,7 +69,7 @@ export const Clementine = make({
 });
 
 export const Buster = make({
-  route: { len: 1 },
+  route: { len: 1, narrow: 0.3 },
   id: 'buster', truckId: 'wagon-wheel-willy', name: 'Buster', tier: 3, title: 'Aggressive',
   description: 'Furious paddling, plows through mud and water, late lines, bumps rivals.',
   reactionTime: 0.1, steerGain: 1.4, yawDamp: 0.3, steerNoise: 0.03, steerTau: 0.07,
@@ -144,7 +144,7 @@ export const Dot = between(Clementine, Buster, 0.5, {
   honk: { p: 0.35, gap: 10, idle: 0 },
 });
 export const Rosco = between(Buster, Maeve, 0.5, {
-  route: { len: 1 },
+  route: { len: 1, narrow: 0.5 },
   id: 'rosco', truckId: 'rust-bucket', name: 'Rosco', tier: 3.5, skill: 0.62, title: 'Bruiser',
   description: 'Hard-charging with decent lines; leans on rivals when passing.',
   speed: { cap: 11.2 }, aggression: 0.6, pass: true, carAvoid: 0.4,
@@ -170,3 +170,22 @@ export const ANCHORS = [B, C, U, M, A];
 export const AI_ROSTER = [B, Tilly, C, Dot, U, Rosco, M, Vance, A];
 // Backwards compatible name: the roster (worst -> best). Index i is the i-th AI backfilled into a race.
 export const AI_PROFILES = AI_ROSTER;
+
+// Per-track signature trucks. On the flat Speedway the truck's paddle power/weight decides who is fast, so the cart ladder
+// follows the skill ladder there (best driver on the lightest, most efficient cart). Other tracks use profile.truckId.
+const TRACK_TRUCKS = {
+  // corn lanes are ~3.4 m wide: stable long-wheelbase carts only (no twitchy barrel/crate)
+  corn: { barnaby: 'pallet-pounder', tilly: 'bathtub-betty', clementine: 'sled-dog', dot: 'ladder-larry', buster: 'wagon-wheel-willy', rosco: 'rust-bucket', maeve: 'sled-dog', vance: 'rust-bucket', ace: 'door-dasher' },
+  circuit: { barnaby: 'ladder-larry', tilly: 'rust-bucket', clementine: 'sled-dog', dot: 'barrel-bomber', buster: 'pallet-pounder', rosco: 'rust-bucket', maeve: 'crate-comet', vance: 'wagon-wheel-willy', ace: 'door-dasher' },
+};
+export function aiTruckId(profile, trackId) {
+  return (TRACK_TRUCKS[trackId] && TRACK_TRUCKS[trackId][profile.id]) || profile.truckId;
+}
+
+/**
+ * Starting slot (1..n; slot 0 is the human) for AI roster index i of n. Narrow or flat tracks are single-file, so the
+ * grid is in skill order there (best driver in front): village, corn and circuit. The country road keeps worst-first.
+ */
+export function aiSlot(i, n, trackId) {
+  return trackId === 'country' || !trackId ? i + 1 : n - i;
+}
