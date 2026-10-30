@@ -186,6 +186,7 @@ export function aiTruckId(profile, trackId) {
  * Starting slot (1..n; slot 0 is the human) for AI roster index i of n. Narrow or flat tracks are single-file, so the
  * grid is in skill order there (best driver in front): village, corn and circuit. The country road keeps worst-first.
  */
-export function aiSlot(i, n, trackId) {
-  return trackId === 'country' || !trackId ? i + 1 : n - i;
+export function aiSlot(i, n, trackId) { // eslint-disable-line no-unused-vars
+  // best AI starts nearest the front on every track (the live country game has used this since the 9-driver ladder)
+  return n - i;
 }

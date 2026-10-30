@@ -185,7 +185,8 @@ async function boot() {
   // each AI profile has a signature truck (profile.truckId); fall back to the caller's index when absent
   function aiTruckIndex(i, fallback) {
     const pr = AI_PROFILES.length ? AI_PROFILES[i % AI_PROFILES.length] : null;
-    const k = pr && pr.truckId ? TRUCKS.findIndex((t) => t.id === pr.truckId) : -1;
+    const tid = pr ? ((aiMod && aiMod.aiTruckId ? aiMod.aiTruckId(pr, builtFor) : null) || pr.truckId) : null;
+    const k = tid ? TRUCKS.findIndex((t) => t.id === tid) : -1;
     return k >= 0 ? k : fallback;
   }
   function makeVehicle(specIdx, slot, kind, aiIdx = 0, name = '') {
@@ -295,7 +296,7 @@ async function boot() {
       const nAI = Math.min(cfg.ai, 9);
       for (let i = 0; i < nAI; i++) {
         const ri = nAI <= 1 ? 4 : Math.round(i * (ROSTER.length - 1) / (nAI - 1));
-        vs.push(makeVehicle(aiTruckIndex(ri, truckIdx + 1 + i), nAI - i, 'ai', ri, rosterName(ri)));
+        vs.push(makeVehicle(aiTruckIndex(ri, truckIdx + 1 + i), aiMod && aiMod.aiSlot ? aiMod.aiSlot(i, nAI, builtFor) : nAI - i, 'ai', ri, rosterName(ri)));
       }
     } else {
       // multiplayer: 10 cars; humans from players[] first, then AI backfill in roster order (slot k >= humans gets AI_ROSTER[k - humans])
@@ -707,7 +708,9 @@ async function boot() {
       v.lastInp = inp;
       v.body.step(STEP, inp);
     }
-    for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) collideBodies(vs[i].body, vs[j].body);
+    // finished cars are ghosts: they park on the line without bumping anyone, and vanish after a few seconds (AI only)
+    for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) if (!vs[i].finished && !vs[j].finished) collideBodies(vs[i].body, vs[j].body);
+    for (const v of vs) if (v.finished && v.kind === 'ai' && game.state.raceTime - v.finishTime > 5 && v.group.visible) v.group.visible = false;
     // finish
     for (const v of vs) {
       if (!v.finished && v.body.state.s >= TRACK_LENGTH - 3) {
