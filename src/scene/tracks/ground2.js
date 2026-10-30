@@ -54,12 +54,12 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
     return mkGeo(P, N, UV, C, idx);
   }
   function terrGeo(road, sA, sB, rowStep, offsAll, lo, hi) {
-    const offs = offsAll.slice(lo, hi), rowsT = Math.floor((sB - sA) / rowStep) + 1, S = offs.length, per = rowsT * S, n = per * 2;
+    const offs = offsAll.slice(lo, hi), rowsT = Math.ceil((sB - sA) / rowStep - 1e-6) + 1, S = offs.length, per = rowsT * S, n = per * 2;
     const P = new Float32Array(n * 3), N = new Float32Array(n * 3), UV = new Float32Array(n * 2), C = new Float32Array(n * 3), idx = [];
     for (let side = 0; side < 2; side++) {
       const sg = side === 0 ? -1 : 1, base = side * per;
       for (let r = 0; r < rowsT; r++) {
-        const s = sA + r * rowStep; road.atS(s, pp);
+        const s = sA + ((sB - sA) * r) / (rowsT - 1); road.atS(s, pp);
         const hwe = pp.hw + SHOULDER_IN;
         for (let j = 0; j < S; j++) {
           const d = sg * (hwe + offs[j]), x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, i = base + r * S + j;
@@ -84,6 +84,15 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
     const road = new THREE.Mesh(roadGeo(main, sA, sB, T.rowStep, cols, true), roadMat); road.receiveShadow = true; road.name = 'road_' + c; parent.add(road);
     chunks.push({ meshes: [road], center: centerOf(main, (sA + sB) / 2), radius: 60, kind: 'ground' });
   }
+  // ---- near-field terrain ribbons that follow heightAt exactly (single-road tracks; tiles are sunk under them) ----
+  if (T.ribbonEnd) {
+    const offs = [0, 0.5, 1, 1.5, 2.2, 3, 4, 5.5, 7.5, 10, 14, 19, 26, 35].filter((o) => o <= T.ribbonEnd);
+    for (let c = 0; c < nCh; c++) {
+      const sA = lo + c * T.chunk, sB = Math.min(hi, sA + T.chunk);
+      const m = new THREE.Mesh(terrGeo(main, sA, sB, T.terrRow, offs, 0, offs.length), grassMat); m.receiveShadow = true; m.name = 'ribbon_' + c; parent.add(m);
+      chunks.push({ meshes: [m], center: centerOf(main, (sA + sB) / 2), radius: T.chunk / 2 + 45, kind: 'ground' });
+    }
+  }
   // ---- world-aligned terrain tiles (192 m, 6 m cells), sunk under the roads ----
   {
     const TS = T.tile || 192, CELL = T.cell || 6, NC = Math.round(TS / CELL), NV = NC + 1;
@@ -102,6 +111,7 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
         const off = Math.max(0, Math.abs(q.d) - pq.hw); OFF[k] = off;
         const sink = (T.tileSink ?? 0.45) * (1 - smoothstep(1.0, 4.5, off));
         let hy = terrain.heightAt(x, z) - sink;
+        if (T.ribbonEnd) { const e0 = SHOULDER_IN + T.ribbonEnd, w = smoothstep(e0 - 9, e0 - 1, off); hy = (Math.min(terrain.heightAt(x, z), pq.py) - 2.4) * (1 - w) + (terrain.heightAt(x, z) - 0.05) * w; }
         if (T.tileNear) { const w = smoothstep(T.tileNear.reach - 3, T.tileNear.reach, off); hy = (pq.py - T.tileNear.drop) * (1 - w) + (terrain.heightAt(x, z) - sink) * w; }
         P[k * 3] = x; P[k * 3 + 1] = hy; P[k * 3 + 2] = z;
         const nrm = terrain.normalAt(x, z, 2.2); Nn[k * 3] = nrm.x; Nn[k * 3 + 1] = nrm.y; Nn[k * 3 + 2] = nrm.z;

@@ -6,6 +6,7 @@ import { createHazardField, SURFACES } from '../hazards.js';
 import { Batch, boxG, cylG, sphG, xf } from '../batch.js';
 import { buildFarm } from '../farms.js';
 import { scatterTrees } from './scatter.js';
+import { createRegistry } from './registry.js';
 
 const PRE = 40, POST = 70, LEN = 3218;
 const CORN_H = 2.7;
@@ -43,6 +44,7 @@ export function planCorn(seed) {
   });
   main.surf = { ...SURFACES.dirt };
   const net = buildNetwork({ main, length: LEN, lapLength: LEN });
+  const registry = createRegistry(net);
   main.field = createHazardField(main, seed + 5, { order: ['puddle', 'mud', 'rutpool', 'gravel', 'rock', 'sand', 'puddle', 'rutpool', 'mud', 'gravel'], start: 100, startJit: 30, gap1: 42, gap2: 55, endGap: 100 });
   const hazards = main.field.hazards.map((h) => ({ ...h }));
 
@@ -75,7 +77,7 @@ export function planCorn(seed) {
   };
   const terrainOpts = { hillAmp: 3.5, hillFar: 8, hillNear: 70, rutScale: 1, noiseScale: 1, crown: 0.1, sideSlope: 0.08, shoulderOut: 12, verge };
   const theme = {
-    roadMat: 'dirtRoad',
+    roadMat: 'dirtRoad', ribbonEnd: 35, terrRow: 4,
     roadUV: (road, s, d, hwe, o) => { o[0] = d / 3.2; o[1] = s / 3.2; },
     roadColor: (road, s, d, p, rnz, o) => {
       const ad = Math.abs(d), edge = smoothstep(p.hw - 0.4, p.hw + 1.4, ad), rut = Math.exp(-(((ad - 0.95) / 0.32) ** 2)) * 0.16;
@@ -105,7 +107,8 @@ export function planCorn(seed) {
   const startPos = (slot) => ({ s: 13.5 - 4.4 * (slot >> 1) - ((slot & 1) ? 2.0 : 0), d: (slot & 1) ? 0.8 : -0.8 });
 
   // ====================================================================================
-  function decorate({ net: nw, terrain, lib, parent, seed: sd }) {
+  function decorate({ net: nw, terrain, lib, parent, seed: sd, plan }) {
+    const reg = plan.registry;
     const rnd = mulberry32(sd * 53 + 3), items = [], P = {};
     const hwOf = (s) => main.atS(s, P).hw;
     const cardGeo = (() => {
@@ -129,7 +132,8 @@ export function planCorn(seed) {
       for (const side of [-1, 1]) for (const off of [1.35, 2.15, 3.0]) {
         for (let s = s0 + rnd() * 0.8; s < s1; s += 0.82 + rnd() * 0.2) {
           if (inClearing(s, side)) continue;
-          const hw = hwOf(s), o = hw + off + (rnd() - 0.5) * 0.35, x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o, y = terrain.heightAt(x, z) - 0.15;
+          const hw = hwOf(s), o = hw + off + (rnd() - 0.5) * 0.35, x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o, y = terrain.heightAt(x, z) - 0.1;
+          reg.circle('corn', x, z, 0.7, y + 0.1, {}, 4);
           e4.set((rnd() - 0.5) * 0.08, rnd() * 6.28, (rnd() - 0.5) * 0.08, 'YXZ'); q4.setFromEuler(e4);
           const sc = 0.95 + rnd() * 0.3;
           ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, CORN_H * (0.9 + rnd() * 0.25), sc)));
@@ -146,16 +150,17 @@ export function planCorn(seed) {
     // wall + canopy strips, 300 m each
     for (let c = 0; c * 300 < LEN + 40; c++) {
       const s0 = c * 300, s1 = Math.min(LEN + 40, s0 + 300), Pa = [], Na = [], Ua = [], Ca = [], Ia = [];
-      const cols = [5, 12, 22, 34, 48, 64], K = cols.length + 2, rows = Math.round((s1 - s0) / 4) + 1;
+      const cols = [5, 12, 22, 34, 48, 64], K = cols.length + 2, rows = Math.round((s1 - s0) / 1.5) + 1;
       for (const side of [-1, 1]) {
         const base = Pa.length / 3, rowOK = [];
         for (let r = 0; r < rows; r++) {
           const s = s0 + ((s1 - s0) * r) / (rows - 1); rowOK.push(!inClearing(s, side));
           main.atS(s, P); const hw = P.hw;
-          const lat = [hw + 1.3, hw + 1.3, ...cols.map((v) => hw + v)], hh = [-0.4, CORN_H, ...cols.map(() => CORN_H)];
+          const wob = 0.3 * nz.n2(s / 2.1 + 11, side * 5.3), ht = CORN_H * (0.9 + 0.16 * nz.n2(s / 1.7 + 3, side * 2.9 + 8));   // ragged face + uneven canopy: not a flat sheet
+          const lat = [hw + 1.3 + wob, hw + 1.3 + wob, ...cols.map((v) => hw + v)], hh = [-0.4, ht, ...cols.map(() => ht)];
           lat.forEach((l, k) => {
             const x = P.px + P.rhx * side * l, z = P.pz + P.rhz * side * l, y = terrain.heightAt(x, z) + hh[k];
-            Pa.push(x, y, z); Na.push(0, 1, 0); Ua.push(s / 3, k * 0.35); const sh = 0.8 + 0.3 * nz.n2(s / 7 + k, side * 3 + k * 5); Ca.push(0.9 * sh, 1.0 * sh, 0.75 * sh);
+            Pa.push(x, y, z); Na.push(0, 1, 0); Ua.push(s / 2.2, k * 0.35); const sh = (0.78 + 0.34 * nz.n2(s / 3.1 + k, side * 3 + k * 5)) * (k === 0 ? 0.62 : 1); Ca.push(0.9 * sh, 1.0 * sh, 0.75 * sh);
           });
         }
         for (let r = 0; r < rows - 1; r++) { if (!rowOK[r] || !rowOK[r + 1]) continue; for (let k = 0; k < K - 1; k++) { const a = base + r * K + k, b = a + 1, d = a + K, e = d + 1; Ia.push(a, d, b, b, d, e, a, b, d, b, e, d); } }
@@ -180,27 +185,29 @@ export function planCorn(seed) {
         for (let i = 0; i < n; i++) {
           const s = cl.s0 + 4 + rnd() * (len - 8), d = hwOf(s) + 3 + rnd() * 20, p = cx(s, d), y = terrain.heightAt(p.x, p.z), r = 0.38 + Math.pow(rnd(), 2) * 0.45;
           e4.set(0, rnd() * 6.28, 0); q4.setFromEuler(e4);
-          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(p.x, y + r * 0.62, p.z), q4.clone(), new THREE.Vector3(r, r * 0.78, r)));
+          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(p.x, y + r * 0.7, p.z), q4.clone(), new THREE.Vector3(r, r * 0.78, r)));
+          reg.circle('pumpkin', p.x, p.z, r, y + r * 0.7 - r * 0.78, {}, 4);
           const t = rnd(); cs.push(t < 0.12 ? new THREE.Color(0.9, 0.78, 0.15) : t < 0.2 ? new THREE.Color(0.55, 0.62, 0.25) : new THREE.Color(1.0, 0.42 + rnd() * 0.2, 0.08));
         }
         const im = new THREE.InstancedMesh(pumpGeo, lib.get('dark', {}), ms.length);
         ms.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, cs[i]); }); im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.castShadow = false; grp.add(im);
-        for (let i = 0; i < 70; i++) { const s = cl.s0 + 4 + rnd() * (len - 8), p = cx(s, hwOf(s) + 3 + rnd() * 20), y = terrain.heightAt(p.x, p.z); b.add('dark', boxG(0.9, 0.05, 0.7, 1), xf(p.x, y + 0.12, p.z, (rnd() - 0.5) * 0.2, rnd() * 6, 0), [0.25, 0.5, 0.15]); }
+        for (let i = 0; i < 70; i++) { const s = cl.s0 + 4 + rnd() * (len - 8), p = cx(s, hwOf(s) + 3 + rnd() * 20), y = terrain.heightAt(p.x, p.z); b.add('dark', boxG(0.9, 0.05, 0.7, 1), xf(p.x, y + 0.04, p.z, (rnd() - 0.5) * 0.2, rnd() * 6, 0), [0.25, 0.5, 0.15]); }
         const q = cx(cl.s0 + 3, hwOf(cl.s0) + 1.9), y = terrain.heightAt(q.x, q.z);
-        b.add('woodWeathered', boxG(0.12, 1.8, 0.12, 1), xf(q.x, y + 0.9, q.z), [0.6, 0.5, 0.4]); b.add('dark', boxG(1.4, 0.7, 0.08, 1), xf(q.x, y + 1.7, q.z, 0, q.ry, 0), [1.0, 0.55, 0.1]);
-        for (let s = cl.s0; s <= cl.s1; s += 4) { const q2 = cx(s, hwOf(s) + 2.6), y2 = terrain.heightAt(q2.x, q2.z); b.add('woodWeathered', boxG(0.12, 1.1, 0.12, 1), xf(q2.x, y2 + 0.5, q2.z), [0.6, 0.5, 0.4]); b.add('woodWeathered', boxG(4, 0.08, 0.1, 1), xf(q2.x, y2 + 0.85, q2.z, 0, q2.ry, 0), [0.62, 0.52, 0.42]); }
+        b.add('woodWeathered', boxG(0.12, 1.9, 0.12, 1), xf(q.x, y + 0.85, q.z), [0.6, 0.5, 0.4]); reg.circle('post', q.x, q.z, 0.1, y - 0.1, {}, 4); b.add('dark', boxG(1.4, 0.7, 0.08, 1), xf(q.x, y + 1.7, q.z, 0, q.ry, 0), [1.0, 0.55, 0.1]);
+        for (let s = cl.s0; s <= cl.s1; s += 4) { const q2 = cx(s, hwOf(s) + 2.6), y2 = terrain.heightAt(q2.x, q2.z); b.add('woodWeathered', boxG(0.12, 1.2, 0.12, 1), xf(q2.x, y2 + 0.5, q2.z), [0.6, 0.5, 0.4]); reg.circle('post', q2.x, q2.z, 0.1, y2 - 0.1, {}, 4); b.add('woodWeathered', boxG(4, 0.08, 0.1, 1), xf(q2.x, y2 + 0.85, q2.z, 0, q2.ry, 0), [0.62, 0.52, 0.42]); }
       }
       if (cl.kind === 'pumpkin' || cl.kind === 'hay') {
         for (let i = 0; i < (cl.kind === 'hay' ? 16 : 6); i++) {
           const s = cl.s0 + 3 + rnd() * (len - 6), p = cx(s, hwOf(s) + 4 + rnd() * (cl.kind === 'hay' ? 22 : 12)), y = terrain.heightAt(p.x, p.z), up = rnd() < 0.3;
-          b.add('straw', cylG(0.72, 0.72, 1.3, 10, 2), xf(p.x, y + (up ? 0.65 : 0.72), p.z, up ? 0 : Math.PI / 2, rnd() * 6, 0), [0.95 + rnd() * 0.1, 0.9, 0.7]);
+          b.add('straw', cylG(0.72, 0.72, 1.3, 10, 2), xf(p.x, y + (up ? 0.65 : 0.72), p.z, up ? 0 : Math.PI / 2, rnd() * 6, 0), [0.95 + rnd() * 0.1, 0.9, 0.7]); reg.circle('hay', p.x, p.z, 0.95, y, {}, 6);
           if (cl.kind === 'hay' && rnd() < 0.45) b.add('straw', cylG(0.72, 0.72, 1.3, 10, 2), xf(p.x + 0.4, y + 1.9, p.z + 0.2, Math.PI / 2, rnd() * 6, 0), [1, 0.92, 0.72]);
         }
       }
       for (let i = 0; i < (cl.kind === 'farm' ? 1 : 2); i++) {
         const s = cl.s0 + 8 + rnd() * (len - 16), p = cx(s, hwOf(s) + 4.5 + rnd() * 9), y = terrain.heightAt(p.x, p.z), ry = rnd() * 6;
         const M = xf(p.x, y, p.z, 0, ry, 0), L = (m) => M.clone().multiply(m);
-        b.add('woodWeathered', boxG(0.1, 2.3, 0.1, 1), L(xf(0, 1.15, 0)), [0.55, 0.45, 0.35]); b.add('woodWeathered', boxG(1.7, 0.1, 0.1, 1), L(xf(0, 1.75, 0)), [0.55, 0.45, 0.35]);
+        reg.circle('scarecrow', p.x, p.z, 0.9, y - 0.05, {}, 6);
+        b.add('woodWeathered', boxG(0.1, 2.3, 0.1, 1), L(xf(0, 1.1, 0)), [0.55, 0.45, 0.35]); b.add('woodWeathered', boxG(1.7, 0.1, 0.1, 1), L(xf(0, 1.75, 0)), [0.55, 0.45, 0.35]);
         b.add('dark', boxG(0.5, 0.85, 0.3, 1), L(xf(0, 1.55, 0)), [0.35 + rnd() * 0.3, 0.3, 0.55]); b.add('straw', sphG(0.22, 6, 4, 1), L(xf(0, 2.2, 0)), [1, 0.9, 0.6]);
         b.add('dark', cylG(0.34, 0.34, 0.05, 8, 1), L(xf(0, 2.38, 0)), [0.45, 0.32, 0.18]); b.add('dark', cylG(0.18, 0.18, 0.22, 8, 1), L(xf(0, 2.5, 0)), [0.45, 0.32, 0.18]);
         for (const sx of [-1, 1]) b.add('straw', boxG(0.07, 0.4, 0.07, 1), L(xf(sx * 0.82, 1.55, 0)), [1, 0.9, 0.6]);
@@ -228,7 +235,7 @@ export function planCorn(seed) {
   }
 
   return {
-    id: 'corn', name: 'Corn & Pumpkins', net, pads, terrainOpts, theme, surface, flags: { closed: false, laps: 1, flat: false, noStuckRescue: false },
+    id: 'corn', name: 'Corn & Pumpkins', net, registry, pads, terrainOpts, theme, surface, flags: { closed: false, laps: 1, flat: false, noStuckRescue: false },
     splits: [], hazards, startPos, landmarks: [{ type: 'barn', s: 780, lateral: -24 }, { type: 'barn', s: 2020, lateral: 24 }, { type: 'pumpkins', s: 365, lateral: 10 }, { type: 'finish', s: LEN, lateral: 0 }],
     decorate, ranges: { ground: 440 },
   };
