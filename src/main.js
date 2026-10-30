@@ -14,6 +14,7 @@ const P = {
   truck: Math.max(0, parseInt(params.get('truck') ?? '0', 10) || 0),
   s: params.has('s') ? parseFloat(params.get('s')) : null,
   time: params.get('time') || 'day',
+  track: params.get('track') || null,
   timeUrl: params.has('time'),
   headlight: params.get('headlight') === '1',
   ai: params.has('ai') ? Math.max(0, Math.min(9, parseInt(params.get('ai'), 10) || 0)) : 9,
@@ -88,25 +89,46 @@ async function boot() {
   let post = gfx ? safe(() => gfx.createPostFX(renderer, scene, camera), 'createPostFX') : null;
   let isDark = P.time === 'night' || P.time === 'dusk';
 
-  // ---- world ----
-  loading.set(0.18, 'building the hill');
-  let world = null;
-  if (sceneMod) {
-    world = await (async () => {
-      try { return await sceneMod.createWorld(scene, { seed: 1, renderer, materials, onProgress: (p, l) => loading.set(0.18 + p * 0.78, l || 'building the hill') }); }
-      catch (e) { console.warn('[main] createWorld failed:', e && e.message); return null; }
-    })();
+  const audio = audioMod ? safe(() => audioMod.createAudio(), 'createAudio') : null;
+  // ---- world (rebuilt when the chosen track changes; materials are kept) ----
+  const TRACK_IDS = ['country', 'village', 'corn', 'circuit'];
+  const normTrack = (t) => { t = typeof t === 'string' ? t : t && (t.id || t.track || t.trackId); t = String(t || '').toLowerCase(); return TRACK_IDS.includes(t) ? t : null; };
+  let world = null, builtFor = null, TRACK_LENGTH = 3218, LAP_LENGTH = 3218, LAPS = 1;
+  const waterSpots = [];
+  let gameRef = null;
+  async function buildWorld(trackId, onProgress) {
+    if (world) { safe(() => { if (world.dispose) world.dispose(); else if (world.group) scene.remove(world.group); }, 'world.dispose'); world = null; }
+    if (sceneMod) {
+      world = await (async () => {
+        try { return await sceneMod.createWorld(scene, { seed: 1, trackId, renderer, materials, onProgress }); }
+        catch (e) { console.warn('[main] createWorld failed:', e && e.message); return null; }
+      })();
+    }
+    if (!world) world = createFallbackWorld(scene);
+    builtFor = trackId;
+    TRACK_LENGTH = (world.track && world.track.length) || (sceneMod && sceneMod.TRACK_LENGTH) || 3218;
+    LAP_LENGTH = (world.track && world.track.lapLength) || TRACK_LENGTH;
+    LAPS = (world.flags && world.flags.laps) || Math.max(1, Math.round(TRACK_LENGTH / LAP_LENGTH));
+    // alpha-tested foliage needs the cut-out depth material for shadows
+    const foliageDepth = materials && materials.foliage && materials.foliage.userData && materials.foliage.userData.depthMaterial;
+    if (foliageDepth && world.group) world.group.traverse((o) => { if (o.isMesh && o.material && o.material.alphaTest > 0 && !o.customDepthMaterial) o.customDepthMaterial = foliageDepth; });
+    if (gfx && gfx.freezeStatic && world.group) safe(() => gfx.freezeStatic(world.group), 'freezeStatic');
+    // water hazards for planar reflection
+    waterSpots.length = 0;
+    for (const h of world.hazards || []) {
+      if (h.type !== 'water') continue;
+      const smp = world.track.sampleAt(h.s);
+      const x = smp.position.x + smp.right.x * h.lateral, z = smp.position.z + smp.right.z * h.lateral;
+      waterSpots.push({ s: h.s, y: world.heightAt(x, z) });
+    }
+    if (audio && audio.setTrack) safe(() => audio.setTrack(world.trackId || trackId), 'audio.setTrack');
+    if (gameRef) { gameRef.world = world; gameRef.state.track = world.trackId || trackId; }
+    return world;
   }
-  if (!world) world = createFallbackWorld(scene);
-  const TRACK_LENGTH = (sceneMod && sceneMod.TRACK_LENGTH) || world.track.length || 3218;
-  // alpha-tested foliage needs the cut-out depth material for shadows
-  const foliageDepth = materials && materials.foliage && materials.foliage.userData && materials.foliage.userData.depthMaterial;
-  if (foliageDepth && world.group) world.group.traverse((o) => { if (o.isMesh && o.material && o.material.alphaTest > 0 && !o.customDepthMaterial) o.customDepthMaterial = foliageDepth; });
-
-  if (gfx && gfx.freezeStatic && world.group) safe(() => gfx.freezeStatic(world.group), 'freezeStatic');
+  loading.set(0.18, 'building the hill');
+  await buildWorld(normTrack(P.track) || 'country', (p, l) => loading.set(0.18 + p * 0.78, l || 'building the hill'));
   const TRUCKS = (vehMod && vehMod.TRUCKS && vehMod.TRUCKS.length) ? vehMod.TRUCKS : FALLBACK_TRUCKS;
   const input = createInput(canvas);
-  const audio = audioMod ? safe(() => audioMod.createAudio(), 'createAudio') : null;
   const AI_PROFILES = (aiMod && (aiMod.AI_ROSTER || aiMod.AI_PROFILES)) || [];
   const ROSTER = AI_PROFILES.length ? AI_PROFILES : Array.from({ length: 9 }, (_, i) => ({ name: `Driver ${i + 1}` }));
   const rosterName = (i) => (ROSTER[i % ROSTER.length] && ROSTER[i % ROSTER.length].name) || `Car ${i + 2}`;
@@ -117,15 +139,6 @@ async function boot() {
     camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
   }
   addEventListener('resize', resize); resize();
-
-  // water hazards for planar reflection
-  const waterSpots = [];
-  for (const h of world.hazards || []) {
-    if (h.type !== 'water') continue;
-    const smp = world.track.sampleAt(h.s);
-    const x = smp.position.x + smp.right.x * h.lateral, z = smp.position.z + smp.right.z * h.lateral;
-    waterSpots.push({ s: h.s, y: world.heightAt(x, z) });
-  }
 
   // ---- game state ----
   const game = {
@@ -138,7 +151,7 @@ async function boot() {
   };
   if (netMod && netMod.onOfflineReady) safe(() => netMod.onOfflineReady(() => { game.state.offlineReady = true; if (game.ui) { if (game.ui.setOfflineReady) game.ui.setOfflineReady(true); else if (game.ui.toast && game.state.mode === 'title') game.ui.toast('Ready to play offline', 2600); } }), 'onOfflineReady');
   let resolveReady; game.screenshotReady = new Promise((r) => { resolveReady = r; });
-  window.__game = game;
+  window.__game = game; gameRef = game; game.state.track = world.trackId || builtFor;
   let readyFrames = 0;
 
   let cockpit = null, playerV = null, ui = null, chaseT = null, lastRespawns = 0, mudTimer = 0;
@@ -172,7 +185,8 @@ async function boot() {
   // each AI profile has a signature truck (profile.truckId); fall back to the caller's index when absent
   function aiTruckIndex(i, fallback) {
     const pr = AI_PROFILES.length ? AI_PROFILES[i % AI_PROFILES.length] : null;
-    const k = pr && pr.truckId ? TRUCKS.findIndex((t) => t.id === pr.truckId) : -1;
+    const tid = pr ? ((aiMod && aiMod.aiTruckId ? aiMod.aiTruckId(pr, builtFor) : null) || pr.truckId) : null;
+    const k = tid ? TRUCKS.findIndex((t) => t.id === tid) : -1;
     return k >= 0 ? k : fallback;
   }
   function makeVehicle(specIdx, slot, kind, aiIdx = 0, name = '') {
@@ -237,6 +251,7 @@ async function boot() {
     const smp = world.track.sampleAt(s);
     const p = _t.copy(smp.position).addScaledVector(smp.right, lateral);
     placeOnGround(v.body, world, p.x, p.z, smp.tangent, smp.tangent.clone().multiplyScalar(speed));
+    if (v.body.setProgress) v.body.setProgress(s);
     v.prevPos.copy(v.body.state.position); v.prevQuat.copy(v.body.state.quaternion);
   }
   function teleport(s, speed = 0) {
@@ -249,7 +264,25 @@ async function boot() {
 
   // ---- start a race ----
   // o: { truck, ai, s, countdown, headlight, role:'solo'|'host'|'client', players, trucks, localSlot, goAtLocal }
+  function selectedTrack() {
+    const sel = ui && ui.getTrack ? safe(() => ui.getTrack(), 'getTrack', null) : null;
+    return normTrack(P.track) || normTrack(sel) || 'country';
+  }
+  // Rebuild the world first when the chosen track differs from the built one (overlay shown); synchronous otherwise.
+  let building = null;
   function startRace(o = {}) {
+    const want = normTrack(o.trackId) || (o.role === 'client' ? null : selectedTrack()) || builtFor;
+    if (!want || want === builtFor) return startRaceNow(o);
+    if (building) return building;
+    clearRace();
+    game.state.mode = 'loading';
+    const ov = createLoading(uiRoot); ov.set(0.02, 'building the ' + want + ' track');
+    building = nextFrame().then(() => buildWorld(want, (p, l) => ov.set(0.05 + p * 0.9, l || 'building the track')))
+      .then(() => { applyConditions(curCond || resolveConditions(), true); ov.done(); building = null; return startRaceNow(o); })
+      .catch((e) => { console.warn('[main] track rebuild failed', e && e.message); ov.done(); building = null; });
+    return building;
+  }
+  function startRaceNow(o = {}) {
     clearRace();
     applyConditions(o.conditions || resolveConditions(), true);
     const role = o.role || 'solo';
@@ -263,7 +296,7 @@ async function boot() {
       const nAI = Math.min(cfg.ai, 9);
       for (let i = 0; i < nAI; i++) {
         const ri = nAI <= 1 ? 4 : Math.round(i * (ROSTER.length - 1) / (nAI - 1));
-        vs.push(makeVehicle(aiTruckIndex(ri, truckIdx + 1 + i), nAI - i, 'ai', ri, rosterName(ri)));
+        vs.push(makeVehicle(aiTruckIndex(ri, truckIdx + 1 + i), aiMod && aiMod.aiSlot ? aiMod.aiSlot(i, nAI, builtFor) : nAI - i, 'ai', ri, rosterName(ri)));
       }
     } else {
       // multiplayer: 10 cars; humans from players[] first, then AI backfill in roster order (slot k >= humans gets AI_ROSTER[k - humans])
@@ -285,7 +318,7 @@ async function boot() {
       }
     }
     chaseT = null; lastRespawns = 0;
-    cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam });
+    cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam, heightAt: () => (world && world.heightAt ? world.heightAt.bind(world) : null) });
     setView(params.get('cam') || savedView());
     const cd = o.countdown ?? 3;
     Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });
@@ -300,10 +333,16 @@ async function boot() {
     if (sOverride != null && role !== 'client') vs.forEach((v, i) => teleportVehicle(v, sOverride - Math.floor(i / 2) * 5, (i % 2 ? 1 : -1) * (i === 0 ? 0 : 1.6), o.v ?? 10));
     if (ui && ui.show) safe(() => ui.show('race'), 'ui.show(race)');
     if (ui && ui.setMapTrack && world && world.track) safe(() => {
+      if (world.mapPaths) {
+        const paths = world.mapPaths() || [];
+        const main = paths.find((p) => p.main) || paths[0];
+        if (main) { ui.setMapTrack(main.pts, paths.filter((p) => p !== main).map((p) => p.pts), { closed: !!(world.flags && world.flags.closed) }); return; }
+      }
       const L = world.track.length, pts = [];
       for (let s = 0; s <= L; s += 12) { const p = world.track.sampleAt(Math.min(s, L)).position; pts.push([p.x, p.z]); }
       ui.setMapTrack(pts);
     }, 'ui.setMapTrack');
+    lastLap = -1;
     mapTimer = 1;
     audioOnce('go0');
     for (const v of vs) { v.prevPos.copy(v.body.state.position); v.prevQuat.copy(v.body.state.quaternion); }
@@ -388,7 +427,7 @@ async function boot() {
     if (!netMod) { ui && ui.toast && ui.toast('Multiplayer unavailable'); return; }
     if (game.lobby) safe(() => game.lobby.close({ keepPeers: false }), 'lobby.close');
     ui.show('lobby');
-    const lobby = netMod.createLobby({ role, ui, name: role === 'host' ? 'Host' : 'Racer' });
+    const lobby = netMod.createLobby({ role, ui, name: role === 'host' ? 'Host' : 'Racer', track: selectedTrack() });
     game.lobby = lobby; game.state.mode = 'lobby';
     lobby.onReady((info) => { mp.info = info; if (role === 'host') hostReady(info); else clientReady(info); });
     lobby.start();
@@ -400,7 +439,7 @@ async function boot() {
     hostLaunch();
   }
   function createHostSync(info) {
-    const sync = netMod.createSync({ role: 'host', peers: info.peers, world });
+    const sync = netMod.createSync({ role: 'host', peers: info.peers, world: () => world });
     game.sync = sync;
     sync.onInput((slot, f) => {
       const d = netMod.decodeInputFrame ? netMod.decodeInputFrame(f) : null; if (!d) return;
@@ -417,17 +456,35 @@ async function boot() {
     for (const p of mp.players) trucks[p.slot] = p.slot === 0 ? game.state.truck : (mp.picks.get(p.slot) ?? p.slot);
     const nHum = mp.players.length;
     for (let i = 0; i < 10; i++) if (trucks[i] == null) trucks[i] = aiTruckIndex(Math.max(0, i - nHum), i + 1);
-    const cond = resolveConditions();
-    safe(() => mp.sync.setRaceConditions && mp.sync.setRaceConditions(cond), 'setRaceConditions');
-    const goAt = mp.sync.startCountdown(3, { players: mp.players, trucks, seed: 1, weather: cond.weather, time: cond.time });
-    startRace({ role: 'host', players: mp.players, trucks, localSlot: 0, countdown: 0, goAtLocal: goAt, conditions: cond });
-    game.state.countdown = Math.max(0, (goAt - performance.now()) / 1000);
+    const cond = { ...resolveConditions(), trackId: selectedTrack() };
+    const go = async () => {
+      safe(() => mp.sync.setRaceConditions && mp.sync.setRaceConditions(cond), 'setRaceConditions');
+      const extra = { players: mp.players, trucks, seed: 1, weather: cond.weather, time: cond.time, trackId: cond.trackId };
+      let goAt;
+      if (mp.sync.prepareRace) { const r = await mp.sync.prepareRace({ seconds: 3, timeoutMs: 20000, ...extra }); goAt = r.goAtLocal; }
+      else goAt = mp.sync.startCountdown(3, extra);
+      startRaceNow({ role: 'host', players: mp.players, trucks, localSlot: 0, countdown: 0, goAtLocal: goAt, conditions: cond });
+    };
+    if (cond.trackId === builtFor) { go(); return; }
+    // build the host's track first (overlay), then start the synchronised countdown
+    clearRace(); game.state.mode = 'loading';
+    const ov = createLoading(uiRoot); ov.set(0.02, 'building the ' + cond.trackId + ' track');
+    nextFrame().then(() => buildWorld(cond.trackId, (p, l) => ov.set(0.05 + p * 0.9, l || 'building the track'))).then(() => { applyConditions(cond, true); ov.done(); go(); }).catch((e) => { console.warn('[main] host track build failed', e && e.message); ov.done(); });
   }
   function clientReady(info) {
-    const sync = netMod.createSync({ role: 'client', peers: info.peers, world });
+    const sync = netMod.createSync({ role: 'client', peers: info.peers, world: () => world });
     mp.sync = sync; game.sync = sync; mp.localSlot = info.localSlot;
     mp.interp = netMod.createInterpolator();
     sync.onSnapshot((data) => { mp.interp.push(data); if (mp.predictor) mp.predictor.onSnapshot(data); });
+    if (sync.onRacePrepare) sync.onRacePrepare(async (pi) => {
+      applyConditions({ weather: pi.weather || 'clear', time: pi.time || 'day' }, true);
+      const want = normTrack(pi.trackId);
+      if (want && want !== builtFor) {
+        clearRace(); game.state.mode = 'loading';
+        const ov = createLoading(uiRoot); ov.set(0.02, 'building the ' + want + ' track');
+        try { await nextFrame(); await buildWorld(want, (p, l) => ov.set(0.05 + p * 0.9, l || 'building the track')); applyConditions(curCond, true); } finally { ov.done(); }
+      }
+    });
     sync.sendControl({ t: 'pick', truck: game.state.truck });
     sync.onControl((id, m) => {
       if (!m) return;
@@ -436,8 +493,7 @@ async function boot() {
         mp.players = m.players || [];
         mp.interp.clear();
         mp.predictor = null;
-        startRace({ role: 'client', players: mp.players, trucks: m.trucks, localSlot: mp.localSlot, countdown: 0, goAtLocal: goAt, conditions: m.weather || m.time ? { weather: m.weather || 'clear', time: m.time || 'day' } : null });
-        game.state.countdown = Math.max(0, (goAt - performance.now()) / 1000);
+        startRace({ role: 'client', trackId: m.trackId, players: mp.players, trucks: m.trucks, localSlot: mp.localSlot, countdown: 0, goAtLocal: goAt, conditions: m.weather || m.time ? { weather: m.weather || 'clear', time: m.time || 'day' } : null });
       } else if (m.t === 'result') {
         mp.results[m.place - 1] = m;
         if (m.slot === mp.localSlot) finishPlayer(m.time, m.place);
@@ -520,6 +576,7 @@ async function boot() {
         else if (cfg.role === 'host' && mp.sync) hostLaunch();
         else if (cfg.role === 'client') { ui.toast && ui.toast('Waiting for the host to restart…'); }
       },
+      onTrack: (id) => { const t = normTrack(id); if (t && game.lobby && game.lobby.setTrack) safe(() => game.lobby.setTrack(t), 'lobby.setTrack'); if (t && audio && audio.setTrack) safe(() => audio.setTrack(t), 'audio.setTrack'); },
       onWeather: (c) => { if (game.state.mode !== 'race') applyConditions({ weather: P.weather || c.weather, time: P.timeUrl ? P.time : c.time }, false); },
       onScreen: (name) => {
         if (name === 'garage') { ensurePreview(); previewShow(game.state.truck); ui.selectTruck && ui.selectTruck(game.state.truck); }
@@ -528,6 +585,8 @@ async function boot() {
     }), 'createUI');
     game.ui = ui;
     if (ui && ui.setTouchZones) safe(() => ui.setTouchZones(ZONES), 'ui.setTouchZones');
+    if (ui && ui.setTrackInfo && sceneMod && sceneMod.TRACKS) safe(() => ui.setTrackInfo(sceneMod.TRACKS), 'setTrackInfo');
+    if (ui && ui.setTrack && P.track) safe(() => ui.setTrack(normTrack(P.track) || 'country'), 'ui.setTrack');
     if (ui && ui.setAINames) safe(() => ui.setAINames(ROSTER), 'setAINames');
     if (ui && ui.setWeather && (P.weather || P.timeUrl)) safe(() => ui.setWeather({ weather: normWx(P.weather || (ui.getWeather() || {}).weather), time: P.timeUrl ? P.time : (ui.getWeather() || {}).time }), 'ui.setWeather');
     if (ui && game.state.offlineReady && ui.setOfflineReady) ui.setOfflineReady(true);
@@ -649,7 +708,9 @@ async function boot() {
       v.lastInp = inp;
       v.body.step(STEP, inp);
     }
-    for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) collideBodies(vs[i].body, vs[j].body);
+    // finished cars are ghosts: they park on the line without bumping anyone, and vanish after a few seconds (AI only)
+    for (let i = 0; i < vs.length; i++) for (let j = i + 1; j < vs.length; j++) if (!vs[i].finished && !vs[j].finished) collideBodies(vs[i].body, vs[j].body);
+    for (const v of vs) if (v.finished && v.kind === 'ai' && game.state.raceTime - v.finishTime > 5 && v.group.visible) v.group.visible = false;
     // finish
     for (const v of vs) {
       if (!v.finished && v.body.state.s >= TRACK_LENGTH - 3) {
@@ -721,7 +782,7 @@ async function boot() {
   }
 
   // live place: finished cars by finish time first, then by distance along the road
-  let rankTimer = 0;
+  let rankTimer = 0, lastLap = -1;
   function livePlace() {
     if (!playerV) return 0;
     const me = playerV; let place = 1;
@@ -746,6 +807,10 @@ async function boot() {
     rankTimer += dt; if (rankTimer < 0.25) return; rankTimer = 0;
     const m = game.state.mode;
     if (ui && ui.setRank && (m === 'race' || m === 'finish')) safe(() => ui.setRank(livePlace(), game.vehicles.length), 'ui.setRank');
+    if (ui && ui.setLap && LAPS > 1 && playerV && (m === 'race' || m === 'finish')) {
+      const lap = Math.min(LAPS, Math.floor(Math.max(0, playerV.body.state.s) / LAP_LENGTH) + 1);
+      if (lap !== lastLap) { lastLap = lap; safe(() => ui.setLap(lap, LAPS), 'ui.setLap'); }
+    }
   }
 
   function render(alpha, dt) {
@@ -907,7 +972,7 @@ async function boot() {
   if (P.menu === 'join' && ui) { openLobby('client'); return; }
   if (P.autostart || sc) {
     const sShort = sc ? sceneShortcutS(sc) : null;
-    startRace({ truck: P.truck % TRUCKS.length, ai: P.ai, s: P.s ?? sShort, v: P.v ?? (sShort != null ? 9 : 10), countdown: 0, headlight: P.headlight });
+    startRace({ trackId: normTrack(P.track) || 'country', truck: P.truck % TRUCKS.length, ai: P.ai, s: P.s ?? sShort, v: P.v ?? (sShort != null ? 9 : 10), countdown: 0, headlight: P.headlight });
   } else if (!ui) {
     game.state.mode = 'title'; showFallbackTitle();
   }

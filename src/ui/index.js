@@ -90,6 +90,36 @@ export function createUI(root, opts = {}) {
       ...list.map(([id, text]) => { const el = h('button', { class: 'sbd-chip', 'aria-label': text, onClick: () => { tryLock(); setWx({ [kind]: id }, true); } }, text); wxChips.push({ el, kind, id }); return el; }));
     return h('div', { class: `sbd-ply sbd-weather${compact ? ' compact' : ''}` }, row('weather', WEATHERS, 'Weather'), row('time', TIMES, 'Time'));
   }
+  // ---------- track chooser (title + garage), persisted ----------
+  const ICON = (inner) => `<svg viewBox="0 0 48 32" fill="none" stroke="#2a170a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  const TRACK_ICONS = {
+    country: ICON('<path d="M2 28 Q16 22 22 14 T46 6" stroke-width="5" opacity=".28"/><path d="M2 28 Q16 22 22 14 T46 6" stroke-dasharray="3 4"/><circle cx="38" cy="22" r="0"/><path d="M6 12 q5-9 10 0" /><circle cx="40" cy="22" r="4" fill="#f2c230"/>'),
+    village: ICON('<path d="M3 29h42"/><path d="M5 29V18l7-6 7 6v11"/><path d="M22 29V10l5-7 5 7v19"/><path d="M27 3v-2M25 9h4"/><path d="M34 29V20l5-5 5 5v9"/><path d="M10 29v-5h4v5" />'),
+    corn: ICON('<path d="M12 30V8"/><path d="M12 14q-7-2-8-8M12 18q7-2 8-8M12 24q-6-1-8-6"/><path d="M12 6q-3-4 0-5 3 1 0 5z" fill="#f2c230"/><path d="M34 30V10"/><path d="M34 16q-7-2-8-8M34 20q7-2 8-8M34 26q-6-1-8-6"/><path d="M34 8q-3-4 0-5 3 1 0 5z" fill="#f2c230"/><circle cx="23" cy="26" r="4.5" fill="#e07a1f"/>'),
+    circuit: ICON('<rect x="4" y="6" width="40" height="20" rx="10" stroke-width="5" opacity=".28"/><rect x="4" y="6" width="40" height="20" rx="10" stroke-dasharray="3 4"/><path d="M22 3v6M26 3v6" stroke-width="3"/><path d="M20 3h8v6h-8z" fill="#fff" opacity=".6" stroke-width="1.2"/>'),
+  };
+  let TRACKS_UI = [
+    { id: 'country', name: 'Country Road', short: 'Country', description: 'The classic long downhill dirt road. 3.2 km, one run.' },
+    { id: 'village', name: 'Hill Village', short: 'Village', description: 'Cobbled streets that split in two: pick your route.' },
+    { id: 'corn', name: 'Corn & Pumpkins', short: 'Corn', description: 'Narrow lanes between tall corn. Mind the crows.' },
+    { id: 'circuit', name: 'Speedway', short: 'Speedway', description: 'Flat oval, 3 laps. Paddle hard!' },
+  ];
+  let trk = 'country';
+  try { const v = localStorage.getItem('sbd-track'); if (v && ['country', 'village', 'corn', 'circuit'].includes(v)) trk = v; } catch (e) {}
+  const trkChips = [], trkDescs = [];
+  const trkInfo = () => TRACKS_UI.find((t) => t.id === trk) || TRACKS_UI[0];
+  function paintTrk() { for (const c of trkChips) c.el.classList.toggle('on', c.id === trk); for (const d of trkDescs) d.textContent = trkInfo().description; }
+  function setTrk(id, fire) {
+    if (!TRACKS_UI.some((t) => t.id === id)) return; trk = id; paintTrk();
+    try { localStorage.setItem('sbd-track', trk); } catch (e) {}
+    if (fire) cb('onTrack', trk);
+  }
+  function makeTracks(compact) {
+    const tiles = TRACKS_UI.map((t) => { const el = h('button', { class: 'sbd-trk', 'aria-label': t.name, title: t.name, onClick: () => { tryLock(); setTrk(t.id, true); } }, h('span', { class: 'ic', html: TRACK_ICONS[t.id] }), h('span', { class: 'nm' }, compact ? t.short : t.name)); trkChips.push({ el, id: t.id, t }); return el; });
+    const kids = [h('div', { class: 'sbd-trow' }, ...tiles)];
+    if (!compact) { const d = h('div', { class: 'sbd-tdesc' }, trkInfo().description); trkDescs.push(d); kids.push(d); }
+    return h('div', { class: `sbd-ply sbd-tracks${compact ? ' compact' : ''}` }, ...kids);
+  }
   const offlineMark = h('div', { class: 'sbd-offline' }, '\u2713 ready to race offline');
   mk('title', 'sbd-barn sbd-title-screen',
     h('div', { class: 'sbd-leftcol' },
@@ -97,7 +127,7 @@ export function createUI(root, opts = {}) {
         h('h1', { class: 'sbd-title' }, 'Soap Box', h('span', {}, 'DERBY')),
         h('div', { class: 'sbd-stripe' }),
         h('p', {}, 'Homemade racers · one big hill · 3.2 km of gravity')),
-      makeWeather(false)),
+      makeTracks(false), makeWeather(false)),
     h('div', { class: 'sbd-menu' },
       btn('Solo Race', 'primary', () => cb('onStartSolo'), null),
       btn('Host Family Race', '', () => cb('onHost'), 'up to 6 on one hotspot'),
@@ -127,7 +157,7 @@ export function createUI(root, opts = {}) {
   gHorn.addEventListener('click', () => { gHorn.classList.add('hit'); setTimeout(() => gHorn.classList.remove('hit'), 200); cb('onTestHonk', o.trucks[gi], gi); });
   mk('garage', 'sbd-barn sbd-garage',
     h('div', { class: 'sbd-head' }, h('h2', { class: 'sbd-title sbd-chalk', style: 'color:var(--chalk)' }, 'The Garage'),
-      btn('Back', 'small chalk', () => api.show('title'))),
+      makeTracks(true), btn('Back', 'small chalk', () => api.show('title'))),
     h('div', { class: 'sbd-garage-body' },
       btn('‹', 'sbd-arrow', () => api.selectTruck(gi - 1)),
       h('div', { class: 'sbd-preview' }, slot, h('div', { class: 'sbd-floor' }), gNum, gHorn),
@@ -194,6 +224,7 @@ export function createUI(root, opts = {}) {
     h('div', { class: 'g-hb', html: GLYPHS.hb }), h('div', { class: 'g-hl', html: GLYPHS.hl }), h('div', { class: 'g-gear', html: GLYPHS.gear }));
   const pegBtn = h('button', { class: 'sbd-peg', 'aria-label': 'Pause', html: peg, onClick: () => { api.show('pause'); cb('onPause'); } });
   const toast = h('div', { class: 'sbd-toast' });
+  const lapEl = h('div', { class: 'sbd-lap', 'aria-hidden': 'true' }, 'Lap 1/3');
   const rankEl = h('div', { class: 'sbd-rank', 'aria-hidden': 'true' }, h('b', {}, '-'), h('span', {}, '/-'));
   // horn: a visible, translucent bulb-horn button at the top-centre (also the H key)
   const hornBtn = h('button', { class: 'sbd-horn', 'aria-label': 'Honk', html: '<svg viewBox="0 0 64 40" width="100%" height="100%"><path d="M6 14h10l26-10v32L16 26H6z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><circle cx="52" cy="20" r="3" fill="currentColor"/><path d="M56 9q6 11 0 22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>' });
@@ -205,7 +236,7 @@ export function createUI(root, opts = {}) {
   viewBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); cb('onView'); });
   // race map: the whole road from above, start at the bottom and finish at the top; a dot per cart (yours ringed). M key or tap to hide/show.
   const mapCv = h('canvas', { class: 'sbd-map', 'aria-hidden': 'true' });
-  const map = { pts: null, minX: 0, maxX: 1, minZ: 0, maxZ: 1, cars: [], on: true };
+  const map = { branches: [], closed: false, pts: null, minX: 0, maxX: 1, minZ: 0, maxZ: 1, cars: [], on: true };
   try { map.on = localStorage.getItem('sbd-map') !== 'off'; } catch (e) {}
   function mapToggle() { map.on = !map.on; try { localStorage.setItem('sbd-map', map.on ? 'on' : 'off'); } catch (e) {} drawMap(); }
   mapCv.addEventListener('pointerdown', (e) => { e.preventDefault(); mapToggle(); });
@@ -222,12 +253,25 @@ export function createUI(root, opts = {}) {
     const ox = pad + ((cw - 2 * pad) - (map.maxX - map.minX) * k) / 2, oz = pad + ((ch - 2 * pad) - (map.maxZ - map.minZ) * k) / 2;
     const X = (x) => ox + (x - map.minX) * k, Y = (z) => oz + (z - map.minZ) * k; // downhill (-Z) points up the screen
     c.lineJoin = c.lineCap = 'round';
-    c.beginPath(); map.pts.forEach(([x, z], i) => (i ? c.lineTo(X(x), Y(z)) : c.moveTo(X(x), Y(z))));
-    c.strokeStyle = 'rgba(30,20,10,.55)'; c.lineWidth = 6; c.stroke();
+    const trace = (pts) => { c.beginPath(); pts.forEach(([x, z], i) => (i ? c.lineTo(X(x), Y(z)) : c.moveTo(X(x), Y(z)))); if (pts === map.pts && map.closed) c.closePath(); };
+    // branches (alternative streets): thinner and dashed, under the main road
+    for (const br of map.branches) {
+      trace(br); c.setLineDash([]); c.strokeStyle = 'rgba(30,20,10,.45)'; c.lineWidth = 3.6; c.stroke();
+      c.setLineDash([4, 3]); c.strokeStyle = 'rgba(245,232,205,.8)'; c.lineWidth = 1.5; c.stroke(); c.setLineDash([]);
+    }
+    trace(map.pts); c.strokeStyle = 'rgba(30,20,10,.55)'; c.lineWidth = 6; c.stroke();
     c.strokeStyle = 'rgba(245,232,205,.9)'; c.lineWidth = 2.5; c.stroke();
-    const [sx0, sz0] = map.pts[0], [fx, fz] = map.pts[map.pts.length - 1];
-    c.fillStyle = '#7fd36b'; c.fillRect(X(sx0) - 4, Y(sz0) - 2, 8, 4);
-    for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? '#111' : '#fff'; c.fillRect(X(fx) - 6 + i * 3, Y(fz) - 2, 3, 4); }
+    if (map.closed) { // loop: chequered start/finish line across the track at the first point, plus a direction arrow
+      const [x0, z0] = map.pts[0], [x1, z1] = map.pts[Math.min(map.pts.length - 1, 3)];
+      let dx = X(x1) - X(x0), dy = Y(z1) - Y(z0); const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+      const nx = -dy, ny = dx, px = X(x0), py = Y(z0);
+      for (let i = -3; i < 3; i++) { c.fillStyle = (i & 1) ? '#111' : '#fff'; c.fillRect(px + nx * (i * 1.6) - 1.6, py + ny * (i * 1.6) - 1.6, 3.2, 3.2); }
+      c.fillStyle = '#7fd36b'; c.beginPath(); const ax = px + dx * 11, ay = py + dy * 11; c.moveTo(ax + dx * 4, ay + dy * 4); c.lineTo(ax + nx * 3, ay + ny * 3); c.lineTo(ax - nx * 3, ay - ny * 3); c.fill();
+    } else {
+      const [sx0, sz0] = map.pts[0], [fx, fz] = map.pts[map.pts.length - 1];
+      c.fillStyle = '#7fd36b'; c.fillRect(X(sx0) - 4, Y(sz0) - 2, 8, 4);
+      for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? '#111' : '#fff'; c.fillRect(X(fx) - 6 + i * 3, Y(fz) - 2, 3, 4); }
+    }
     const cars = map.cars.slice().sort((a, b) => (a.me ? 1 : 0) - (b.me ? 1 : 0)); // draw yours last (on top)
     for (const car of cars) {
       const r = car.me ? 5 : 3.4;
@@ -241,8 +285,8 @@ export function createUI(root, opts = {}) {
   const padL = padBox('l'), padR = padBox('r');
   const isTouchDev = typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0);
   if (!isTouchDev) { padL.style.display = padR.style.display = 'none'; }
-  mk('race', '', glyphs, pegBtn, toast, rankEl, hornBtn, viewBtn, mapCv, padL, padR);
-  paintWx();
+  mk('race', '', glyphs, pegBtn, toast, rankEl, lapEl, hornBtn, viewBtn, mapCv, padL, padR);
+  paintWx(); paintTrk();
 
   const pauseScr = mk('pause', 'sbd-center', h('div', { class: 'sbd-ply sbd-pause' }, h('h2', {}, 'Paused'),
     btn('Keep rolling', 'green', () => { api.show('race'); cb('onResume'); }),
@@ -304,7 +348,7 @@ export function createUI(root, opts = {}) {
       screens.race.classList.toggle('on', name === 'race' || name === 'pause');
       el.style.pointerEvents = 'none';
       if (name === 'race' && leaving !== 'pause') {
-        raceT0 = performance.now(); stroke = false; rankEl.classList.remove('on');
+        raceT0 = performance.now(); stroke = false; rankEl.classList.remove('on'); lapEl.classList.remove('on');
         clearTimeout(gTimer); clearTimeout(idleTimer); clearTimeout(safetyTimer); glyphs.classList.remove('faint'); glyphOn();
         safetyTimer = setTimeout(() => { glyphOff(); armIdle(); }, 6000); // if main never calls raceStarted()
         armIdle();
@@ -390,15 +434,39 @@ export function createUI(root, opts = {}) {
     flashPaddle(side) {
       const el = side === 'L' ? padL : padR; el.classList.add('hit'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('hit'), 140);
     },
-    /** Race map. pts: [[x, z], ...] along the road (start first). Call once per race. */
-    setMapTrack(pts) {
-      map.pts = pts && pts.length > 1 ? pts : null; if (!map.pts) return;
-      map.minX = Math.min(...pts.map((p) => p[0])); map.maxX = Math.max(...pts.map((p) => p[0]));
-      map.minZ = Math.min(...pts.map((p) => p[1])); map.maxZ = Math.max(...pts.map((p) => p[1]));
+    /** Race map. mainPts: [[x, z], ...] along the main road (start first). branches: alternative roads, each [[x,z],..]
+     *  or {pts}; drawn thinner/dashed. opts.closed (or first~=last point) draws a loop with a chequered start/finish
+     *  marker; point-to-point tracks keep start-at-bottom / finish-at-top. Accepts world.mapPaths() as the 1st arg too. */
+    setMapTrack(mainPts, branches = [], opts = {}) {
+      if (Array.isArray(mainPts) && mainPts.length && mainPts[0] && mainPts[0].pts) { // world.mapPaths() form
+        const paths = mainPts; const m = paths.find((q) => q.main) || paths[0]; branches = paths.filter((q) => q !== m); mainPts = m.pts;
+      }
+      const pts = mainPts; map.pts = pts && pts.length > 1 ? pts : null; if (!map.pts) return;
+      map.branches = (branches || []).map((b) => (b && b.pts ? b.pts : b)).filter((b) => b && b.length > 1);
+      const all = [pts, ...map.branches].flat();
+      map.minX = Math.min(...all.map((p) => p[0])); map.maxX = Math.max(...all.map((p) => p[0]));
+      map.minZ = Math.min(...all.map((p) => p[1])); map.maxZ = Math.max(...all.map((p) => p[1]));
+      const f = pts[0], l = pts[pts.length - 1], ext = Math.max(map.maxX - map.minX, map.maxZ - map.minZ, 1);
+      map.closed = opts.closed != null ? !!opts.closed : Math.hypot(f[0] - l[0], f[1] - l[1]) < ext * 0.06;
       drawMap();
     },
     /** cars: [{ x, z, color: css, me: bool }] — call ~10x a second. */
     setMapCars(cars) { map.cars = cars || []; drawMap(); },
+    /** Chalk "Lap 2/3" under the rank; hidden when laps <= 1 (or lap falsy). */
+    setLap(lap, laps) {
+      if (!lap || !laps || laps <= 1) { lapEl.classList.remove('on'); return; }
+      lapEl.textContent = `Lap ${Math.min(lap, laps)}/${laps}`; lapEl.classList.add('on');
+    },
+    /** Track chooser: ids 'country'|'village'|'corn'|'circuit'. */
+    getTrack() { return trk; },
+    setTrack(id, fire = false) { setTrk(id, fire); },
+    /** Optional: override names/descriptions from the scene's TRACKS ([{id,name,description,laps}]). */
+    setTrackInfo(list) {
+      if (!Array.isArray(list)) return;
+      TRACKS_UI = TRACKS_UI.map((t) => { const q = list.find((x) => x.id === t.id); return q ? { ...t, name: q.name || t.name, description: q.description || t.description } : t; });
+      for (const c of trkChips) { const t = TRACKS_UI.find((x) => x.id === c.id); c.el.setAttribute('title', t.name); c.el.setAttribute('aria-label', t.name); }
+      paintTrk();
+    },
     setRank(place, total) {
       if (!place) { rankEl.classList.remove('on'); return; }
       rankEl.firstChild.textContent = String(place); rankEl.lastChild.textContent = `/${total || ''}`;

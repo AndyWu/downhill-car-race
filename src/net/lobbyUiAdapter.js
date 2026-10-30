@@ -13,7 +13,7 @@ export function isAgent4UI(ui) { return !!(ui && typeof ui.showQR === 'function'
 
 export function createUiAdapter(ui, { name = 'Player' } = {}) {
   const panel = createLobbyPanel();
-  let roleSet = false, lastKind = null, placed = false;
+  let roleSet = false, lastKind = null, placed = false, lastTrack = null;
 
   function placeBar() {
     if (placed && panel.bar.isConnected) return;
@@ -26,6 +26,7 @@ export function createUiAdapter(ui, { name = 'Player' } = {}) {
   function render(state, actions) {
     if (!roleSet) { ui.setLobbyRole?.(state.role); roleSet = true; }
     ui.setLobbySteps?.(state.steps);
+    if (state.track && state.track.id !== lastTrack) { lastTrack = state.track.id; ui.setLobbyTrack?.(state.track); }
     if (state.phase === 'closed') { ui.clearQR?.(); panel.bar.remove(); placed = false; lastKind = null; return; }
 
     const c = panel.center(state, actions);

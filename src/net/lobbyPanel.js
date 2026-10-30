@@ -11,6 +11,7 @@ const CSS = `
 .sbd-net-actions button{font:inherit;font-weight:700;font-size:17px;border:0;border-radius:10px;padding:10px 16px;min-height:44px;background:#b8401d;color:#fff;cursor:pointer}
 .sbd-net-actions button.sec{background:rgba(0,0,0,.12);color:inherit}
 .sbd-net-actions button.link{background:none;color:inherit;text-decoration:underline;font-weight:500;padding:6px 8px;min-height:36px;opacity:.85}
+.sbd-net-actions .note.track{font-weight:700;opacity:1}
 .sbd-net-actions .note{margin:0;font-size:14px;opacity:.85;line-height:1.3}
 .sbd-net-actions textarea{width:100%;min-height:52px;font:12px ui-monospace,monospace;border-radius:8px;border:1px solid rgba(0,0,0,.3);padding:6px;box-sizing:border-box;background:#fffdf7;color:#222}
 .sbd-net-actions .paste{display:flex;flex-direction:column;gap:6px;width:100%}
@@ -93,6 +94,7 @@ export function createLobbyPanel() {
       } else allowPaste = false;
     } else allowPaste = false;
     if (st.notice) kids.unshift(p(st.notice));
+    if (st.track) { const tl = p(`Track: ${st.track.name}`); tl.className = 'note track'; tl.dataset.trackId = st.track.id; kids.unshift(tl); }
 
     const nodes = [];
     if (row.childNodes.length) nodes.push(row);

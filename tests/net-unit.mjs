@@ -6,7 +6,7 @@ import { encodeInputFrame, decodeInputFrame, packInputPacket, unpackInputPacket,
 import { createPredictor } from '../src/net/predictor.js';
 import { createSync, normalizeConditions } from '../src/net/sync.js';
 import { strokeCount, SNAP_EVENTS } from '../src/net/protocol.js';
-import { createFakeWorld, carAt } from './net-fake-world.js';
+import { createFakeWorld, carAt, createFakeCircuit, createFakeVillage, carOnTrack } from './net-fake-world.js';
 import { createInterpolator } from '../src/net/interpolator.js';
 import { createLicensing, MAX_SEATS } from '../src/net/licensing.js';
 
@@ -220,8 +220,8 @@ await t('host honk via sync: merged frames keep the honk, starved repeats never 
   let honks = 0;
   for (let k = 0; k < 60; k++) { const r = host.takeInput(1); if (r && decodeInputFrame(r.frame).honk) honks++; }
   assert.equal(honks, 1, 'exactly one honk applied');
-  assert.deepEqual(host.setRaceConditions({ weather: 'Stormy', time: 'night' }), { weather: 'storm', time: 'night' });
-  assert.deepEqual(normalizeConditions({ weather: 'lava', time: 'noon' }), { weather: 'clear', time: 'day' });
+  assert.deepEqual(host.setRaceConditions({ weather: 'Stormy', time: 'night' }), { weather: 'storm', time: 'night', trackId: 'country' });
+  assert.deepEqual(normalizeConditions({ weather: 'lava', time: 'noon' }), { weather: 'clear', time: 'day', trackId: 'country' });
   host.close(); client.close();
 });
 
@@ -244,6 +244,81 @@ await t('honk events: repeated in 3 snapshots, de-duplicated on the client, surv
   const h = [...honked.values()].reduce((a, b) => a + b, 0), g = [...heard.values()].reduce((a, b) => a + b, 0);
   console.log(`        ${h} honks sent across 10 cars, ${g} heard by the client at 30% snapshot loss (no duplicates)`);
   assert.ok(g <= h && g >= h * 0.93, `heard ${g} of ${h}`); // all 3 copies lost: 0.3^3 ≈ 2.7%
+});
+
+await t('tracks: circuit (cars on different laps side by side) and village side streets stay compact and exact', () => {
+  const check = (world, mk, label) => {
+    const enc = createSnapshotEncoder({ world, keyframeEvery: 1000 }), dec = createSnapshotDecoder({ world });
+    dec.decode(enc.encode(mkSnap(0, mk(0)))); // keyframe (FULL)
+    const cars = mk(0.8); // everyone moved 0.8 m
+    const buf = enc.encode(mkSnap(2, cars));
+    const out = dec.decode(buf).data;
+    let worst = 0, worstS = 0;
+    for (let i = 0; i < cars.length; i++) {
+      const b = SNAP_HEADER + i * SNAP_STRIDE, c = cars[i];
+      worst = Math.max(worst, Math.hypot(out[b + 1] - c[1], out[b + 2] - c[2], out[b + 3] - c[3]));
+      worstS = Math.max(worstS, Math.abs(out[b + 11] - c[11]));
+    }
+    const perCar = (buf.byteLength - (new Uint8Array(buf)[2] & 2 ? 25 : 9)) / cars.length;
+    console.log(`        ${label}: ${perCar.toFixed(1)} B/car, worst pos ${(worst * 100).toFixed(1)} cm, worst s ${(worstS * 100).toFixed(1)} cm; full/compact/branch ${enc.stats.full - cars.length}/${enc.stats.compact}/${enc.stats.branch || 0}`);
+    return { worst, worstS, enc };
+  };
+  // circuit: pairs of cars at the same spot on laps 1, 2 and 3 → s must keep them apart
+  const circ = createFakeCircuit();
+  const L = circ.track.lapLength;
+  const cc = (d) => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((id) => carOnTrack(circ, id, 200 + d + (id % 3) * L + Math.floor(id / 3) * 4, { lateral: (id % 2 ? 1.5 : -1.5) }));
+  const r1 = check(circ, cc, 'circuit, 10 cars on laps 1-3 overlapping in space');
+  assert.ok(r1.worst < 0.15 && r1.worstS < 0.06 && r1.enc.stats.compact === 10, 'circuit compact & lap-exact');
+  // village: cars on main street, market square, back alley and riverside lane
+  const vil = createFakeVillage();
+  const vc = (w) => (d) => [
+    carOnTrack(w, 0, 700 + d, {}), carOnTrack(w, 1, 700 + d, { choice: { market: 1 } }), carOnTrack(w, 2, 705 + d, { choice: { market: 2 } }),
+    carOnTrack(w, 3, 760 + d, { choice: { market: 1 }, lateral: 2 }), carOnTrack(w, 4, 1800 + d, { choice: { river: 1 } }), carOnTrack(w, 5, 1810 + d, {}),
+    carOnTrack(w, 6, 300 + d, {}), carOnTrack(w, 7, 2500 + d, { lateral: -3 }), carOnTrack(w, 8, 650 + d, { choice: { market: 2 } }), carOnTrack(w, 9, 1900 + d, { choice: { river: 1 } }),
+  ];
+  const r2 = check(vil, vc(vil), 'village, 6 of 10 cars on side streets');
+  assert.ok(r2.worst < 0.15 && r2.enc.stats.branch === 6 && r2.enc.stats.compact === 10, 'branch records used');
+  // a world whose sampleAt ignores the route choice → cars on side streets fall back to FULL, never wrong
+  const plain = createFakeVillage({ honourChoice: false });
+  const r3 = check(plain, vc(vil), 'village without route support (fallback)');
+  assert.ok(r3.worst < 0.15 && r3.enc.stats.full - 10 >= 4, 'side-street cars fall back to FULL (cars near the split ends still fit the main road within tolerance)');
+});
+
+await t('race-start handshake: prepare → clients rebuild their world → ready → countdown (and timeout)', async () => {
+  // fake ctrl link: host has 2 client peers; messages are delivered asynchronously
+  const mkPair = (id) => {
+    const h = { id, ctrl: { readyState: 'open' }, fast: { readyState: 'open' }, ls: {}, on(ev, cb) { (h.ls[ev] ??= []).push(cb); return () => {}; }, sendFast() {}, sendCtrl(m) { setTimeout(() => c.ls.ctrl?.forEach((cb) => cb(JSON.parse(JSON.stringify(m)))), 5); } };
+    const c = { id: 0, ctrl: { readyState: 'open' }, fast: { readyState: 'open' }, ls: {}, on(ev, cb) { (c.ls[ev] ??= []).push(cb); return () => {}; }, sendFast() {}, sendCtrl(m) { setTimeout(() => h.ls.ctrl?.forEach((cb) => cb(JSON.parse(JSON.stringify(m)))), 5); } };
+    return { h, c };
+  };
+  const p1 = mkPair(1), p2 = mkPair(2);
+  const host = createSync({ role: 'host', peers: [p1.h, p2.h] });
+  const c1 = createSync({ role: 'client', peers: [p1.c] }), c2 = createSync({ role: 'client', peers: [p2.c] });
+  try {
+  const log = [];
+  c1.onRacePrepare(async (info) => { log.push(['c1 prepare', info.trackId, info.weather]); await new Promise((r) => setTimeout(r, 120)); log.push(['c1 built']); });
+  c2.onRacePrepare(async (info) => { log.push(['c2 prepare', info.trackId]); await new Promise((r) => setTimeout(r, 40)); log.push(['c2 built']); });
+  let started = [];
+  c1.onRaceStart((r) => started.push(['c1', r.trackId, r.weather, r.time])); c2.onRaceStart((r) => started.push(['c2', r.trackId]));
+  const progress = []; host.onPrepareProgress((st) => progress.push(st.ready.length));
+  host.setRaceConditions({ weather: 'snow', time: 'night', trackId: 'circuit' });
+  const t0 = Date.now();
+  const res = await host.prepareRace({ seconds: 3, players: [], trucks: [], timeoutMs: 2000 });
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(res.timedOut, []); assert.deepEqual(res.ready.sort(), [1, 2]);
+  assert.equal(res.trackId, 'circuit');
+  assert.ok(Date.now() - t0 >= 120, 'host waited for the slowest client');
+  assert.deepEqual(progress, [1, 2]);
+  assert.deepEqual(log.map((x) => x[0]), ['c1 prepare', 'c2 prepare', 'c2 built', 'c1 built']);
+  assert.deepEqual(started.sort(), [['c1', 'circuit', 'snow', 'night'], ['c2', 'circuit']]);
+  // a client that never finishes → host starts after the timeout anyway
+  c1.onRacePrepare(() => new Promise(() => {}));
+  const t1 = Date.now();
+  const res2 = await host.prepareRace({ trackId: 'village', timeoutMs: 300 });
+  assert.deepEqual(res2.timedOut, [1]); assert.ok(Date.now() - t1 >= 290);
+  assert.equal(normalizeConditions({ trackId: 'moon' }).trackId, 'country');
+  console.log(`        all ready after ${res.ready.length}/2 acks (waited for the slowest rebuild); timeout path started without client 1 after 300 ms`);
+  } finally { host.close(); c1.close(); c2.close(); }
 });
 
 console.log('Interpolator');

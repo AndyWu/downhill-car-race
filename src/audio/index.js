@@ -16,6 +16,9 @@ const SURF = {
   sand:   { f: 1900, q: 0.7, g: 0.2, rate: 0.5, gf: 800, gq: 0.6, hiss: 0.6 },
   mud:    { f: 260,  q: 1.8, g: 0.14, rate: 1.2, gf: 320,  gq: 3.0, hiss: 0.0 },
   water:  { f: 1800, q: 0.6, g: 0.16, rate: 4.0, gf: 2600, gq: 0.7, hiss: 0.5 },
+  cobble: { f: 1500, q: 0.9, g: 0.16, rate: 5.5, gf: 2200, gq: 1.4, hiss: 0.1 },
+  asphalt:{ f: 1100, q: 0.6, g: 0.14, rate: 0.5, gf: 1800, gq: 0.6, hiss: 0.3 },
+  kerb:   { f: 700,  q: 1.2, g: 0.18, rate: 9.0, gf: 900,  gq: 2.0, hiss: 0.0 },
   grass:  { f: 1200, q: 0.5, g: 0.06, rate: 1.0, gf: 2000, gq: 0.6, hiss: 0.4 },
 };
 
@@ -137,6 +140,11 @@ export function createAudio(options = {}) {
     n.gustSrc = loopSrc(noiseBuf); n.gustBP = filt('bandpass', 380, 0.9); n.gustGain = gain(0);
     n.gustMod = gain(0.6); n.gustSrc.connect(n.gustBP); n.gustBP.connect(n.gustMod); n.gustMod.connect(n.gustGain); n.gustGain.connect(bus);
     lfo(0.13, 400, n.gustBP.frequency); lfo(0.21, 0.4, n.gustMod.gain); // gusts: slow amplitude swell
+    // track ambience: corn rustle bed, tyre squeal (asphalt)
+    n.cornSrc = loopSrc(noiseBuf); n.cornBP = filt('bandpass', 3200, 0.7); n.cornGain = gain(0); n.cornMod = gain(0.7);
+    n.cornSrc.connect(n.cornBP); n.cornBP.connect(n.cornMod); n.cornMod.connect(n.cornGain); n.cornGain.connect(n.amb); lfo(0.4, 0.3, n.cornMod.gain);
+    n.sqSrc = loopSrc(noiseBuf); n.sqBP = filt('bandpass', 2300, 16); n.sqGain = gain(0);
+    n.sqSrc.connect(n.sqBP); n.sqBP.connect(n.sqGain); n.sqGain.connect(bus); lfo(23, 600, n.sqBP.frequency);
     // crowd bed near the finish (loop, gain driven by finishDist)
     const cr = play('cheer', { vol: 0, loop: true }); n.crowd = cr && cr.g;
     ready = true;
@@ -247,6 +255,32 @@ export function createAudio(options = {}) {
     if (Math.random() < 1 - Math.exp(-rate * dt)) fn();
   };
 
+  // ---- per-track ambience ----
+  let trackId = 'country';
+  function farPan(x, y, z, life = 3500) { const p = panner(x, y, z); const lp = filt('lowpass', 3200, 0.6); lp.connect(p); p.connect(n.amb); setTimeout(() => { try { lp.disconnect(); p.disconnect(); } catch (e) {} }, life); return lp; }
+  function churchBell() {
+    const d = farPan(rnd(-90, 90), 14, rnd(-140, -80), 9000), f0 = [196, 233, 261][(Math.random() * 3) | 0], strikes = 1 + ((Math.random() * 4) | 0);
+    for (let k = 0; k < strikes; k++) [[0.5, 4], [1, 3.4], [1.19, 2.8], [1.5, 2.4], [2, 1.8], [2.5, 1.4], [3, 1.0], [4.1, 0.7]].forEach(([m, t60], i) => tone({ f: f0 * m * 2, a: 0.003, d: t60, vol: 0.2 / (1 + i * 0.6), dest: d, when: k * 1.15 }));
+  }
+  function chatter() {
+    const d = farPan(rnd(-70, 70), 1.7, rnd(-60, -25), 3000), g = gain(0.7); g.connect(d);
+    for (let v = 0; v < 2; v++) voice({ type: 'sawtooth', path: [[0, rnd(110, 130)], [0.6, rnd(130, 190)], [1.3, rnd(105, 150)]], dur: 1.3, vol: 0.05, a: 0.1, rel: 0.2, formants: [[500 + v * 80, 4, 1], [1500, 5, 0.6], [2500, 6, 0.3]], am: [rnd(4, 6.5), 0.9], dest: g, when: v * 0.25 });
+  }
+  function dogBark() {
+    const d = farPan(rnd(-100, 100), 1, rnd(-120, -40), 2500), n2 = 2 + ((Math.random() * 2) | 0);
+    for (let i = 0; i < n2; i++) voice({ type: 'sawtooth', path: [[0, 520], [0.09, 340]], dur: 0.12, vol: 0.3, a: 0.008, rel: 0.05, formants: [[700, 6, 1], [1400, 6, 0.5], [2600, 6, 0.2]], dest: d, when: i * 0.24 });
+  }
+  function crow() {
+    const d = farPan(rnd(-80, 80), rnd(10, 30), rnd(-90, -20), 3000), n2 = 2 + ((Math.random() * 3) | 0);
+    for (let i = 0; i < n2; i++) voice({ type: 'sawtooth', path: [[0, 780], [0.2, 520]], dur: 0.24, vol: 0.2, a: 0.02, rel: 0.06, formants: [[1100, 6, 1], [2200, 6, 0.5]], am: [65, 0.5], dest: d, when: i * 0.36 });
+  }
+  function tannoy() {
+    const d = farPan(rnd(-1, 1) > 0 ? 60 : -60, 6, -30, 4000);
+    tone({ f: 880, type: 'triangle', d: 0.5, vol: 0.12, dest: d }); tone({ f: 659, type: 'triangle', d: 0.7, vol: 0.12, dest: d, when: 0.4 });
+    const bp = gain(1); const f = filt('bandpass', 1700, 1.2); bp.connect(f); f.connect(d);
+    voice({ type: 'sawtooth', path: [[0, 115], [0.5, 135], [1.1, 112], [1.6, 128]], dur: 1.6, vol: 0.12, a: 0.05, rel: 0.2, formants: [[550, 5, 1], [1600, 6, 0.8], [2500, 6, 0.4]], am: [5.5, 0.8], dest: bp, when: 1.0 });
+  }
+
   const WEATHER = {
     clear: { rain: 0, gust: 0, ambLP: 20000, amb: 1, bird: 1 },
     fog:   { rain: 0, gust: 0, ambLP: 4500, amb: 0.8, bird: 0.35 },
@@ -343,7 +377,7 @@ export function createAudio(options = {}) {
       if (contacts == null) contacts = 4;
       const ground = clamp(contacts / 4, 0, 1);
       const surfName = (typeof p.surface === 'object' && p.surface ? p.surface.type : p.surface) || 'dirt';
-      const S = SURF[surfName] || SURF.dirt;
+      const S = SURF[surfName] || (surfName === 'cobbles' ? SURF.cobble : surfName === 'tarmac' ? SURF.asphalt : SURF.dirt);
       const bumps = clamp(p.bumps ?? (p.surface && p.surface.bump) ?? 0.2, 0, 1);
       const rough = clamp(0.15 + bumps, 0, 1.2);
       const dusk = clamp(p.dusk ?? 0, 0, 1);
@@ -374,7 +408,7 @@ export function createAudio(options = {}) {
       n.hissGain.gain.setTargetAtTime(S.hiss * 0.1 * sp * ground, t, tc);
       if (ground > 0.1 && speed > 0.8) {
         const rate = S.rate * speed * ground * 0.8, v = 0.55 * Math.min(1, 0.3 + sp);
-        const GR = { dirt: ['dirt', 1, 0], gravel: ['gravel', 1, 0], rock: ['knock', 1.35, 0], sand: ['dirt', 0.6, 800], grass: ['dirt', 0.8, 1800], mud: ['mud', 0.9, 0], water: ['drip', 1, 0] }[surfName] || ['dirt', 1, 0];
+        const GR = { dirt: ['dirt', 1, 0], gravel: ['gravel', 1, 0], rock: ['knock', 1.35, 0], sand: ['dirt', 0.6, 800], grass: ['dirt', 0.8, 1800], mud: ['mud', 0.9, 0], water: ['drip', 1, 0], cobble: ['knock', 1.9, 2600], cobbles: ['knock', 1.9, 2600], kerb: ['plank', 1.3, 2000], asphalt: ['dirt', 1.1, 2200], tarmac: ['dirt', 1.1, 2200] }[surfName] || ['dirt', 1, 0];
         poisson('grain', dt, rate, () => play(GR[0], { rate: GR[1] * rnd(0.8, 1.25) * (0.85 + sp * 0.3), vol: v * rnd(0.4, 1) * (GR[0] === 'mud' ? 0.42 : GR[0] === 'knock' ? 0.3 : GR[0] === 'drip' ? 0.7 : 0.7), lp: GR[2] }));
         if (surfName === 'rock' || surfName === 'gravel') poisson('ping', dt, 0.2 * speed * bumps, () => metalClick(0.05));
       }
@@ -418,11 +452,28 @@ export function createAudio(options = {}) {
       n.gustGain.gain.setTargetAtTime(0.1 * W.gust, t, 0.8);
       if (W.rain > 0) poisson('patter', dt, 26 * W.rain, () => play('drip', { vol: 0.07 * W.rain, rate: rnd(1.4, 2.6), lp: 5000 }));
 
+      // per-track ambience
+      const slip = clamp(p.slip ?? (Math.abs(p.steer || 0) * clamp(speed / 12, 0, 1)), 0, 1);
+      const asphalt = surfName === 'asphalt' || surfName === 'tarmac';
+      n.sqGain.gain.setTargetAtTime(asphalt && ground > 0.5 ? 0.11 * Math.pow(slip, 1.5) * (speed > 3 ? 1 : 0) : 0, t, 0.05);
+      n.sqBP.frequency.setTargetAtTime(1900 + speed * 25, t, 0.2);
+      n.cornGain.gain.setTargetAtTime(trackId === 'corn' ? (0.05 + 0.1 * clamp(sp, 0, 1)) : 0, t, 0.6);
+      if (trackId === 'village') {
+        poisson('bell', dt, 1 / 70, churchBell); poisson('chat', dt, 0.12 * duck, chatter); poisson('dog', dt, 0.03, dogBark);
+      } else if (trackId === 'corn') {
+        poisson('crow', dt, 0.14 * duck * (W.bird > 0.05 ? 1 : 0.3), crow); n.breezeGain.gain.setTargetAtTime(0.18 * duck + 0.05 * W.gust, t, 0.5);
+      } else if (trackId === 'circuit') {
+        poisson('pa', dt, 1 / 25, tannoy);
+      }
+      let crowdNear = p.crowd;
+      if (crowdNear == null && trackId === 'circuit' && p.s != null) { const L = p.lapLength || 1072.7, lp = ((p.s % L) + L) % L, dd = Math.min(lp, L - lp); crowdNear = clamp(1 - dd / 140, 0, 1); }
+      state.crowdNear = crowdNear || 0;
+
       // crowd swell near the finish arch (finishDist in metres) + cowbell when passing an opponent
       if (n.crowd) {
         const fd = p.finishDist;
         const target = fd == null ? 0 : clamp(1 - fd / 260, 0, 1) ** 1.5 * 0.4;
-        n.crowd.gain.setTargetAtTime(target, t, 0.6);
+        n.crowd.gain.setTargetAtTime(Math.max(target, state.crowdNear * state.crowdNear * 0.38), t, 0.6);
       }
       let place = p.place;
       if (place == null && p.s != null && p.others && p.others.some((o) => o.s != null)) place = 1 + p.others.filter((o) => o.s > p.s).length;
@@ -466,6 +517,12 @@ export function createAudio(options = {}) {
       setTimeout(() => { try { out.disconnect(); panNode && panNode.disconnect(); } catch (e) {} }, 3000);
     },
     hornIds: Object.keys(HORNS),
+    /** 'country'|'village'|'corn'|'circuit': switches ambience (village bell/chatter/dogs, corn crows/rustle, circuit crowd/PA/squeal). */
+    setTrack(id) { trackId = ['village', 'corn', 'circuit'].includes(id) ? id : 'country'; },
+    get track() { return trackId; },
+    /** Fire ambience one-shots on demand: 'bell'|'bark'|'caw'|'tannoy'|'chatter'. */
+    ambience(name) { if (!ready) return; ({ bell: churchBell, bark: dogBark, caw: crow, tannoy, chatter })[name]?.(); },
+    hornIds2: undefined,
     /** 'clear'|'fog'|'snow'|'rain'|'storm' */
     setWeather(name) { W = WEATHER[name] || WEATHER.clear; weatherName = WEATHER[name] ? name : 'clear'; },
     get weather() { return weatherName; },

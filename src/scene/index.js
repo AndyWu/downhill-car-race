@@ -8,11 +8,19 @@ import { buildGround } from './ground.js';
 import { buildScenery } from './scenery.js';
 import { planFarms, buildFarm } from './farms.js';
 import { clamp, lerp } from './util.js';
+import { createTrackWorld } from './tracks/world2.js';
 
 export const TRACK_LENGTH = TL;
+export const TRACKS = [
+  { id: 'country', name: 'Country Road', description: 'A long downhill dirt road through farms and fields: puddles, mud, streams and a few tight switchbacks.', laps: 1, lapLength: TL, length: TL },
+  { id: 'village', name: 'Hill Village', description: 'Gentle cobbled streets through a hill village. Three times the road splits: market square, riverside lane or a narrow back alley.', laps: 1, lapLength: TL, length: TL },
+  { id: 'corn', name: 'Corn & Pumpkins', description: 'Very narrow dirt lanes between tall corn, past pumpkin patches, hay bales, scarecrows and flocks of crows.', laps: 1, lapLength: TL, length: TL },
+  { id: 'circuit', name: 'Speedway', description: 'A flat 1.07 km loop with kerbs, tyre walls and grandstands. Three laps - paddle hard.', laps: 3, lapLength: TL / 3, length: TL },
+];
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-export async function createWorld(scene, { seed = 1, renderer, materials, onProgress } = {}) {
+export async function createWorld(scene, { seed = 1, trackId = 'country', renderer, materials, onProgress } = {}) {
+  if (trackId && trackId !== 'country' && TRACKS.some((t) => t.id === trackId)) return createTrackWorld(scene, { trackId, seed, renderer, materials, onProgress });
   const progress = (p, label) => { try { onProgress && onProgress(p, label); } catch (e) { /* ignore */ } };
   progress(0.02, 'surveying the road');
   const track = buildTrack(seed, TRACK_LENGTH);
@@ -151,7 +159,9 @@ export async function createWorld(scene, { seed = 1, renderer, materials, onProg
 
   return {
     landmarks,
-    track: { length: TRACK_LENGTH, sampleAt: track.sampleAt, project: track.project },
+    trackId: 'country', flags: { closed: false, laps: 1, flat: false, noStuckRescue: false }, splits: [],
+    track: { length: TRACK_LENGTH, lapLength: TRACK_LENGTH, sampleAt: track.sampleAt, project: track.project },
+    mapPaths() { const pts = [], pp = {}; for (let s = 0; s <= TRACK_LENGTH; s += 10) { const p = track.sampleAt(s).position; pts.push([p.x, p.z]); } return [{ pts, main: true }]; },
     heightAt: terrain.heightAt,
     normalAt: (x, z) => terrain.normalAt(x, z),
     surfaceAt,

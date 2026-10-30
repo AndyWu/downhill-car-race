@@ -8,6 +8,10 @@ export const SURFACES = {
   sand:   { friction: 0.55, drag: 0.45, bump: 0.15 },
   mud:    { friction: 0.38, drag: 1.00, bump: 0.25 },
   water:  { friction: 0.48, drag: 0.28, bump: 0.06 },
+  cobble: { friction: 0.78, drag: 0.02, bump: 0.28 },
+  asphalt: { friction: 1.0, drag: 0.0, bump: 0.02 },
+  corn:   { friction: 0.4, drag: 1.2, bump: 0.55 },
+  wall:   { friction: 0.3, drag: 1.4, bump: 0.5 },
   rock:   { friction: 0.80, drag: 0.05, bump: 0.85 },
 };
 
@@ -18,20 +22,22 @@ const KINDS = {
   stream:  { type: 'water', dip: 0.36, bumpAmp: 0.006, friction: 0.42, drag: 0.34, bump: 0.2 },
   mud:     { type: 'mud',   dip: 0.10, bumpAmp: 0.01, friction: 0.36, drag: 1.0, bump: 0.25 },
   gravel:  { type: 'gravel', dip: 0, bumpAmp: 0.02, friction: 0.68, drag: 0.1, bump: 0.2 },
+  stall:   { type: 'rock', dip: 0, bumpAmp: 0, friction: 0.7, drag: 0.1, bump: 0.35 },
+  steps:   { type: 'rock', dip: 0, bumpAmp: 0, friction: 0.7, drag: 0.04, bump: 0.7 },
   rock:    { type: 'rock',  dip: 0, bumpAmp: 0.085, friction: 0.8, drag: 0.05, bump: 0.85 },
   sand:    { type: 'sand',  dip: 0.02, bumpAmp: 0.008, friction: 0.55, drag: 0.45, bump: 0.15 },
 };
 const WETKIND = { puddle: 1, rutpool: 1, stream: 1, mud: 1 };
 
-export function createHazardField(track, seed = 1) {
+export function createHazardField(track, seed = 1, opts = {}) {
   const rng = mulberry32(seed * 4421 + 99);
   const nz = new Noise(seed * 13 + 5);
   const L = track.length;
   const zones = [];
   const pp = {};
-  const order = ['puddle', 'mud', 'rutpool', 'gravel', 'stream', 'rock', 'rutpool', 'sand', 'puddle', 'stream', 'mud', 'rock', 'rutpool', 'sand', 'gravel', 'stream'];
-  let s = 110 + rng() * 25, last = '', oi = 0, streamIdx = 0;
-  while (s < L - 100) {
+  const order = opts.order || ['puddle', 'mud', 'rutpool', 'gravel', 'stream', 'rock', 'rutpool', 'sand', 'puddle', 'stream', 'mud', 'rock', 'rutpool', 'sand', 'gravel', 'stream'];
+  let s = (opts.start ?? 110) + rng() * (opts.startJit ?? 25), last = '', oi = 0, streamIdx = 0;
+  while (s < L - (opts.endGap ?? 100)) {
     let kind = order[(oi++ + Math.floor(rng() * 2)) % order.length];
     if (kind === last) kind = order[(oi++) % order.length];
     last = kind;
@@ -62,10 +68,17 @@ export function createHazardField(track, seed = 1) {
         break;
       case 'gravel': z.a = 12 + rng() * 18; z.b = rng() < 0.5 ? hw + 0.3 : 2.2 + rng() * 1.4; z.lateral = z.b > hw ? 0 : sgn * rng() * (hw - z.b); break;
       case 'rock': z.a = 5 + rng() * 5; z.b = 1.6 + rng() * 1.2; z.lateral = sgn * rng() * (hw - z.b); break;
+      case 'stall': {
+        z.a = 4 + rng() * 3; z.b = hw; z.lateral = 0; z.obstacles = [];
+        const n = 3 + Math.floor(rng() * 2);
+        for (let i = 0; i < n; i++) z.obstacles.push({ s: z.s + (i - (n - 1) / 2) * 2.6, d: (i % 2 ? 1 : -1) * hw * (0.45 + rng() * 0.15), r: 0.85 + rng() * 0.25, h: 1.1 });
+        break;
+      }
+      case 'steps': z.a = 3 + rng() * 3; z.b = hw + 0.3; z.lateral = 0; z.stairs = true; break;
       case 'sand': z.a = 8 + rng() * 12; z.b = 2.0 + rng() * 1.6; z.lateral = sgn * rng() * (hw - z.b + 0.5); break;
     }
     zones.push(z);
-    s += z.a * 1.5 + 38 + rng() * 50;
+    s += z.a * 1.5 + (opts.gap1 ?? 38) + rng() * (opts.gap2 ?? 50);
   }
 
   // buckets by s (50 m)
@@ -98,6 +111,7 @@ export function createHazardField(track, seed = 1) {
     if (!b) return o;
     for (let i = 0; i < b.length; i++) {
       const z = b[i], w = weight(z, s, d);
+      if (z.obstacles) for (const ob of z.obstacles) { const dd = Math.hypot(s - ob.s, d - ob.d); if (dd < ob.r) o.lift += ob.h * (1 - smoothstep(0.82, 1, dd / ob.r)); }
       if (w <= 0) continue;
       if (w > o.w) { o.w = w; o.zone = z; }
       if (z.kind === 'stream') {
@@ -109,7 +123,8 @@ export function createHazardField(track, seed = 1) {
           o.cut += w * z.dip;
           if (z.stones) for (const st of z.stones) { const dd = Math.hypot(s - st.s, d - st.d); if (dd < st.r) o.lift += st.h * (1 - smoothstep(0.35, 1, dd / st.r)); }
         }
-      } else o.lift += w * (-z.dip + z.bumpAmp * (0.6 * nz.n2(s * 1.7 + z.seed, d * 2.1) + 0.4 * nz.n2(s * 4.3, d * 5.1)));
+      } else if (z.stairs) { o.lift += w * 0.1 * (Math.sin(s * 3.4) > 0.2 ? 1 : 0); }
+      else o.lift += w * (-z.dip + z.bumpAmp * (0.6 * nz.n2(s * 1.7 + z.seed, d * 2.1) + 0.4 * nz.n2(s * 4.3, d * 5.1)));
     }
     return o;
   }

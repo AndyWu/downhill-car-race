@@ -20,9 +20,34 @@ export function forwardXZ(q) {
  *  headlight   boolean | () => boolean ; default reads world.timeOfDay / world.isDark
  */
 export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, human, headlight } = {}) {
-  const P = profile;
+  // On the slower tracks the terrain, not the driver, sets the speed unless the driver holds back: tier the target speed by skill.
+  const TRACK_CAP = { village: (k) => 7.4 + 4.1 * k, corn: (k) => 7.0 + 3.9 * k };
+  const capFn = TRACK_CAP[world.trackId];
+  const P = capFn ? { ...profile, speed: { ...profile.speed, cap: Math.min(profile.speed.cap, capFn(profile.skill ?? 0.5)) } } : profile;
   rng = rng || createRng(1);
-  const plan = buildPlan(world, P, rng, spec);
+  // ---- village: pick a street through every split according to personality (progress-s plan, sampleAt(s, choice)) ----
+  let choice;
+  const splits = world.splits || [];
+  if (splits.length) {
+    choice = {};
+    const R = P.route || { time: 1 };
+    for (const sp of splits) {
+      if (R.random) { // random, but not into an alley too narrow for a pack of ten
+        const ok = sp.paths.filter((pa) => pa.width >= (R.minWidth ?? 4));
+        const pool = ok.length ? ok : sp.paths;
+        choice[sp.id] = pool[Math.floor(rng() * pool.length) % pool.length].index; continue;
+      }
+      let best = 0, bestScore = Infinity;
+      for (const pa of sp.paths) {
+        const m = buildPlan(world, P, () => 0, spec, { ...choice, [sp.id]: pa.index }).metrics(sp.fromS, sp.toS);
+        const score = (R.time || 0) * m.time + (R.len || 0) * (m.len / 10) + (R.width || 0) * Math.max(0, 6 - m.minW) * 6 + (R.narrow ?? 1) * Math.max(0, 5.5 - m.minW) * 10 + (R.risk || 0) * m.risk * 0.05;
+        if (score < bestScore - 1e-9) { bestScore = score; best = pa.index; }
+      }
+      choice[sp.id] = best;
+    }
+  }
+  const plan = buildPlan(world, P, rng, spec, choice);
+  const flat = !!(world.flags && world.flags.flat);
   const WB = spec?.wheelBase ?? 1.7, LOCK = spec?.steerLock ?? 0.5;
   const L = plan.length;
 
@@ -47,6 +72,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     let ahead = null, aheadDs = Infinity, alongside = null;
     for (const o of others) {
       if (!o || o === self) continue;
+      if (o.splitId != null && o.splitId === self.splitId && o.pathIndex != null && self.pathIndex != null && o.pathIndex !== self.pathIndex) continue; // other street
       const dsO = o.s - s, dl = o.lateral - self.lateral;
       if (dsO === 0 && dl === 0) continue;
       if (dsO > 0.5 && dsO < aheadDs && Math.abs(dl) < 3) { ahead = o; aheadDs = dsO; }
@@ -69,10 +95,10 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
         if (Math.abs(latPass) > hw - 1.2 || t - passStart > 6) { passSide = 0; passCool = t + 4; } // no room / not working: stay put
         else { passUntil = t + 1.5; goal = clamp(latPass - eT, -3.5, 3.5); }
       } else if (P.draft.range > 0 && aheadDs <= P.draft.range) {
-        if (P.draft.overtake && aheadDs < 3.5 && speed > (ahead.speed || 0) + 0.2) {
+        if (P.draft.overtake && !plan.narrow && aheadDs < 3.5 && speed > (ahead.speed || 0) + 0.2) {
           goal = (ahead.lateral > eT ? -1 : 1) * 1.8; // slingshot past
         } else {
-          goal = clamp(ahead.lateral - eT, -2.5, 2.5) * P.draft.strength; // sit in the slipstream
+          goal = plan.narrow ? 0 : clamp(ahead.lateral - eT, -2.5, 2.5) * P.draft.strength; // sit in the slipstream (no room to weave in a lane)
         }
       } else if (P.aggression > 0.5 && aheadDs < 6 && (ahead.speed || 0) > speed - 0.3 && Math.abs(dl) < 1.2) {
         goal = clamp(ahead.lateral - eT, -1.5, 1.5) * 0.5; // nudge a rival that is not slower
@@ -91,7 +117,9 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (launch === null) { launch = { s0: s, off: clamp(self.lateral - plan.offsetAt(s), -3, 3) }; } // grid slot is rarely on the planned line
     const launchOff = launch.off * Math.max(0, 1 - (sT - launch.s0) / 90); // fade the grid offset into the plan over 90 m
     const [rxT, rzT] = plan.rightAt(sT);
-    const tx = plan.xAt(sT) + (extra + launchOff) * rxT, tz = plan.zAt(sT) + (extra + launchOff) * rzT;
+    const hwT = plan.widthAt(sT) / 2;
+    const offT = clamp(eT + extra + launchOff, -(hwT - 0.6), hwT - 0.6) - eT; // never aim outside the lane (narrow corn lanes)
+    const tx = plan.xAt(sT) + offT * rxT, tz = plan.zAt(sT) + offT * rzT;
     const dx = tx - px, dz = tz - pz;
     const xl = dx * fx + dz * fz, yl = -dx * fz + dz * fx;
     const dist = Math.max(1, Math.hypot(dx, dz));
@@ -100,10 +128,10 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     // yaw-rate damping (Y-up: +yaw = turning left, so a right-hand path wants negative yaw)
     const yaw = self.angularVelocity ? self.angularVelocity.y : 0;
     const yawDes = -speed * curv;
-    const delta = Math.atan(WB * curv) + P.yawDamp * clamp(yaw - yawDes, -1.5, 1.5);
+    const delta = Math.atan(WB * curv) + P.yawDamp * (flat ? 0.65 : 1) * clamp(yaw - yawDes, -1.5, 1.5);
     noise += (-noise / P.steerNoiseTau) * dt + P.steerNoise * Math.sqrt((2 * dt) / P.steerNoiseTau) * normal(rng);
     const lockScale = 0.35 + 0.65 / (1 + 0.7 * (speed / 16) ** 2); // physics reduces effective lock with speed
-    const rawSteer = clamp((P.steerGain * (1 + 0.5 * Math.min(1, outBy)) * delta) / (LOCK * lockScale) + noise, -1, 1);
+    const rawSteer = clamp((P.steerGain * (flat ? 0.82 : 1) * (1 + 0.5 * Math.min(1, outBy)) * delta) / (LOCK * lockScale) + noise, -1, 1);
 
     // ---- speed target / handbrake ----
     // soft rubber band (default ON, gentle): +-5% paddle cadence by gap to the human (opts.human() -> state) or, if
@@ -126,6 +154,9 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       if (gapB < Infinity) easeK = clamp((gapB - 20) / 40, 0, 1) * P.leaderEase * rubberBand;
     }
     let vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (outBy > 0 ? 0.65 : 1);
+    if (plan.narrow && ahead && aheadDs < 7 && Math.abs(ahead.lateral - self.lateral) < 1.4 && P.aggression < 0.5) {
+      vt = Math.min(vt, (ahead.speed || 0) + 0.4 + (1 - (P.patience ?? 0.5)) * 1.6); // patient on a lane too narrow to pass
+    }
     vt *= 1 - 0.04 * easeK; // lift off a touch (and paddle less, below) when clear of the AI behind
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
@@ -145,7 +176,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     switch (PD.mode) {
       case 'forgetful':
         if (t >= nextToggle) { attentive = rng() < PD.attentive; nextToggle = t + 2 + rng() * 4; }
-        want = s < PD.startDist || speed < 2.5 || attentive ? 1 : 0;
+        want = s < PD.startDist || speed < (flat ? 6 : 2.5) || attentive || (flat && rng() < 0.5) ? 1 : 0;
         break;
       case 'slow': want = slow ? 1 : 0; break;
       case 'furious': want = 1; break;
@@ -162,12 +193,15 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const sf = self.surface;
     if (offRoad || sf === 'mud' || sf === 'water' || sf === 'sand') want = Math.max(want, PD.mode === 'forgetful' ? 0 : 1); // dig in when drag spikes
     if (offRoad) want = 1; // always dig in when on the verge
+    if (flat && (PD.mode !== 'forgetful' || want > 0)) want = 1; // flat: no free speed from the hill, paddle whenever below the target
     if (hbOut > 0.05) want = 0;
     const fat = PD.stamina.minFactor + (1 - PD.stamina.minFactor) * stamina;
     // physics gives dv ~ 1/(1+(v/5.5)^2) per stroke, so the pro bursts hardest when slowest
     const burst = PD.mode === 'rhythm' ? 1 + 0.6 * (1 - clamp(speed / 10, 0, 1)) : PD.mode === 'optimal' ? Math.min(4.6 / PD.cadence, 1 + 0.6 * (1 - clamp(speed / 10, 0, 1))) : 1;
     const warm = PD.warmup && t < PD.warmup.t ? PD.warmup.f : 1; // e.g. Buster's cold start
-    const cadence = PD.cadence * warm * fat * burst * rb * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
+    // flat tracks (speedway): paddling is the only engine, so everybody digs in, the less skilled a bit harder to stay on the pace
+    const flatCad = Math.min(4.6, (3.0 + 0.6 * (P.skill ?? 0.5)) * (1 + 0.8 * (1 - clamp(speed / 6, 0, 1))));
+    const cadence = (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;
@@ -211,7 +245,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const trig = passedNow || blockedT > 0.6;
     let honk = false;
     if (t >= honkReady) {
-      if (trig && (!trigPrev || t >= honkRoll)) { honkRoll = t + 3; if (rng() < H.p) honk = true; }
+      if (trig && (!trigPrev || t >= honkRoll)) { honkRoll = t + 3; if (rng() < Math.min(1, H.p * (plan.narrow ? 1.6 : 1))) honk = true; }
       else if (H.idle > 0 && rng() < H.idle * dt) honk = true;
       if (honk) honkReady = t + H.gap * (0.7 + 0.6 * rng());
     }
@@ -227,8 +261,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       reverse,
     };
   }
-  return { think, profile: P, plan, get recoveries() { return recoveries; },
+  return { think, profile: P, plan, get choice() { return choice; }, get recoveries() { return recoveries; },
     /** seconds continuously below 1.5 m/s (recovery manoeuvres didn't free the car). Host should call body.recover(~8) when needsRescue. */
-    get stuckFor() { return stuckTotal; }, get needsRescue() { return stuckTotal > 3.5; },
+    get stuckFor() { return stuckTotal; }, get needsRescue() { return stuckTotal > 2.5; },
     clearStuck() { stuckTotal = 0; stuckT = 0; consec = 0; } };
 }

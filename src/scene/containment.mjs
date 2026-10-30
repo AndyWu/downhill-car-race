@@ -4,7 +4,8 @@ import { createWorld } from './index.js';
 import { createVehicleBody, placeOnGround } from '../core/physics.js';
 import { TRUCKS } from '../vehicles/index.js';
 
-const world = await createWorld(new THREE.Scene(), { seed: 1 });
+const TRACK = process.env.TRACK || 'country';
+const world = await createWorld(new THREE.Scene(), { seed: 1, trackId: TRACK });
 world.setWeather(process.env.WEATHER || 'clear');
 const spec = TRUCKS[Number(process.env.TRUCK || 0)];
 let worst = 0; const bad = [];
@@ -76,7 +77,7 @@ for (const speed of [10, 14]) for (const steer of [-0.5, 0.5]) for (const s0 of 
   }
 }
 // full-course coasting check: no input from the start ramp must reach the finish and never stall
-if (process.env.COAST !== '0') {
+if (process.env.COAST !== '0' && TRACK === 'country') {
   const body = createVehicleBody(spec, world), st0 = world.startTransform(0);
   body.reset(st0.position, st0.quaternion);
   let t = 0, stall = 0, worstStall = 0, stallAt = 0;

@@ -168,7 +168,7 @@ export function createInput(dom) {
       const sameFrame = S.frames - p.frames0 <= 2;
       const inZ = inZone(ZONES.headlight, nx, ny);
       if (DEBUG) console.log('[input] up', p.role, 'inZone', inZ, 'held', Math.round(held), 'allowed', Math.round(allowed), 'moved', Math.round(p.moved));
-      if (inZ && p.moved < 24 && (held < allowed || sameFrame || (held < 2000 && S.stallMs > 0))) {
+      if (inZ && p.moved < 24 && (held < allowed || sameFrame || (held < 8000 && S.stallMs - p.stall0 > 0))) {
         S.headlight = !S.headlight; if (DEBUG) console.log('[input] headlight ->', S.headlight);
         p.accum = 0; return;
       }
@@ -244,7 +244,8 @@ export function createInput(dom) {
   }
 
   return {
-    noteFrame() { S.frames++; },
+    // rAF gaps > 100 ms mean the page was starved: pointer events queued behind it look much longer than the real tap
+    noteFrame(rawDt) { S.frames++; if (rawDt > 0.1 && rawDt < 30) S.stallMs += rawDt * 1000 - 50; },
     // called at the END of every frame with its duration: a frame that hogged the thread delayed any pointer events queued behind it
     noteFrameEnd(ms) { if (ms > 100) S.stallMs += ms - 50; }, read, requestPermissions, calibrate, isLandscape, isTouch,
     setEnabled(v) { S.enabled = !!v; if (!v) { ptrs.clear(); S.touchHB = 0; } },

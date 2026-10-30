@@ -17,6 +17,8 @@
 //     u8  horizontal speed (0.25 m/s, ≤ 63.75 m/s)
 //     i8  slip: velocity heading − body yaw (360°/256)
 //     i8  vertical speed (0.1 m/s)
+//   BRANCH    (UNCHANGED|COMPACT both set): u8 path index + COMPACT, for a car on an alternative
+//             street of a village split (sampleAt(s, { [split.id]: path })) ................ 12 B
 //   FULL      (keyframes, off-road / airborne / flipped / no world) ................. 22 B
 //     3 × u24 position (origin + u·scale), u32 smallest-three quaternion (2 + 3×10 bit),
 //     3 × i16 velocity (1/50 m/s), u16 s in decimetres (+100 m offset)
@@ -91,19 +93,31 @@ function resolveWorld(w) {
   return world && world.track && typeof world.track.sampleAt === 'function' && typeof world.heightAt === 'function' ? world : null;
 }
 const sStep = (world) => ((world.track.length || 3218) + 60) / 65535;
-function frame(world, s) {
-  const smp = world.track.sampleAt(s);
+function splitAt(world, s) {
+  const sp = world.splits;
+  if (!sp || !sp.length) return null;
+  for (const x of sp) if (s >= x.fromS && s <= x.toS) return x;
+  return null;
+}
+function choiceFor(world, s, path) {
+  if (!path) return undefined;
+  const sp = splitAt(world, s);
+  return sp ? { [sp.id]: path } : undefined;
+}
+function frame(world, s, path = 0) {
+  const ch = choiceFor(world, s, path);
+  const smp = ch ? world.track.sampleAt(s, ch) : world.track.sampleAt(s);
   const rl = Math.hypot(smp.right.x, smp.right.z) || 1;
   return { cx: smp.position.x, cz: smp.position.z, rx: smp.right.x / rl, rz: smp.right.z / rl, trackYaw: Math.atan2(-smp.tangent.x, -smp.tangent.z) };
 }
 
 /** Rebuild a car record (fields 1..11) from compact bytes; returns false if impossible. */
-function decodeCompact(world, dv, o, out, b) {
+function decodeCompact(world, dv, o, out, b, path = 0) {
   const step = sStep(world);
   const s = dv.getUint16(o, true) * step - S_OFF;
   const lat = dv.getInt8(o + 2) * LAT;
   const h = dv.getUint8(o + 3) * H_STEP - H_OFF;
-  const f = frame(world, s);
+  const f = frame(world, s, path);
   const x = f.cx + f.rx * lat, z = f.cz + f.rz * lat;
   const y = world.heightAt(x, z) + h;
   const yaw = f.trackYaw + dv.getInt8(o + 4) * ANG, pitch = dv.getInt8(o + 5) * ANG, roll = dv.getInt8(o + 6) * ANG;
@@ -115,22 +129,45 @@ function decodeCompact(world, dv, o, out, b) {
   return true;
 }
 
-/** Try to write a compact record for car at snap[b..]; returns bytes written or 0 if it must be FULL. */
+/**
+ * Try to write a compact record for car at snap[b..]. On a village split every alternative street
+ * is tried and the one the car is actually on is used (path index > 0 → branch record).
+ * @returns {{n:number, path:number}} n = bytes written (0 → must be FULL)
+ */
 function encodeCompact(world, snap, b, dv, o, check) {
   const step = sStep(world);
-  const px = snap[b + 1], py = snap[b + 2], pz = snap[b + 3];
+  const sp = splitAt(world, snap[b + 11]);
+  const paths = sp && sp.paths ? sp.paths.map((p, i) => p.index ?? i) : [0];
+  if (!paths.includes(0)) paths.unshift(0);
+  let best = null;
+  for (const path of paths) {
+    const r = locate(world, snap, b, step, path);
+    if (r && (!best || Math.abs(r.lq) + Math.abs(r.along) < Math.abs(best.lq) + Math.abs(best.along))) best = r;
+  }
+  if (!best) return { n: 0, path: 0 };
+  return { n: writeCompact(world, snap, b, dv, o, check, step, best), path: best.path };
+}
+function locate(world, snap, b, step, path) {
+  const px = snap[b + 1], pz = snap[b + 3];
   let sq = Math.round((snap[b + 11] + S_OFF) / step);
-  if (!(sq >= 0 && sq <= 65535)) return 0;
-  let f = frame(world, sq * step - S_OFF);
-  // refine s so the car sits on the normal of the centreline (s from physics may be approximate)
-  for (let it = 0; it < 2; it++) {
-    const along = (px - f.cx) * f.rz - (pz - f.cz) * f.rx; // horizontal tangent = (rz, -rx)
+  if (!(sq >= 0 && sq <= 65535)) return null;
+  let f = frame(world, sq * step - S_OFF, path);
+  let along = 0;
+  // refine s so the car sits on the normal of the road (s from physics may be approximate;
+  // on a branch, progress and metres along the street differ slightly → a few iterations)
+  for (let it = 0; it < 4; it++) {
+    along = (px - f.cx) * f.rz - (pz - f.cz) * f.rx; // horizontal tangent = (rz, -rx)
     if (Math.abs(along) < step * 0.5) break;
     sq = Math.round((sq * step - S_OFF + along + S_OFF) / step);
-    if (!(sq >= 0 && sq <= 65535)) return 0;
-    f = frame(world, sq * step - S_OFF);
+    if (!(sq >= 0 && sq <= 65535)) return null;
+    f = frame(world, sq * step - S_OFF, path);
   }
+  if (path && !choiceFor(world, sq * step - S_OFF, path)) return null; // refined out of the split
   const lq = Math.round(((px - f.cx) * f.rx + (pz - f.cz) * f.rz) / LAT);
+  return { sq, f, lq, along, path };
+}
+function writeCompact(world, snap, b, dv, o, check, step, { sq, f, lq, path }) {
+  const px = snap[b + 1], py = snap[b + 2], pz = snap[b + 3];
   if (lq < -127 || lq > 127) return 0;
   const gx = f.cx + f.rx * lq * LAT, gz = f.cz + f.rz * lq * LAT;
   const hq = Math.round((py - world.heightAt(gx, gz) + H_OFF) / H_STEP);
@@ -150,7 +187,7 @@ function encodeCompact(world, snap, b, dv, o, check) {
   dv.setInt8(o + 4, yq); dv.setInt8(o + 5, pq); dv.setInt8(o + 6, rq);
   dv.setUint8(o + 7, hsq); dv.setInt8(o + 8, slq); dv.setInt8(o + 9, vyq);
   // self-check: reconstruct exactly as a client would
-  decodeCompact(world, dv, o, check, 0);
+  decodeCompact(world, dv, o, check, 0, path);
   const dp = Math.hypot(check[1] - px, check[2] - py, check[3] - pz);
   let dot = 0; for (let k = 0; k < 4; k++) dot += check[4 + k] * snap[b + 4 + k];
   const da = 2 * Math.acos(Math.min(1, Math.abs(dot) / (Math.hypot(snap[b + 4], snap[b + 5], snap[b + 6], snap[b + 7]) || 1)));
@@ -194,14 +231,14 @@ export function createSnapshotEncoder({ keyframeEvery = 10, world, compact = tru
       // pass 1: classify + write car bodies into carBuf (full records need origin/scale → pass 2)
       const kinds = new Array(count);
       const cdv = new DataView(carBuf.buffer);
-      const compactAt = new Array(count);
+      const compactAt = new Array(count), paths = new Array(count);
       let co = 0, anyFull = false;
       for (let i = 0; i < count; i++) {
         const b = SNAP_HEADER + i * SNAP_STRIDE;
         const id = snap[b] & ID_MASK;
         if (!key && sameAsBase(snap, b, base.get(id))) { kinds[i] = 'u'; continue; }
-        const n = w ? encodeCompact(w, snap, b, cdv, co, check) : 0;
-        if (n) { kinds[i] = 'c'; compactAt[i] = co; co += n; } else { kinds[i] = 'f'; anyFull = true; }
+        const r = w ? encodeCompact(w, snap, b, cdv, co, check) : { n: 0, path: 0 };
+        if (r.n) { kinds[i] = r.path ? 'b' : 'c'; paths[i] = r.path; compactAt[i] = co; co += r.n; } else { kinds[i] = 'f'; anyFull = true; }
       }
       let mn = [0, 0, 0], scale = 1;
       if (anyFull) {
@@ -226,11 +263,12 @@ export function createSnapshotEncoder({ keyframeEvery = 10, world, compact = tru
         const ev = snap[b + 12] & 255;
         const ack = acks && acks.has(id) ? acks.get(id) & 255 : -1;
         const k = kinds[i];
-        dv.setUint8(o++, id | (k === 'u' ? C_UNCHANGED : 0) | (k === 'c' ? C_COMPACT : 0) | (ev ? C_EVENTS : 0) | (ack >= 0 ? C_ACK : 0));
+        dv.setUint8(o++, id | (k === 'u' || k === 'b' ? C_UNCHANGED : 0) | (k === 'c' || k === 'b' ? C_COMPACT : 0) | (ev ? C_EVENTS : 0) | (ack >= 0 ? C_ACK : 0));
         if (ev) dv.setUint8(o++, ev);
         if (ack >= 0) dv.setUint8(o++, ack);
         if (k === 'u') { stats.unchanged++; continue; }
-        if (k === 'c') { scratch.set(carBuf.subarray(compactAt[i], compactAt[i] + 10), o); o += 10; stats.compact++; continue; }
+        if (k === 'b') { dv.setUint8(o++, paths[i]); stats.branch = (stats.branch || 0) + 1; }
+        if (k === 'c' || k === 'b') { scratch.set(carBuf.subarray(compactAt[i], compactAt[i] + 10), o); o += 10; stats.compact++; continue; }
         stats.full++;
         const pu = [0, 1, 2].map((a) => clamp(Math.round((snap[b + 1 + a] - mn[a]) / scale), 0, U24));
         pu.forEach((v, a) => { dv.setUint16(o + a * 3, v & 0xffff, true); dv.setUint8(o + a * 3 + 2, v >>> 16); }); o += 9;
@@ -277,7 +315,13 @@ export function createSnapshotDecoder({ world } = {}) {
         const ev = head & C_EVENTS ? dv.getUint8(o++) : 0;
         const ack = head & C_ACK ? dv.getUint8(o++) : -1;
         const b = SNAP_HEADER + n * SNAP_STRIDE;
-        if (head & C_UNCHANGED) {
+        if ((head & C_UNCHANGED) && (head & C_COMPACT)) { // compact record on a village side street
+          const path = dv.getUint8(o++);
+          const at = o; o += 10;
+          if (!w) continue;
+          decodeCompact(w, dv, at, out, b, path);
+          out[b + 14] = 0;
+        } else if (head & C_UNCHANGED) {
           const bs = haveBase && base.get(id);
           if (!bs) continue;
           out.set(bs, b);

@@ -310,7 +310,7 @@ const SHIRT = [[0.7, 0.2, 0.15], [0.2, 0.35, 0.6], [0.85, 0.8, 0.6], [0.25, 0.45
 const PANTS = [[0.15, 0.17, 0.3], [0.28, 0.22, 0.15], [0.2, 0.2, 0.2], [0.35, 0.4, 0.5]];
 const FLAGC = [[0.85, 0.2, 0.15], [0.95, 0.9, 0.75], [0.2, 0.4, 0.7], [0.95, 0.75, 0.2], [0.3, 0.6, 0.3]];
 
-function figure(b, rnd, x, y, z, yaw, sc, cheer) {
+export function figure(b, rnd, x, y, z, yaw, sc, cheer) {
   const shirt = SHIRT[Math.floor(rnd() * SHIRT.length)], skin = SKIN[Math.floor(rnd() * SKIN.length)], pants = PANTS[Math.floor(rnd() * PANTS.length)];
   b.add('dark', cylG(0.15, 0.15, 0.55, 5, 1), xf(x, y + 0.27 * sc, z, 0, yaw, 0, sc), pants);
   b.add('dark', cylG(0.2, 0.24, 0.62, 6, 1), xf(x, y + 0.85 * sc, z, 0, yaw, 0, sc), shirt);
@@ -324,7 +324,7 @@ function figure(b, rnd, x, y, z, yaw, sc, cheer) {
     b.add('dark', boxG(0.07, 0.5 * sc, 0.07, 1), xf(ox, y + (up ? 1.35 : 0.85) * sc, oz, 0, yaw, up ? sg * 0.45 : sg * 0.08, sc), up ? skin : shirt);
   }
 }
-function buntingMesh(lines, lib) {
+export function buntingMesh(lines, lib) {
   // lines: [{a:[x,y,z], b:[x,y,z], sag}] -> triangular pennants
   const P = [], C = [], N = [];
   let ci = 0;

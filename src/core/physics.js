@@ -307,9 +307,11 @@ export function createVehicleBody(specIn, world, opts = {}) {
       good.p.copy(state.position); good.q.copy(state.quaternion);
       this.updateTrack();
     },
+    // teleports: the caller knows the intended unwrapped progress (project() uses it as hintS on closed circuits)
+    setProgress(sv) { state.s = sv; state.maxS = sv; this.updateTrack(); },
     updateTrack() {
       if (world && world.track && world.track.project) {
-        const pr = world.track.project(state.position);
+        const pr = world.track.project(state.position, state.s);   // hintS: unwrapped progress (laps keep growing on closed circuits)
         if (pr) { state.s = fin(pr.s, state.s); state.lateral = fin(pr.lateral, state.lateral); if (state.s > state.maxS && state.s - state.maxS < 30) state.maxS = state.s; }
       }
     },
@@ -355,7 +357,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
           if (state.wrongWay > 4) { state.wrongWay = 0; this.recover(2); }
         }
       }
-      if (state.stuck > 5 && !this.noRecover) { state.stuck = 0; this.recover(3); }
+      if (state.stuck > 5 && !this.noRecover && !(world && world.flags && world.flags.noStuckRescue)) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);
       if (wc0) state.surface = wc0.surface;

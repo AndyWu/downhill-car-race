@@ -11,12 +11,15 @@ const now = () => performance.now();
 
 export const WEATHERS = ['clear', 'fog', 'snow', 'rain', 'storm'];
 export const TIMES_OF_DAY = ['day', 'night', 'dusk', 'golden'];
-/** Whitelists weather/time from the wire (also accepts 'foggy'/'heavy rain'/'stormy' spellings). */
-export function normalizeConditions({ weather, time } = {}) {
+export const TRACK_IDS = ['country', 'village', 'corn', 'circuit'];
+export const TRACK_NAMES = { country: 'Country Road', village: 'Hill Village', corn: 'Corn & Pumpkins', circuit: 'Speedway' };
+/** Whitelists weather/time/trackId from the wire (also accepts 'foggy'/'heavy rain'/'stormy' spellings). */
+export function normalizeConditions({ weather, time, trackId } = {}) {
   const alias = { foggy: 'fog', snowy: 'snow', 'heavy rain': 'rain', heavyrain: 'rain', rainy: 'rain', stormy: 'storm', sunny: 'clear' };
   let w = String(weather || 'clear').toLowerCase(); w = alias[w] || w;
   const t = String(time || 'day').toLowerCase();
-  return { weather: WEATHERS.includes(w) ? w : 'clear', time: TIMES_OF_DAY.includes(t) ? t : 'day' };
+  const k = String(trackId || 'country').toLowerCase();
+  return { weather: WEATHERS.includes(w) ? w : 'clear', time: TIMES_OF_DAY.includes(t) ? t : 'day', trackId: TRACK_IDS.includes(k) ? k : 'country' };
 }
 
 function listPeers(peers) {
@@ -72,7 +75,11 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
     if (!peer || attached.has(peer)) return;
     attached.add(peer);
     unsubs.push(peer.on('fast', (data) => onFast(peer, data)));
-    unsubs.push(peer.on('ctrl', (m) => ctrlCbs.forEach((cb) => cb(peer.id, m))));
+    unsubs.push(peer.on('ctrl', (m) => {
+      if (m && m.t === 'ready' && isHost) { onReadyAck(peer.id, m); return; }
+      if (m && m.t === 'prepare' && !isHost) onPrepare(m);
+      ctrlCbs.forEach((cb) => cb(peer.id, m));
+    }));
   }
   const all = () => { const l = listPeers(peers); l.forEach(attach); return l; };
   all();
@@ -157,6 +164,26 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
       pingTimer = setTimeout(ping, pingsSent < 8 ? 250 : 2000);
     };
     pingTimer = setTimeout(ping, 50);
+  }
+
+  // ---- race-start handshake: prepare (world rebuild on clients) → ready acks → countdown ----
+  const prepareCbs = new Set(), progressCbs = new Set();
+  let pending = null; // host: { raceId, expected:Set, ready:Set, done() }
+  function onReadyAck(id, m) {
+    if (!pending || m.raceId !== pending.raceId) return;
+    pending.ready.add(id);
+    const st = { raceId: pending.raceId, ready: [...pending.ready], expected: [...pending.expected] };
+    progressCbs.forEach((cb) => cb(st));
+    pending.check();
+  }
+  function sendReady(raceId, extra = {}) {
+    all().forEach((p) => p.sendCtrl({ t: 'ready', raceId, ...extra }));
+  }
+  function onPrepare(m) {
+    const info = { raceId: m.raceId, ...normalizeConditions(m), players: m.players, trucks: m.trucks, seed: m.seed, raw: m };
+    if (!prepareCbs.size) { sendReady(m.raceId); return; } // nothing to rebuild → ack at once
+    Promise.all([...prepareCbs].map((cb) => { try { return Promise.resolve(cb(info)); } catch (e) { return Promise.reject(e); } }))
+      .then(() => sendReady(m.raceId), (e) => sendReady(m.raceId, { error: String(e && e.message || e) }));
   }
 
   const api = {
@@ -297,8 +324,50 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
       this.sendControl({ t: 'countdown', goAtHostMs: at, seconds, ...raceConditions, ...extra });
       return at;
     },
-    /** HOST: weather/time sent with the race-start (countdown) message. Unknown values fall back to clear/day. */
-    setRaceConditions({ weather, time } = {}) { raceConditions = normalizeConditions({ weather, time }); return raceConditions; },
+    /** HOST: weather/time/trackId sent with the prepare + countdown messages. Unknown → clear/day/country. */
+    setRaceConditions({ weather, time, trackId } = {}) { raceConditions = normalizeConditions({ weather, time, trackId: trackId ?? raceConditions.trackId }); return raceConditions; },
+    /**
+     * HOST: two-phase race start. Sends {t:'prepare', raceId, weather, time, trackId, ...extra} so
+     * clients can rebuild their world, waits until every connected client acks 'ready' (or
+     * `timeoutMs`), then sends the countdown. Resolves { goAtLocal, raceId, ready:[ids], timedOut:[ids] }.
+     * Clients that ack late simply join the countdown in progress.
+     */
+    prepareRace({ seconds = 3, timeoutMs = 20000, ...extra } = {}) {
+      const cond = normalizeConditions({ ...raceConditions, ...extra });
+      raceConditions = cond;
+      const raceId = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+      const expected = new Set(all().filter((p) => p.ctrl?.readyState === 'open').map((p) => p.id));
+      return new Promise((resolve) => {
+        let timer = null;
+        const finish = () => {
+          clearTimeout(timer);
+          const ready = [...pending.ready], timedOut = [...expected].filter((id) => !pending.ready.has(id));
+          pending = null;
+          const goAtLocal = api.startCountdown(seconds, { raceId, ...extra, ...cond });
+          resolve({ goAtLocal, raceId, ready, timedOut, ...cond });
+        };
+        pending = {
+          raceId, expected, ready: new Set(),
+          check() {
+            const open = new Set(all().filter((p) => p.ctrl?.readyState === 'open').map((p) => p.id));
+            if ([...expected].every((id) => pending.ready.has(id) || !open.has(id))) finish();
+          },
+        };
+        timer = setTimeout(finish, timeoutMs);
+        api.sendControl({ t: 'prepare', raceId, ...extra, ...cond });
+        pending.check(); // no clients → start at once
+      });
+    },
+    /** HOST: cb({ raceId, ready:[ids], expected:[ids] }) whenever a client acks (for a "2/3 ready" label). */
+    onPrepareProgress(cb) { progressCbs.add(cb); return () => progressCbs.delete(cb); },
+    /**
+     * CLIENT: cb({ raceId, weather, time, trackId, players, trucks, seed }) when the host prepares a
+     * race. Return a promise that resolves once the world for `trackId` is built; 'ready' is then
+     * sent automatically. With no handler registered the client acks immediately.
+     */
+    onRacePrepare(cb) { prepareCbs.add(cb); return () => prepareCbs.delete(cb); },
+    /** CLIENT: manual ack (normally automatic via onRacePrepare). */
+    sendReady,
     get raceConditions() { return { ...raceConditions }; },
     /**
      * CLIENT: cb({ goAtLocal, seconds, weather, time, players, trucks, seed, raw }) when the host
@@ -308,7 +377,7 @@ export function createSync({ role, peers, worldSnapshotSize = 0, snapshotHz = 30
       const h = (id, m) => {
         if (!m || m.t !== 'countdown') return;
         const goAtLocal = clock.synced ? clock.toLocal(m.goAtHostMs) : now() + (m.seconds || 3) * 1000;
-        cb({ goAtLocal, seconds: m.seconds, ...normalizeConditions(m), players: m.players, trucks: m.trucks, seed: m.seed, raw: m });
+        cb({ goAtLocal, seconds: m.seconds, raceId: m.raceId, ...normalizeConditions(m), players: m.players, trucks: m.trucks, seed: m.seed, raw: m });
       };
       ctrlCbs.add(h);
       return () => ctrlCbs.delete(h);

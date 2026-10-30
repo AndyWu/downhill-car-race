@@ -8,20 +8,20 @@ import { bannerTexture } from './materials.js';
 export const SCENERY_CHUNK = 125;
 
 // ---------- geometry builders ----------
-function colorize(g, fn) {
+export function colorize(g, fn) {
   const p = g.attributes.position, c = new Float32Array(p.count * 3), t = [0, 0, 0];
   for (let i = 0; i < p.count; i++) { fn(p.getX(i), p.getY(i), p.getZ(i), t); c[i * 3] = t[0]; c[i * 3 + 1] = t[1]; c[i * 3 + 2] = t[2]; }
   g.setAttribute('color', new THREE.BufferAttribute(c, 3));
   return g;
 }
-function mergeParts(parts) {
+export function mergeParts(parts) {
   const list = parts.map(({ g, m, shade }) => {
     const x = prep(g); if (m) x.applyMatrix4(m);
     colorize(x, shade); return x;
   });
   const out = mergeGeometries(list, false); out.computeBoundingSphere(); return out;
 }
-function blob(r, detail, seed, squash = 0.8) {
+export function blob(r, detail, seed, squash = 0.8) {
   const g = new THREE.IcosahedronGeometry(r, detail);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
@@ -34,7 +34,7 @@ function blob(r, detail, seed, squash = 0.8) {
 }
 const lerp3 = (a, b, t, o) => { o[0] = lerp(a[0], b[0], t); o[1] = lerp(a[1], b[1], t); o[2] = lerp(a[2], b[2], t); };
 
-function makePine(seed, narrow = 1) {
+export function makePine(seed, narrow = 1) {
   const r = mulberry32(seed * 91 + 3);
   const bark = (x, y, z, o) => { o[0] = 0.55; o[1] = 0.45; o[2] = 0.38; };
   const trunk = mergeParts([{ g: cylG(0.12, 0.28, 9, 6, 2), m: xf(0, 4.5, 0), shade: bark }]);
@@ -48,7 +48,7 @@ function makePine(seed, narrow = 1) {
   }
   return { trunk, canopy: mergeParts(cones), h: 10 };
 }
-function makeOak(seed, maple = false) {
+export function makeOak(seed, maple = false) {
   const r = mulberry32(seed * 57 + 11);
   const barkc = (x, y, z, o) => { o[0] = 0.5; o[1] = 0.42; o[2] = 0.36; };
   const lean = (r() - 0.5) * 0.3;
@@ -68,7 +68,7 @@ function makeOak(seed, maple = false) {
   }
   return { trunk, canopy: mergeParts(blobs), h: 9.2 };
 }
-function makePoplar(seed) {
+export function makePoplar(seed) {
   const trunk = mergeParts([{ g: cylG(0.1, 0.22, 5, 6, 2), m: xf(0, 2.5, 0), shade: (x, y, z, o) => { o[0] = 0.58; o[1] = 0.52; o[2] = 0.45; } }]);
   const blobs = [[0, 4.2, 1.1, 1.7], [0.1, 6.2, 0.95, 1.9], [-0.1, 8.2, 0.75, 1.9], [0, 10, 0.5, 1.6]].map((q, i) => ({
     g: blob(q[2], 1, seed + i, q[3]), m: xf(q[0], q[1], 0, 0, i, 0),
@@ -76,7 +76,7 @@ function makePoplar(seed) {
   }));
   return { trunk, canopy: mergeParts(blobs), h: 11.5 };
 }
-function makeBirch(seed) {
+export function makeBirch(seed) {
   const trunk = mergeParts([{ g: cylG(0.1, 0.17, 8, 6, 2), m: xf(0, 4, 0), shade: (x, y, z, o) => { const m = ihash(Math.round(y * 3), 0, seed) > 0.7 ? 0.3 : 1.35; o[0] = m; o[1] = m; o[2] = m * 0.95; } }]);
   const blobs = [];
   [[0, 7.8, 0, 1.3, 1.6], [0.4, 6.0, 0.3, 1.2, 1.3], [-0.4, 8.9, -0.2, 0.8, 1.1]].forEach((q, i) => blobs.push({
@@ -85,13 +85,13 @@ function makeBirch(seed) {
   }));
   return { trunk, canopy: mergeParts(blobs), h: 10 };
 }
-function makeDead(seed) {
+export function makeDead(seed) {
   const col = (x, y, z, o) => { o[0] = 0.62; o[1] = 0.58; o[2] = 0.52; };
   const parts = [{ g: cylG(0.1, 0.3, 6, 6, 2), m: xf(0, 3, 0), shade: col }];
   [[0.9, 4.4, 0, -0.9], [-0.8, 3.6, 0.2, 0.8], [0.2, 5.2, 0.7, -0.5], [-0.3, 5.6, -0.8, 0.5], [0.7, 2.8, -0.5, -1.1]].forEach((q) => parts.push({ g: cylG(0.03, 0.12, 2.2, 4, 2), m: xf(q[0], q[1], q[2], q[2] * 0.6, 0, q[3]), shade: col }));
   return { trunk: mergeParts(parts), canopy: null, h: 6.5 };
 }
-function makeBush(seed) {
+export function makeBush(seed) {
   const blobs = [];
   [[0, 0.5, 0, 0.8], [0.7, 0.4, 0.3, 0.6], [-0.6, 0.4, -0.3, 0.65], [0.1, 0.9, -0.2, 0.55]].forEach((q, i) => blobs.push({
     g: blob(q[3], 0, seed + i, 0.85), m: xf(q[0], q[1], q[2]),
@@ -99,7 +99,7 @@ function makeBush(seed) {
   }));
   return { trunk: null, canopy: mergeParts(blobs), h: 1.6 };
 }
-function makeRock(seed) {
+export function makeRock(seed) {
   const g = new THREE.IcosahedronGeometry(1, 1);
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
@@ -111,7 +111,7 @@ function makeRock(seed) {
   g.computeBoundingSphere();
   return g;
 }
-function makeGrass() {
+export function makeGrass() {
   const rng = mulberry32(5);
   const P = [], C = [], N = [];
   const blade = (ang, lean, h, w, r) => {
@@ -128,7 +128,7 @@ function makeGrass() {
   g.computeBoundingSphere();
   return g;
 }
-function makePole() {
+export function makePole() {
   const col = (x, y, z, o) => { if (y > 7.3 && y < 7.9) { o[0] = 0.4; o[1] = 0.5; o[2] = 0.5; } else { o[0] = 0.62; o[1] = 0.55; o[2] = 0.48; } };
   return mergeParts([
     { g: cylG(0.11, 0.17, 9, 6, 2), m: xf(0, 4.5, 0), shade: col },
@@ -140,7 +140,7 @@ function makePole() {
 
 
 // ---------- baking helpers (merge many placed copies into one static geometry) ----------
-function bakeStatic(geo, ms, cols) {
+export function bakeStatic(geo, ms, cols) {
   const base = prep(geo), list = [];
   for (let i = 0; i < ms.length; i++) {
     const g = base.clone(); g.applyMatrix4(ms[i]);
@@ -158,7 +158,7 @@ function bakeStatic(geo, ms, cols) {
   return out;
 }
 /** merge placed trees; adds swayH (height factor incl. species amplitude) and swayO (tree origin xz) for the vertex shader */
-function bakeTrees(items, part) {
+export function bakeTrees(items, part) {
   const list = [];
   for (const it of items) {
     const g0 = it.sp[part]; if (!g0) continue;
@@ -179,13 +179,13 @@ function bakeTrees(items, part) {
   if (!list.length) return null;
   const out = mergeGeometries(list, false); out.computeBoundingSphere(); return out;
 }
-function makeFarConifer() {
+export function makeFarConifer() {
   return mergeParts([
     { g: cylG(0.22, 0.3, 3, 4, 2), m: xf(0, 1.5, 0), shade: (x, y, z, o) => { o[0] = 0.4; o[1] = 0.32; o[2] = 0.25; } },
     { g: new THREE.ConeGeometry(2.2, 8, 6, 1), m: xf(0, 6.0, 0), shade: (x, y, z, o) => { const t = clamp((y - 2) / 8, 0, 1); lerp3([0.12, 0.24, 0.13], [0.22, 0.36, 0.18], t, o); } },
   ]);
 }
-function makeFarBroad() {
+export function makeFarBroad() {
   return mergeParts([
     { g: cylG(0.3, 0.45, 4, 4, 2), m: xf(0, 2, 0), shade: (x, y, z, o) => { o[0] = 0.4; o[1] = 0.32; o[2] = 0.25; } },
     { g: blob(2.9, 0, 3, 0.8), m: xf(0, 6.2, 0), shade: (x, y, z, o) => { const t = clamp((y - 4) / 5, 0, 1); lerp3([0.2, 0.33, 0.14], [0.4, 0.55, 0.22], t, o); } },
