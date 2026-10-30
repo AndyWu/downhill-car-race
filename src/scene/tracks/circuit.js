@@ -6,6 +6,7 @@ import { Batch, boxG, cylG, xf } from '../batch.js';
 import { figure, buntingMesh } from '../ground.js';
 import { bannerTexture, textureOf } from '../materials.js';
 import { scatterTrees } from './scatter.js';
+import { createRegistry } from './registry.js';
 
 const LAP = 3218 / 3;
 const WIDTH = 10;
@@ -28,6 +29,7 @@ export function planCircuit(seed) {
   });
   main.surf = { type: 'asphalt', friction: 1.0, drag: 0.0, bump: 0.02 };
   const net = buildNetwork({ main, length: 3218, lapLength: LAP });
+  const registry = createRegistry(net);
   const pp = {};
 
   // verge: run-off grass, then a steep barrier / tyre wall that stops fast cars, back slope behind
@@ -35,13 +37,14 @@ export function planCircuit(seed) {
     const ad = Math.abs(d), r = ad - (hw + 3.4);
     if (r < -0.4) return 0;
     const kap = Math.abs(road.tables.kap[Math.round(road.idxOf(s)) % road.TN]), lip = 1.5 + 1.0 * Math.min(1, kap / 0.01);
-    return lip * smoothstep(0, 0.55, r) * (1 - smoothstep(1.4, 5.0, r));
+    const sm = ((s % LAP) + LAP) % LAP, pit = (sm > LAP - 70 || sm < 230) ? 1 : 0;   // start/pit straight: berm drops away right behind the barrier (level ground for stands + garages)
+    return lip * smoothstep(0, 0.55, r) * (1 - smoothstep(pit ? 0.7 : 1.4, pit ? 1.5 : 5.0, r));
   };
   const terrainOpts = { hillAmp: 2.5, hillFar: 7, hillNear: 60, rutScale: 0, noiseScale: 0.15, crown: 0.05, sideSlope: 0.04, shoulderOut: 10, verge };
 
   const hash = (a) => { const x = Math.sin(a * 12.9898) * 43758.5453; return x - Math.floor(x); };
   const theme = {
-    roadMat: 'asphaltLines', rowStep: 2, terrRow: 6, tileRadius: 0.55,
+    roadMat: 'asphaltLines', rowStep: 2, terrRow: 4, tileRadius: 0.55, ribbonEnd: 35,
     roadUV: (road, s, d, hwe, o) => { o[0] = (d / hwe + 1) / 2; o[1] = s / 8; },
     roadColor: (road, s, d, p, rnz, o) => {
       const ad = Math.abs(d), n = 0.93 + 0.1 * (rnz.n2(s * 0.5, d * 0.7) * 0.5 + 0.5);
@@ -67,7 +70,8 @@ export function planCircuit(seed) {
   };
   const startPos = (slot) => ({ s: -(5.5 + 5.6 * (slot >> 1) + ((slot & 1) ? 2.4 : 0)), d: (slot & 1) ? 2.0 : -2.0 });
 
-  function decorate({ net: nw, terrain, lib, parent, seed: sd }) {
+  function decorate({ net: nw, terrain, lib, parent, seed: sd, plan }) {
+    const reg = plan.registry;
     const items = [];
     const rnd = mulberry32(sd * 41 + 7);
     const P = (s, d, dy = 0) => { main.atS(s, pp); const x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d; return { x, z, y: terrain.heightAt(x, z) + dy, ry: Math.atan2(-pp.rhz, pp.rhx), hw: pp.hw, kap: pp.kap, rhx: pp.rhx, rhz: pp.rhz }; };
@@ -79,13 +83,19 @@ export function planCircuit(seed) {
     for (let c = 0; c * 120 < LAP; c++) {
       const s0 = c * 120, s1 = Math.min(LAP, s0 + 120), rows = Math.round((s1 - s0) / 3) + 1;
       const Pa = [], Na = [], Ua = [], Ca = [], Ia = [];
-      const rowPts = (s, sg) => { main.atS(s, pp); const out = []; for (const [dd, hh] of [[hw3(pp), 0], [hw3(pp), 1.4], [hw3(pp) + 0.35, 1.4]]) { const d = sg * dd, x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d; out.push([x, terrain.heightAt(x, z) + hh - (hh === 0 ? 0.3 : 0.05), z, hh]); } return out; };
+      const rowPts = (s, sg) => {
+        main.atS(s, pp); const d0 = sg * hw3(pp), d1 = sg * (hw3(pp) + 0.35);
+        const x0 = pp.px + pp.rhx * d0, z0 = pp.pz + pp.rhz * d0, x1 = pp.px + pp.rhx * d1, z1 = pp.pz + pp.rhz * d1;
+        const h0 = terrain.heightAt(x0, z0), top = Math.max(h0 + 1.35, terrain.heightAt(x1, z1) + 0.12);   // flat cap, never lower than the berm behind it
+        return [[x0, h0 - 0.55, z0, 0], [x0, top, z0, 1.4], [x1, top, z1, 1.4], h0];
+      };
       for (const sg of [-1, 1]) {
         for (let r = 0; r < rows - 1; r++) {
           const sa = s0 + ((s1 - s0) * r) / (rows - 1), sb = s0 + ((s1 - s0) * (r + 1)) / (rows - 1);
           const paint = Math.floor((sa + 0.01) / 9) % 3, col = paint === 0 ? [2.0, 0.4, 0.35] : paint === 1 ? [1.9, 1.9, 1.85] : [1.1, 1.1, 1.1];
           const A = rowPts(sa, sg), B = rowPts(sb, sg), base = Pa.length / 3;
-          for (const row of [A, B]) for (const v of row) { Pa.push(v[0], v[1], v[2]); Na.push(0, 1, 0); Ua.push(sa / 3, v[3]); Ca.push(...col); }
+          for (const row of [A, B]) for (let k = 0; k < 3; k++) { const v = row[k]; Pa.push(v[0], v[1], v[2]); Na.push(0, 1, 0); Ua.push(sa / 3, v[3]); Ca.push(...col); }
+          reg.poly('barrier', [[A[0][0], A[0][2]], [A[2][0], A[2][2]], [B[2][0], B[2][2]], [B[0][0], B[0][2]]], A[0][1], [A[0][0], A[0][2]], { sunk: true });
           for (let q = 0; q < 2; q++) { const a = base + q, b2 = a + 1, c2 = a + 3, d2 = c2 + 1; Ia.push(a, c2, b2, b2, c2, d2); }
         }
       }
@@ -111,7 +121,7 @@ export function planCircuit(seed) {
           for (let row = 0; row < 2; row++) {
             const d = sg * (pp.hw + 3.15 - 0.0), x = pp.px + pp.rhx * d, zz = pp.pz + pp.rhz * d, y = terrain.heightAt(x, zz);
             const m = xf(x, y + 0.2 + row * 0.42, zz, Math.PI / 2, Math.atan2(-pp.rhz, pp.rhx), 0, 1, 1, 1);
-            ms.push(m);
+            ms.push(m); if (row === 0) reg.circle('tyre', x, zz, 0.34, y - 0.01, {}, 4);
             const shade = 0.25 + 0.2 * hash(s * 3 + row); cols.push(new THREE.Color(shade * ((Math.floor(s / 3.1) % 5 === 0) ? 6 : 1), shade * ((Math.floor(s / 3.1) % 5 === 0) ? 6 : 1), shade * ((Math.floor(s / 3.1) % 5 === 0) ? 6 : 1)));
           }
         }
@@ -126,14 +136,24 @@ export function planCircuit(seed) {
     });
 
     // ---- start / finish area: gantry, grandstands, pit garages, flags, billboards ----
+    // Box axes: local x = ACROSS the road (right vector), local z = ALONG the road. Every solid is registered for the clearance/grounding tests.
     {
       const b = new Batch(), grp = new THREE.Group(); grp.name = 'start_area';
       const hw = WIDTH / 2;
+      const put = (key, wA, h, lA, q, dA, y0, color, type = null, sink = 0, dAlong = 0) => {
+        // centre of the box: lateral offset dA (already in q) ; y0 = visible bottom ; sink = extra depth hidden in the ground
+        const c = Math.cos(q.ry), sn = Math.sin(q.ry), ax = [c, -sn], az = [sn, c];
+        const pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => [q.x + ax[0] * u * wA / 2 + az[0] * v * lA / 2, q.z + ax[1] * u * wA / 2 + az[1] * v * lA / 2]);
+        if (sink) for (const p of pts) y0 = Math.min(y0, terrain.heightAt(p[0], p[1]));   // base follows the lowest ground under the footprint: buried on the high side, never floating
+        const cy = y0 + h / 2 - sink / 2;
+        b.add(key, boxG(wA, h + sink, lA, 2), xf(q.x, cy, q.z, 0, q.ry, 0), color);
+        if (type) reg.poly(type, pts, y0, [q.x, q.z], sink ? { sunk: true } : {});
+      };
       // gantry at s = 0
       for (const sg of [-1, 1]) {
         const q = P(0, sg * (hw + 2.4));
-        b.add('metalRusted', boxG(0.6, 9.5, 0.6, 2), xf(q.x, q.y + 4.5, q.z, 0, q.ry, 0), [0.9, 0.9, 0.95]);
-        b.add('concrete', boxG(1.4, 0.6, 1.4, 2), xf(q.x, q.y + 0.2, q.z, 0, q.ry, 0), [1, 1, 1]);
+        put('metalRusted', 0.6, 9.5, 0.6, q, 0, q.y, [0.9, 0.9, 0.95], 'gantry', 0.5);
+        put('concrete', 1.4, 0.6, 1.4, q, 0, q.y, [1, 1, 1], 'gantry', 0.3);
       }
       const c0 = P(0, 0);
       b.add('metalRusted', boxG(WIDTH + 5.6, 1.5, 0.7, 2), xf(c0.x, c0.y + 9.2, c0.z, 0, c0.ry, 0), [0.9, 0.9, 0.95]);
@@ -141,54 +161,54 @@ export function planCircuit(seed) {
       for (let i = 0; i < 5; i++) b.add('dark', boxG(0.5, 0.35, 0.3, 1), xf(c0.x + c0.rhx * (i - 2) * 2.6, c0.y + 8.5, c0.z + c0.rhz * (i - 2) * 2.6, 0, c0.ry, 0), [2.2, 0.3, 0.2]);
       const bm = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH + 4.5, 1.9), new THREE.MeshStandardMaterial({ map: bannerTexture('START / FINISH', '#f4f1e6', '#111111'), roughness: 0.9, side: THREE.DoubleSide }));
       bm.position.set(c0.x, c0.y + 9.0, c0.z); bm.rotation.y = c0.ry; grp.add(bm);
-      // grandstands (left = outside of the straight) and a second one on the back straight
+      // grandstands: only on the straight (s 30..200), behind the barrier on the left; tiers rise away from the track
       const stand = (sCenter, len, side, tiers = 6) => {
+        const d0 = hw + 5.6;
         for (let t = 0; t < tiers; t++) {
-          const q = P(sCenter, side * (hw + 6.3 + t * 1.5));
-          const yaw = q.ry;
-          b.add('concrete', boxG(len, 0.9 + t * 0.9, 1.5, 2), xf(q.x, q.y + (0.9 + t * 0.9) / 2, q.z, 0, yaw, 0), [0.95, 0.95, 0.92]);
-          b.add('dark', boxG(len - 0.4, 0.12, 0.5, 1), xf(q.x - q.rhx * side * 0.2, q.y + 0.9 + t * 0.9 + 0.06, q.z - q.rhz * side * 0.2, 0, yaw, 0), t % 2 ? [0.85, 0.2, 0.15] : [0.2, 0.3, 0.7]);
+          const h = 0.9 + t * 0.9, nSeg = Math.ceil(len / 10), sl = len / nSeg;
+          for (let k = 0; k < nSeg; k++) { const q = P(sCenter - len / 2 + (k + 0.5) * sl, side * (d0 + t * 1.5)); put('concrete', 1.5, h, sl + 0.02, q, 0, q.y, [0.95, 0.95, 0.92], 'stand', 1.0); }
+          const qs = P(sCenter, side * (d0 + t * 1.5 - 0.25));
+          b.add('dark', boxG(0.5, 0.12, len - 0.4, 1), xf(qs.x, qs.y + h + 0.06, qs.z, 0, qs.ry, 0), t % 2 ? [0.85, 0.2, 0.15] : [0.2, 0.3, 0.7]);
         }
-        const top = P(sCenter, side * (hw + 6.3 + (tiers - 1) * 1.5 - 0.6));
-        b.add('metalRusted', boxG(len + 1, 0.25, tiers * 1.5 + 2.6, 2), xf(top.x, top.y + tiers * 0.9 + 3.4, top.z, 0, top.ry, 0), [0.95, 0.55, 0.45]);
-        for (const e of [-1, 1]) for (const dd of [hw + 6.0, hw + 6.3 + tiers * 1.5]) { const pq = P(sCenter + e * (len / 2 - 0.3), side * dd); b.add('metalRusted', boxG(0.25, tiers * 0.9 + 3.4, 0.25, 1), xf(pq.x, pq.y + (tiers * 0.9 + 3.4) / 2, pq.z, 0, pq.ry, 0), [0.8, 0.8, 0.85]); }
-        // crowd
+        const top = P(sCenter, side * (d0 + (tiers - 1) * 1.5 - 0.6));
+        b.add('metalRusted', boxG(tiers * 1.5 + 2.6, 0.25, len + 1, 2), xf(top.x, top.y + tiers * 0.9 + 3.4, top.z, 0, top.ry, 0), [0.95, 0.55, 0.45]);
+        for (const e of [-1, 1]) for (const dd of [d0 - 0.4, d0 + tiers * 1.5 + 0.4]) { const pq = P(sCenter + e * (len / 2 - 0.3), side * dd); put('metalRusted', 0.25, tiers * 0.9 + 3.4, 0.25, pq, 0, pq.y, [0.8, 0.8, 0.85], 'standPost', 0.5); }
         for (let t = 0; t < tiers; t++) for (let i = 0; i < len / 1.4; i++) {
           if (rnd() < 0.42) continue;
-          const sc = sCenter - len / 2 + 0.6 + i * 1.15 + (rnd() - 0.5) * 0.5, q = P(sc, side * (hw + 6.7 + t * 1.5 + 0.1));
+          const sc = sCenter - len / 2 + 0.6 + i * 1.15 + (rnd() - 0.5) * 0.5, q = P(sc, side * (d0 + 0.5 + t * 1.5));
           figure(b, rnd, q.x, q.y + 0.9 + t * 0.9, q.z, q.ry - side * Math.PI / 2 + (rnd() - 0.5) * 0.5, 0.75 + rnd() * 0.25, true);
         }
       };
-      stand(-40, 60, -1, 5); stand(55, 70, -1, 6);
-      // pit garages on the right
+      stand(70, 60, -1, 5); stand(160, 70, -1, 6);
+      // pit garages on the right, behind the barrier, doors facing the track
       for (let i = 0; i < 9; i++) {
-        const s = -30 + i * 13, q = P(s, hw + 5.0), col = [[0.9, 0.2, 0.15], [0.2, 0.4, 0.8], [0.95, 0.75, 0.2], [0.2, 0.6, 0.3]][i % 4];
-        b.add('concrete', boxG(11.5, 3.6, 5, 2), xf(q.x + q.rhx * 2.5, q.y + 1.8, q.z + q.rhz * 2.5, 0, q.ry, 0), [1, 1, 0.97]);
-        const f = P(s, hw + 2.55);
-        b.add('dark', boxG(6.5, 2.6, 0.2, 1), xf(f.x, f.y + 1.5, f.z, 0, f.ry, 0), [col[0] * 0.8, col[1] * 0.8, col[2] * 0.8]);
-        b.add('dark', boxG(11.5, 0.5, 0.4, 1), xf(f.x, f.y + 3.6, f.z, 0, f.ry, 0), col);
+        const s = 12 + i * 13, col = [[0.9, 0.2, 0.15], [0.2, 0.4, 0.8], [0.95, 0.75, 0.2], [0.2, 0.6, 0.3]][i % 4];
+        const q = P(s, hw + 7.0), f = P(s, hw + 4.55);
+        put('concrete', 5, 3.6, 11.5, q, 0, q.y, [1, 1, 0.97], 'garage', 1.0);
+        b.add('dark', boxG(0.2, 2.6, 6.5, 1), xf(f.x, f.y + 1.3, f.z, 0, f.ry, 0), [col[0] * 0.8, col[1] * 0.8, col[2] * 0.8]);
+        b.add('dark', boxG(0.4, 0.5, 11.5, 1), xf(f.x, f.y + 3.5, f.z, 0, f.ry, 0), col);
       }
-      // pit wall
-      for (let s = -34; s < 90; s += 4) { const q = P(s, hw + 2.1); b.add('concrete', boxG(4, 1.0, 0.4, 2), xf(q.x, q.y + 0.5, q.z, 0, q.ry, 0), s % 8 ? [1, 1, 1] : [1.9, 1.9, 1.85]); }
-      // flag poles with flags along the start straight (right side)
-      for (let s = -60; s < 230; s += 24) {
-        const q = P(s, -(hw + 4.6));
-        b.add('metalRusted', cylG(0.06, 0.06, 7, 5, 1), xf(q.x, q.y + 3.5, q.z), [0.85, 0.85, 0.9]);
+      // flag poles with flags along the start straight (left side, behind the barrier)
+      for (let s = -20; s < 230; s += 24) {
+        const q = P(s, -(hw + 6.0));
+        put('metalRusted', 0.12, 7, 0.12, q, 0, q.y, [0.85, 0.85, 0.9], 'flagpole', 0.3);
         const col = [[1.0, 0.2, 0.15], [0.9, 0.9, 0.85], [0.15, 0.3, 0.9], [1.0, 0.8, 0.2]][Math.floor(rnd() * 4)];
-        b.add('dark', boxG(1.5, 0.9, 0.04, 1), xf(q.x + q.rhx * 0.75, q.y + 6.4, q.z + q.rhz * 0.75, 0, q.ry, 0), col);
+        b.add('dark', boxG(0.04, 0.9, 1.5, 1), xf(q.x + q.rhx * 0.0, q.y + 6.4, q.z + 0.0, 0, q.ry, 0).multiply(xf(0, 0, 0.8)), col);
       }
-      // sponsor billboards behind the barrier
-      for (let s = 130; s < LAP - 60; s += 52) {
+      // sponsor billboards behind the barrier (low boards on posts), only where the road is straight enough
+      for (let s = 260; s < LAP - 60; s += 52) {
         for (const sg of [-1, 1]) {
-          if (rnd() < 0.35) continue; const q = P(s, sg * (hw + 5.0)), col = [[0.9, 0.2, 0.15], [0.2, 0.45, 0.85], [0.95, 0.8, 0.2], [0.2, 0.65, 0.35], [0.9, 0.9, 0.85]][Math.floor(rnd() * 5)];
-          b.add('dark', boxG(8, 1.8, 0.2, 1), xf(q.x, q.y + 1.6, q.z, 0, q.ry, 0), col);
-          b.add('metalRusted', boxG(0.2, 2.2, 0.2, 1), xf(q.x - q.rhx * 3.2 * 0, q.y + 1.0, q.z, 0, q.ry, 0), [0.7, 0.7, 0.75]);
+          if (rnd() < 0.35) continue; const q = P(s, sg * (hw + 5.2)), col = [[0.9, 0.2, 0.15], [0.2, 0.45, 0.85], [0.95, 0.8, 0.2], [0.2, 0.65, 0.35], [0.9, 0.9, 0.85]][Math.floor(rnd() * 5)];
+          const pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => { const c = Math.cos(q.ry), sn = Math.sin(q.ry); return [q.x + c * u * 0.15 + sn * v * 4, q.z - sn * u * 0.15 + c * v * 4]; });
+          if (!reg.fits(pts, 3.2, 1.0)) continue;
+          put('dark', 0.2, 1.8, 8, q, 0, q.y + 1.0, col, 'billboard'); reg.items[reg.items.length - 1].supported = true;
+          for (const e of [-3.4, 0, 3.4]) { const qp = P(s + e, sg * (hw + 5.2)); put('metalRusted', 0.25, 1.1, 0.25, qp, 0, qp.y, [0.7, 0.7, 0.75], 'billboardPost', 0.3); }
         }
       }
       grp.add(b.build(lib, { shadow: false }));
       // bunting across the start straight
       const lines = [];
-      for (const s of [-60, -20, 40, 80]) { const l = P(s, -(hw + 4.6)), r = P(s, hw + 4.6); lines.push({ a: [l.x, l.y + 7, l.z], b: [r.x, r.y + 7, r.z], sag: 1.4 }); }
+      for (const s of [20, 60, 100, 140]) { const l = P(s, -(hw + 4.6)), r = P(s, hw + 4.6); lines.push({ a: [l.x, l.y + 7, l.z], b: [r.x, r.y + 7, r.z], sag: 1.4 }); }
       grp.add(buntingMesh(lines, lib));
       // painted lines on the grid + chequered line (draped)
       const strip = (s0, s1, tex, rep) => {
@@ -203,7 +223,7 @@ export function planCircuit(seed) {
         return new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
       };
       grp.add(strip(-0.6, 0.6, 'checker', 6));
-      addItem(grp, cOf(10), 150, 380);
+      addItem(grp, cOf(100), 170, 380);
     }
 
     // ---- trees outside the barriers ----
@@ -213,7 +233,7 @@ export function planCircuit(seed) {
   }
 
   return {
-    id: 'circuit', name: 'Speedway', net, pads: [], terrainOpts, theme, surface, flags: { closed: true, laps: 3, flat: true, noStuckRescue: true },
+    id: 'circuit', name: 'Speedway', net, registry, pads: [], terrainOpts, theme, surface, flags: { closed: true, laps: 3, flat: true, noStuckRescue: true },
     splits: [], hazards: [], startPos, landmarks: [{ type: 'finish', s: 3218, lateral: 0 }, { type: 'grandstand', s: 15, lateral: -14 }],
     decorate, ranges: { ground: 460 },
   };

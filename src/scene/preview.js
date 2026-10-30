@@ -26,5 +26,11 @@ cam.lookAt(tgt);
 sun.position.copy(f.position).add(new THREE.Vector3(-80, 140, 50)); sun.target.position.copy(f.position);
 function frame() { world.update(0.016, cam); renderer.render(scene, cam); }
 for (let i = 0; i < 3; i++) frame();
+window.__shoot = (ss, ch = {}, dd = 0, hh = 1.4, lk = 30, pitch = 2) => {
+  const f2 = world.track.sampleAt(ss, ch);
+  cam.position.copy(f2.position).addScaledVector(f2.right, dd); cam.position.y = Math.max(f2.position.y + hh, world.heightAt(cam.position.x, cam.position.z) + hh);
+  const t2 = world.track.sampleAt(ss + lk, ch).position.clone(); t2.y = cam.position.y - pitch; cam.lookAt(t2);
+  sun.position.copy(f2.position).add(new THREE.Vector3(-80, 140, 50)); sun.target.position.copy(f2.position); for (let i = 0; i < 2; i++) frame();
+};
 window.__ready = true;
 window.__info = renderer.info.render;

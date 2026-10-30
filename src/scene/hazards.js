@@ -40,6 +40,7 @@ export function createHazardField(track, seed = 1, opts = {}) {
   while (s < L - (opts.endGap ?? 100)) {
     let kind = order[(oi++ + Math.floor(rng() * 2)) % order.length];
     if (kind === last) kind = order[(oi++) % order.length];
+    if (kind === 'stall' && opts.noStall && opts.noStall.some(([a, b]) => s > a && s < b)) kind = 'puddle';   // keep geometry hazards out of junction mouths
     last = kind;
     track.atS(s, pp);
     const hw = pp.hw;
@@ -71,7 +72,7 @@ export function createHazardField(track, seed = 1, opts = {}) {
       case 'stall': {
         z.a = 4 + rng() * 3; z.b = hw; z.lateral = 0; z.obstacles = [];
         const n = 3 + Math.floor(rng() * 2);
-        for (let i = 0; i < n; i++) z.obstacles.push({ s: z.s + (i - (n - 1) / 2) * 2.6, d: (i % 2 ? 1 : -1) * hw * (0.45 + rng() * 0.15), r: 0.85 + rng() * 0.25, h: 1.1 });
+        for (let i = 0; i < n; i++) { const r = 0.85 + rng() * 0.25, f = 0.45 + rng() * 0.15; z.obstacles.push({ s: z.s + (i - (n - 1) / 2) * 2.6, d: (i % 2 ? 1 : -1) * (opts.stallEdge ? hw - 0.55 - r * 0.45 : hw * f), r, h: opts.stallEdge ? 0.95 : 1.1 }); }
         break;
       }
       case 'steps': z.a = 3 + rng() * 3; z.b = hw + 0.3; z.lateral = 0; z.stairs = true; break;

@@ -5,6 +5,7 @@ import { makeRoad, buildNetwork } from '../roadnet.js';
 import { createHazardField, SURFACES } from '../hazards.js';
 import { Batch, boxG, cylG, sphG, prismG, xf } from '../batch.js';
 import { scatterTrees } from './scatter.js';
+import { createRegistry } from './registry.js';
 
 const PRE = 40, POST = 70, LEN = 3218;
 const SPLITS = [
@@ -96,6 +97,7 @@ export function planVillage(seed) {
   // branch roads start/end on main-street samples: the polyline above includes the two anchor points, which were
   // used only for tangent shaping; trim them so the branch begins exactly at the split point
   const net = buildNetwork({ main, branches, length: LEN, lapLength: LEN });
+  const registry = createRegistry(net);
 
   // ---- hazards per road ----
   const hz = [];
@@ -109,11 +111,11 @@ export function planVillage(seed) {
       hz.push({ ...h, s: mapS(road, h.s), halfLength: h.halfLength * k, ...sp });
     }
   };
-  main.field = createHazardField(main, seed + 11, { order: ['puddle', 'rock', 'puddle', 'stall', 'rock', 'puddle'], start: 120, startJit: 30, gap1: 55, gap2: 60, endGap: 110 });
+  main.field = createHazardField(main, seed + 11, { order: ['puddle', 'rock', 'puddle', 'stall', 'rock', 'puddle'], start: 120, startJit: 30, gap1: 55, gap2: 60, endGap: 110, stallEdge: true, noStall: SPLITS.flatMap((sp) => [[sp.fromS - 20, sp.fromS + 70], [sp.toS - 70, sp.toS + 20]]) });
   addHaz(main, main.field);
   for (const b of branches) {
     const kind = b.road.kind;
-    const opts = kind === 'market' ? { order: ['stall', 'puddle', 'stall', 'stall'], start: 30, startJit: 8, gap1: 18, gap2: 10, endGap: 30 }
+    const opts = kind === 'market' ? { order: ['stall', 'puddle', 'stall', 'stall'], start: 62, startJit: 8, gap1: 18, gap2: 10, endGap: 30 }
       : kind === 'alley' ? { order: ['steps', 'rock', 'steps', 'puddle'], start: 28, startJit: 8, gap1: 16, gap2: 10, endGap: 28 }
         : { order: ['puddle', 'puddle', 'rock'], start: 45, startJit: 15, gap1: 60, gap2: 30, endGap: 40 };
     b.road.field = createHazardField(b.road, seed + 31 + b.road.id, opts);
@@ -158,8 +160,10 @@ export function planVillage(seed) {
   const startPos = (slot) => ({ s: 13.5 - 4.4 * (slot >> 1) - ((slot & 1) ? 2.0 : 0), d: (slot & 1) ? 1.15 : -1.15 });
 
   // =========================================================================================
-  function decorate({ net: nw, terrain, lib, parent, seed: sd }) {
+  function decorate({ net: nw, terrain, lib, parent, seed: sd, plan }) {
     const rnd = mulberry32(sd * 71 + 5);
+    const reg = plan.registry;
+    const ROW = 0.66;   // house / wall front plane, metres beyond the road edge (corridor = edge + 0.3, doorsteps/awnings protrude <= 0.3)
     const items = [];
     const pp = {}, qq = {};
     const CH = 120;
@@ -177,7 +181,7 @@ export function planVillage(seed) {
       road.atS(s, pp);
       const hw = pp.hw, T = new THREE.Vector3(pp.rhz, 0, -pp.rhx), R = new THREE.Vector3(pp.rhx, 0, pp.rhz);
       const Z = R.clone().multiplyScalar(sg), X = sg > 0 ? T : T.clone().negate(), Y = new THREE.Vector3(0, 1, 0);
-      const base = new THREE.Vector3(pp.px + R.x * sg * (hw + 0.2), pp.py, pp.pz + R.z * sg * (hw + 0.2));
+      const base = new THREE.Vector3(pp.px + R.x * sg * (hw + ROW), pp.py, pp.pz + R.z * sg * (hw + ROW));
       return { M: new THREE.Matrix4().makeBasis(X, Y, Z).setPosition(base), hw, base, X, Z };
     };
     function house(b, M, w, depth, floors, ground, big) {
@@ -204,20 +208,20 @@ export function planVillage(seed) {
         const x = -w / 2 + bw * (i + 0.5), y = 0.5 + 1.9 + f * 3.1;
         if (f === 0 && i === Math.floor(bays / 2)) {
           b.add('woodWeathered', boxG(1.2, 2.3, 0.2, 1), L(xf(x, 1.65, -0.02)), [0.35 + rnd() * 0.3, 0.25 + rnd() * 0.2, 0.2]);
-          b.add('concrete', boxG(1.6, 0.18, 0.7, 1), L(xf(x, 0.55, -0.3)), [1, 1, 1]);
+          b.add('concrete', boxG(1.6, 0.18, 0.5, 1), L(xf(x, 0.55, -0.05)), [1, 1, 1]);
           continue;
         }
         b.add('woodWeathered', boxG(1.15, 1.55, 0.1, 1), L(xf(x, y, -0.02)), [1.5, 1.45, 1.35]);
         b.add('dark', boxG(0.9, 1.3, 0.12, 1), L(xf(x, y, -0.05)), [0.08, 0.1, 0.12]);
         if (rnd() < 0.3) { const sc = SHUT[Math.floor(rnd() * SHUT.length)]; for (const sx of [-1, 1]) b.add('woodWeathered', boxG(0.45, 1.45, 0.06, 1), L(xf(x + sx * 0.78, y, -0.06)), [sc[0] * 1.2, sc[1] * 1.2, sc[2] * 1.2]); }
-        if (rnd() < 0.35) { b.add('woodWeathered', boxG(1.1, 0.26, 0.3, 1), L(xf(x, y - 0.95, -0.2)), [0.55, 0.4, 0.3]); const fc = FLOW[Math.floor(rnd() * 4)]; b.add('dark', boxG(1.0, 0.22, 0.26, 1), L(xf(x, y - 0.8, -0.2)), [fc[0] * 0.8, fc[1] * 0.8, fc[2] * 0.8]); }
+        if (rnd() < 0.35) { b.add('woodWeathered', boxG(1.1, 0.26, 0.3, 1), L(xf(x, y - 0.95, 0.0)), [0.55, 0.4, 0.3]); const fc = FLOW[Math.floor(rnd() * 4)]; b.add('dark', boxG(1.0, 0.22, 0.26, 1), L(xf(x, y - 0.8, 0.0)), [fc[0] * 0.8, fc[1] * 0.8, fc[2] * 0.8]); }
       }
       if (ground && rnd() < 0.55) {
         const ac = rnd() < 0.5 ? [0.85, 0.2, 0.18] : [0.2, 0.4, 0.75];
-        for (let i = 0; i < 6; i++) b.add('dark', boxG(w / 6 - 0.02, 0.06, 1.1, 1), L(xf(-w / 2 + (i + 0.5) * w / 6, 2.9, -0.65, 0.35, 0, 0)), i % 2 ? [1.7, 1.7, 1.6] : ac);
+        for (let i = 0; i < 6; i++) b.add('dark', boxG(w / 6 - 0.02, 0.06, 1.1, 1), L(xf(-w / 2 + (i + 0.5) * w / 6, 2.9, 0.15, 0.35, 0, 0)), i % 2 ? [1.7, 1.7, 1.6] : ac);
         const sc = [[0.9, 0.7, 0.2], [0.25, 0.5, 0.35], [0.8, 0.3, 0.25], [0.2, 0.3, 0.6]][Math.floor(rnd() * 4)];
         b.add('dark', boxG(Math.min(w * 0.7, 3.6), 0.6, 0.1, 1), L(xf(0, 3.7, -0.1)), sc);
-        b.add('dark', boxG(0.35, 0.45, 0.35, 1), L(xf(w / 2 - 0.9, 0.9, -0.4)), [0.55, 0.35, 0.2]);
+        b.add('dark', boxG(0.35, 0.45, 0.35, 1), L(xf(w / 2 - 0.9, 0.9, 0.0)), [0.55, 0.35, 0.2]);
       }
     }
     function frontage(road, sgs, sLo, sHi, big) {
@@ -228,21 +232,23 @@ export function planVillage(seed) {
           if (sc > sHi - 4) break;
           const bs = mkBasis(road, sc, sg);
           const cx = bs.base.x + bs.Z.x * depth / 2, cz = bs.base.z + bs.Z.z * depth / 2;
-          let ok = free(cx, cz, Math.hypot(w, depth) / 2);
-          if (ok) for (const [lx, lz] of [[-w / 2, depth * 0.5], [w / 2, depth * 0.5], [0, depth * 0.5], [-w / 2, 1.5], [w / 2, 1.5], [0, depth]]) {
-            const x = bs.base.x + bs.X.x * lx + bs.Z.x * lz, z = bs.base.z + bs.X.z * lx + bs.Z.z * lz;
-            if (clearOf(x, z) < 0.1) { ok = false; break; }
-          }
+          const Mq = bs.M.clone(), poly = reg.boxPoly(Mq, 0, (depth - 0.3) / 2, w / 2 + 0.05, (depth + 0.3) / 2), gpt = [bs.base.x - bs.Z.x * 0.3, bs.base.z - bs.Z.z * 0.3];
+          let ok = free(cx, cz, Math.hypot(w, depth) / 2) && reg.fits(poly, 0.31, 0.5);
           if (ok) {
             const prog = road.map ? road.map.fromS + (sc / road.map.len) * (road.map.toS - road.map.fromS) : sc;
-            const M = bs.M.clone(); M.elements[13] = terrain.heightAt(bs.base.x - bs.Z.x * 0.1, bs.base.z - bs.Z.z * 0.1) - 0.05;
+            const M = bs.M.clone(); M.elements[13] = terrain.heightAt(gpt[0], gpt[1]) - 0.05;
             house(batchOf(prog), M, w, depth, floors, true, big);
             placed.push({ x: cx, z: cz, r: Math.hypot(w, depth) / 2 });
-          } else if (rnd() < 0.8) { // garden wall so the street edge stays closed
-            const prog = road.map ? road.map.fromS + (sc / road.map.len) * (road.map.toS - road.map.fromS) : sc;
-            const M = bs.M.clone(); M.elements[13] = terrain.heightAt(bs.base.x, bs.base.z) - 0.05;
-            batchOf(prog).add('concrete', boxG(w, 2.3, 0.7, 2), M.clone().multiply(xf(0, 1.0, 0.45)), [0.95, 0.9, 0.82]);
-            batchOf(prog).add('concrete', boxG(w + 0.1, 0.2, 0.9, 2), M.clone().multiply(xf(0, 2.2, 0.45)), [0.8, 0.78, 0.75]);
+            reg.poly('house', poly, M.elements[13] - 4.1, gpt, { sunk: true });   // plinth boxes reach 4.1 m below the floor
+          } else if (rnd() < 0.8) { // garden wall so the street edge stays closed (only where it stays out of every corridor)
+            const gw = reg.boxPoly(bs.M, 0, 0.35, w / 2, 0.35);
+            if (reg.fits(gw, 0.31, 0.5)) {
+              const prog = road.map ? road.map.fromS + (sc / road.map.len) * (road.map.toS - road.map.fromS) : sc;
+              const M = bs.M.clone(); M.elements[13] = terrain.heightAt(bs.base.x, bs.base.z) - 0.05;
+              batchOf(prog).add('concrete', boxG(w, 3.1, 0.7, 2), M.clone().multiply(xf(0, 0.6, 0.35)), [0.95, 0.9, 0.82]);
+              batchOf(prog).add('concrete', boxG(w + 0.1, 0.2, 0.9, 2), M.clone().multiply(xf(0, 2.2, 0.35)), [0.8, 0.78, 0.75]);
+              reg.poly('gardenwall', gw, M.elements[13] - 0.95, [bs.base.x, bs.base.z], { sunk: true });
+            }
           }
           s += w + 0.1 + rnd() * 0.5;
         }
@@ -288,12 +294,13 @@ export function planVillage(seed) {
       for (let c = 0; c < nCh; c++) {
         const sa = (road.length * c) / nCh, sb = (road.length * (c + 1)) / nCh, rows = Math.round((sb - sa) / 2) + 1, Pa = [], Na = [], Ua = [], Ia = [];
         for (const sg of [-1, 1]) {
-          const base = Pa.length / 3;
+          const base = Pa.length / 3, rowOK = [];
           for (let r = 0; r < rows; r++) {
-            const s = sa + ((sb - sa) * r) / (rows - 1); road.atS(s, pp);
-            for (const [dd, hh] of [[0.55, -0.4], [0.75, WALL], [2.4, WALL]]) { const d = sg * (pp.hw + dd), x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d; Pa.push(x, pp.py + hh, z); Na.push(0, 1, 0); Ua.push(s / 3, hh / 3); }
+            const s = sa + ((sb - sa) * r) / (rows - 1); road.atS(s, pp); let ok = true;
+            for (const [dd, hh] of [[ROW - 0.07, -0.4], [ROW + 0.13, WALL], [2.4, WALL]]) { const d = sg * (pp.hw + dd), x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d; if (reg.clear(x, z) < 0.31) ok = false; Pa.push(x, pp.py + hh, z); Na.push(0, 1, 0); Ua.push(s / 3, hh / 3); }
+            rowOK.push(ok);
           }
-          for (let r = 0; r < rows - 1; r++) for (let q = 0; q < 2; q++) { const a = base + r * 3 + q, b2 = a + 1, c2 = a + 3, d2 = c2 + 1; Ia.push(a, c2, b2, b2, c2, d2); }
+          for (let r = 0; r < rows - 1; r++) { if (!rowOK[r] || !rowOK[r + 1]) continue; for (let q = 0; q < 2; q++) { const a = base + r * 3 + q, b2 = a + 1, c2 = a + 3, d2 = c2 + 1; Ia.push(a, c2, b2, b2, c2, d2); } }
         }
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(Pa, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(Na, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(Ua, 2));
@@ -310,7 +317,10 @@ export function planVillage(seed) {
     // ---- lamp posts (main street) ----
     for (let s = 20; s < LEN + 40; s += 27) {
       const sg = (Math.floor(s / 27) % 2) ? 1 : -1, bs = mkBasis(main, s, sg), x = bs.base.x, z = bs.base.z, y = terrain.heightAt(x, z), b = batchOf(s), ry = Math.atan2(-bs.Z.z, bs.Z.x);
-      b.add('dark', cylG(0.07, 0.1, 4.4, 5, 1), xf(x, y + 2.2, z), [0.3, 0.3, 0.32]);
+      if (reg.clear(x, z) < 0.45) continue;
+      const ys = terrain.heightAt(pp.px + pp.rhx * sg * (bs.hw + 0.1), pp.pz + pp.rhz * sg * (bs.hw + 0.1)) - 0.6;   // post foot buried in the street wall
+      reg.circle('lamp', x, z, 0.12, ys, { sunk: true }, 6);
+      b.add('dark', cylG(0.07, 0.1, 5.0, 5, 1), xf(x, ys + 2.5, z), [0.3, 0.3, 0.32]);
       b.add('dark', boxG(0.35, 0.5, 0.35, 1), xf(x - bs.Z.x * 0.4, y + 4.5, z - bs.Z.z * 0.4, 0, ry, 0), [2.0, 1.8, 1.1]);
       b.add('dark', boxG(0.9, 0.07, 0.07, 1), xf(x - bs.Z.x * 0.2, y + 4.3, z - bs.Z.z * 0.2, 0, ry, 0), [0.3, 0.3, 0.32]);
     }
@@ -324,8 +334,22 @@ export function planVillage(seed) {
           road.atS(ob.s, pp);
           const x = pp.px + pp.rhx * ob.d, zz = pp.pz + pp.rhz * ob.d, y = terrain.heightAt(x, zz) - ob.h + 0.0;
           const prog = road.map ? road.map.fromS + (ob.s / road.map.len) * (road.map.toS - road.map.fromS) : ob.s, b = batchOf(prog);
-          const ry = Math.atan2(-pp.rhz, pp.rhx), M = xf(x, y, zz, 0, ry + (rnd() - 0.5) * 0.3, 0), L = (m) => M.clone().multiply(m);
-          if (rnd() < 0.62) {
+          const ry = Math.atan2(-pp.rhz, pp.rhx), yaw = ry + (rnd() - 0.5) * 0.3, M = xf(x, y, zz, 0, yaw, 0), L = (m) => M.clone().multiply(m);
+          const onMain = !road.map, pick = rnd();
+          if (onMain) {
+            // main street: only low, clearly-hazard props pushed to the kerb (hay cart / crate stack), never a full stall
+            if (pick < 0.5) {
+              b.add('woodWeathered', boxG(1.7, 0.55, 1.5, 1.5), L(xf(0, 0.28, 0)), [0.6, 0.48, 0.34]);
+              for (const sz of [-1, 1]) b.add('dark', cylG(0.42, 0.42, 0.1, 10, 1), L(xf(0, 0.42, sz * 0.8, Math.PI / 2, 0, 0)), [0.25, 0.2, 0.15]);
+              b.add('straw', boxG(1.5, 0.4, 1.3, 1.5), L(xf(0, 0.75, 0)), [1.0, 0.88, 0.55]);
+            } else {
+              for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) b.add('woodWeathered', boxG(0.7, 0.55, 0.7, 1), L(xf(-0.7 + i * 0.75, 0.28 + ((i + j) % 2) * 0.01, -0.4 + j * 0.75)), [0.7 - 0.05 * j, 0.52, 0.34]);
+              b.add('woodWeathered', boxG(0.7, 0.5, 0.7, 1), L(xf(-0.35, 0.82, 0.0)), [0.75, 0.56, 0.36]); b.add('woodWeathered', boxG(0.7, 0.5, 0.7, 1), L(xf(0.4, 0.82, 0.3)), [0.66, 0.5, 0.32]);
+            }
+            reg.box('hazard', M, 0, 0, 1.0, 0.9, 0, { hazard: true, lift: ob.h });
+            continue;
+          }
+          if (pick < 0.62) {
             const ac = [[0.85, 0.2, 0.18], [0.2, 0.45, 0.8], [0.9, 0.7, 0.15], [0.25, 0.6, 0.35]][Math.floor(rnd() * 4)];
             b.add('woodWeathered', boxG(2.3, 1.15, 2.1, 1.5), L(xf(0, 0.575, 0)), [0.65, 0.5, 0.38]);
             for (const [px, pz] of [[-1.1, -1.0], [1.1, -1.0], [-1.1, 1.0], [1.1, 1.0]]) b.add('woodWeathered', boxG(0.08, 2.5, 0.08, 1), L(xf(px, 1.25, pz)), [0.6, 0.45, 0.3]);
@@ -337,6 +361,7 @@ export function planVillage(seed) {
             b.add('woodWeathered', boxG(1.8, 0.07, 0.07, 1), L(xf(-1.9, 0.9, 0.5, 0, 0, 0.12)), [0.55, 0.42, 0.3]); b.add('woodWeathered', boxG(1.8, 0.07, 0.07, 1), L(xf(-1.9, 0.9, -0.5, 0, 0, 0.12)), [0.55, 0.42, 0.3]);
             for (let i = 0; i < 6; i++) b.add('dark', boxG(0.4, 0.4, 0.4, 1), L(xf(-0.7 + i * 0.3, 1.35, (i % 2) * 0.4 - 0.2)), [0.85, 0.72, 0.45]);
           }
+          reg.box('hazard', M, 0, 0, 1.15, 1.05, 0, { hazard: true, lift: ob.h });
         }
       }
     }
@@ -380,7 +405,7 @@ export function planVillage(seed) {
   }
 
   return {
-    id: 'village', name: 'Hill Village', net, pads: [], terrainOpts, theme, surface, flags: { closed: false, laps: 1, flat: false, noStuckRescue: false },
+    id: 'village', name: 'Hill Village', net, registry, pads: [], terrainOpts, theme, surface, flags: { closed: false, laps: 1, flat: false, noStuckRescue: false },
     splits, hazards: hz, startPos, landmarks: [{ type: 'market', s: 620, lateral: 0 }, { type: 'church', s: 1090, lateral: 20 }, { type: 'fountain', s: 1075, lateral: -8 }, { type: 'finish', s: LEN, lateral: 0 }],
     decorate, ranges: { ground: 330 },
   };

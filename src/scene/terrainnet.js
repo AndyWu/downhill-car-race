@@ -2,6 +2,7 @@
 // is treated as road, with a per-track verge profile (walls, kerbs, corn berm, tyre walls).
 import * as THREE from 'three';
 import { Noise, clamp, smoothstep } from './util.js';
+import { makeClear } from './tracks/registry.js';
 
 export const SHOULDER_IN = 1.5;
 
@@ -30,7 +31,14 @@ export function buildTerrainNet(net, pads, seed, opts = {}) {
     if (road.field && ad <= hw + SHOULDER_IN) { road.field.query(s, d, zq); y += zq.lift * (1 - smoothstep(hw, hw + 0.6, ad)) - zq.cut; } else { zq.lift = 0; zq.cut = 0; }
     return y;
   }
-  const verge = (road, s, d, hw) => (O.verge ? O.verge(road, s, d, hw) : 0);
+  const clearOf = net.roads.length > 1 ? makeClear(net) : null;
+  // verge of the winning road, faded out wherever the point lies inside (or hugging) ANOTHER road's corridor: walls never rise inside a junction mouth
+  const verge = (road, s, d, hw, x, z, ri) => {
+    if (!O.verge) return 0;
+    const v = O.verge(road, s, d, hw);
+    if (!clearOf || v < 0.005) return v;
+    return v * smoothstep(0.25, 0.8, clearOf(x, z, ri));
+  };
 
   const side = (s, d, hw) => O.sideSlope * nz.n1(s / 130 + 3) * clamp(d, -22, 22) * smoothstep(hw + 3, hw + 12, Math.abs(d));
   for (let iz = 0; iz < GZ; iz++) for (let ix = 0; ix < GX; ix++) {
@@ -78,11 +86,11 @@ export function buildTerrainNet(net, pads, seed, opts = {}) {
     const road = q.road; road.params(q.idx, pp);
     const hw = pp.hw, ad = Math.abs(q.d);
     if (ad > hw + SHOULDER_OUT) return g;
-    if (ad <= hw + SHOULDER_IN) return roadY(road, q.s, q.d, pp) + verge(road, q.s, q.d, hw);
+    if (ad <= hw + SHOULDER_IN) return roadY(road, q.s, q.d, pp) + verge(road, q.s, q.d, hw, x, z, q.roadIndex);
     let y0 = roadY(road, q.s, q.d < 0 ? -(hw + SHOULDER_IN) : hw + SHOULDER_IN, pp);
     y0 += zq.cut;
     if (road.field) road.field.query(q.s, q.d, zq); else { zq.cut = 0; }
-    return y0 + (g - y0) * smoothstep(hw + SHOULDER_IN, hw + SHOULDER_OUT, ad) + verge(road, q.s, q.d, hw) - zq.cut;
+    return y0 + (g - y0) * smoothstep(hw + SHOULDER_IN, hw + SHOULDER_OUT, ad) + verge(road, q.s, q.d, hw, x, z, q.roadIndex) - zq.cut;
   }
   function normalAt(x, z, e = 0.35) {
     return new THREE.Vector3(heightAt(x - e, z) - heightAt(x + e, z), 2 * e, heightAt(x, z - e) - heightAt(x, z + e)).normalize();
