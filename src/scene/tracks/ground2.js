@@ -27,6 +27,7 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
   const rnz = new Noise(seed * 17 + 2), cnz = new Noise(seed * 5 + 1);
   const T = { rowStep: 2, colSpacing: 0.55, terrRow: 4, offs: OFFS2, chunk: 100, ...theme };
   const roadMat = lib.get(T.roadMat, { vertexColors: true, polygonOffset: -2 });
+  const branchMat = lib.get(T.roadMat, { vertexColors: true, polygonOffset: -5 });   // branch strips win the z-fight over the main strip inside junction mouths
   const grassMat = lib.get(T.terrMat || 'grass', { vertexColors: true });
   const innerMat = T.innerMat ? lib.get(T.innerMat, { vertexColors: true }) : null;
   const pp = {}, col = [0, 0, 0], uvo = [0, 0];
@@ -44,7 +45,7 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
         const kk = clamp(k - 1, 0, cols0 - 1), u = (kk / (cols0 - 1)) * 2 - 1, d = skirt ? skirt * (hwe + 0.9) : (dCols ? dCols[kk] : u * hwe), x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, i = r * cols + k;
         const dh = skirt ? skirt * hwe : d;
         const xe = pp.px + pp.rhx * dh, ze = pp.pz + pp.rhz * dh;
-        P[i * 3] = x; P[i * 3 + 1] = terrain.heightAt(skirt ? xe : x, skirt ? ze : z) - (skirt ? 0.55 : 0); P[i * 3 + 2] = z;
+        P[i * 3] = x; P[i * 3 + 1] = terrain.heightAt(skirt ? xe : x, skirt ? ze : z) - (skirt ? 0.55 : 0) - (T.meshLift && !skirt ? T.meshLift(road, s, d) : 0); P[i * 3 + 2] = z;   // meshLift: physics-only bumps (village prop pucks) kept out of the drawn road
         if (detail && !skirt) { const nrm = terrain.normalAt(x, z, 0.3); N[i * 3] = nrm.x; N[i * 3 + 1] = nrm.y; N[i * 3 + 2] = nrm.z; } else N[i * 3 + 1] = 1;
         T.roadUV(road, s, skirt ? skirt * hwe : d, hwe, uvo); UV[i * 2] = uvo[0]; UV[i * 2 + 1] = uvo[1];
         T.roadColor(road, s, skirt ? skirt * hwe : d, pp, rnz, col); C[i * 3] = col[0]; C[i * 3 + 1] = col[1]; C[i * 3 + 2] = col[2];
@@ -146,7 +147,7 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
     for (let c = 0; c < nb; c++) {
       const sA = (rd.length * c) / nb, sB = (rd.length * (c + 1)) / nb;
       const hwA = rd.atS((sA + sB) / 2, {}).hw, cols = T.roadColsFn ? T.roadColsFn(hwA).length : Math.max(7, 2 * Math.round((hwA + SHOULDER_IN) / T.colSpacing / 2) + 1);
-      const m = new THREE.Mesh(roadGeo(rd, sA, sB, T.rowStep, cols, true), roadMat); m.receiveShadow = true; m.name = 'branch_' + b.splitId + '_' + b.pathIndex + '_' + c; m.renderOrder = 1; parent.add(m);
+      const m = new THREE.Mesh(roadGeo(rd, sA, sB, T.rowStep, cols, true), branchMat); m.receiveShadow = true; m.name = 'branch_' + b.splitId + '_' + b.pathIndex + '_' + c; m.renderOrder = 1; parent.add(m);
       chunks.push({ meshes: [m], center: centerOf(rd, (sA + sB) / 2), radius: 60, kind: 'ground' });
     }
   }
