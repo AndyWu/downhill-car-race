@@ -38,10 +38,10 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
     for (let r = 0; r < rows; r++) {
       const s = sA + (sB - sA) * (r / (rows - 1));
       road.atS(s, pp);
-      const hwe = pp.hw + SHOULDER_IN;
+      const hwe = pp.hw + SHOULDER_IN, dCols = T.roadColsFn ? T.roadColsFn(pp.hw) : null;   // optional per-theme column layout (village kerb / parapet edges)
       for (let k = 0; k < cols; k++) {
         const skirt = k === 0 ? -1 : k === cols - 1 ? 1 : 0;
-        const kk = clamp(k - 1, 0, cols0 - 1), u = (kk / (cols0 - 1)) * 2 - 1, d = skirt ? skirt * (hwe + 0.9) : u * hwe, x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, i = r * cols + k;
+        const kk = clamp(k - 1, 0, cols0 - 1), u = (kk / (cols0 - 1)) * 2 - 1, d = skirt ? skirt * (hwe + 0.9) : (dCols ? dCols[kk] : u * hwe), x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, i = r * cols + k;
         const dh = skirt ? skirt * hwe : d;
         const xe = pp.px + pp.rhx * dh, ze = pp.pz + pp.rhz * dh;
         P[i * 3] = x; P[i * 3 + 1] = terrain.heightAt(skirt ? xe : x, skirt ? ze : z) - (skirt ? 0.55 : 0); P[i * 3 + 2] = z;
@@ -80,7 +80,7 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
   const nCh = Math.ceil((hi - lo) / T.chunk);
   for (let c = 0; c < nCh; c++) {
     const sA = lo + c * T.chunk, sB = Math.min(hi, sA + T.chunk);
-    const hwA = main.atS((sA + sB) / 2, {}).hw, cols = Math.max(9, 2 * Math.round((hwA + SHOULDER_IN) / T.colSpacing / 2) + 1);
+    const hwA = main.atS((sA + sB) / 2, {}).hw, cols = T.roadColsFn ? T.roadColsFn(hwA).length : Math.max(9, 2 * Math.round((hwA + SHOULDER_IN) / T.colSpacing / 2) + 1);
     const road = new THREE.Mesh(roadGeo(main, sA, sB, T.rowStep, cols, true), roadMat); road.receiveShadow = true; road.name = 'road_' + c; parent.add(road);
     chunks.push({ meshes: [road], center: centerOf(main, (sA + sB) / 2), radius: 60, kind: 'ground' });
   }
@@ -145,7 +145,7 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
     const rd = b.road, nb = Math.max(1, Math.round(rd.length / 110));
     for (let c = 0; c < nb; c++) {
       const sA = (rd.length * c) / nb, sB = (rd.length * (c + 1)) / nb;
-      const hwA = rd.atS((sA + sB) / 2, {}).hw, cols = Math.max(7, 2 * Math.round((hwA + SHOULDER_IN) / T.colSpacing / 2) + 1);
+      const hwA = rd.atS((sA + sB) / 2, {}).hw, cols = T.roadColsFn ? T.roadColsFn(hwA).length : Math.max(7, 2 * Math.round((hwA + SHOULDER_IN) / T.colSpacing / 2) + 1);
       const m = new THREE.Mesh(roadGeo(rd, sA, sB, T.rowStep, cols, true), roadMat); m.receiveShadow = true; m.name = 'branch_' + b.splitId + '_' + b.pathIndex + '_' + c; m.renderOrder = 1; parent.add(m);
       chunks.push({ meshes: [m], center: centerOf(rd, (sA + sB) / 2), radius: 60, kind: 'ground' });
     }

@@ -64,8 +64,8 @@ const TEX = {
   asphaltLines: () => {
     const W = 512, Hh = 256, data = new Uint8Array(W * Hh * 4);
     for (let y = 0; y < Hh; y++) for (let x = 0; x < W; x++) {
-      const u = x / W, v = y / Hh, n = fb(u, v, 6, 3, 311), sp = tn(u, v, 90, 313) > 0.82 ? 1.35 : 1;
-      let c = mix([58, 58, 60], [88, 88, 90], n); c = [c[0] * sp, c[1] * sp, c[2] * sp];
+      const u = x / W, v = y / Hh, n = fb(u, v, 6, 3, 311), sp = 0.93 + 0.14 * tn(u, v, 128, 313);   // fine dark aggregate (no bright flecks: they read as snow / litter at cockpit height)
+      let c = mix([46, 46, 49], [72, 72, 75], n); c = [c[0] * sp, c[1] * sp, c[2] * sp];
       const edge = Math.abs(u - 0.154) < 0.008 || Math.abs(u - 0.846) < 0.008;
       const dash = Math.abs(u - 0.5) < 0.006 && v < 0.5;
       if (edge || dash) c = [226, 226, 218];
@@ -88,9 +88,21 @@ const TEX = {
     const c = mix([132, 62, 40], [182, 96, 60], h); return [c[0] * sh, c[1] * sh, c[2] * sh];
   }),
   concrete: () => makeTex(128, (u, v) => { const n = fb(u, v, 6, 4, 351); const c = mix([128, 128, 124], [176, 174, 168], n); return c; }),
+  // corn wall face (map-loop round 1): dense vertical leaf blades with dark gaps and pale mid-ribs, brighter toward the top
   cornwall: () => makeTex(256, (u, v) => {
-    const st = tn(u * 2 % 1, v, 40, 361), leaf = fb(u, v, 12, 3, 363);
-    const c = mix([58, 92, 34], [150, 160, 64], clamp(0.35 + 0.5 * leaf + 0.25 * v, 0, 1)); const k = 0.75 + 0.35 * st; return [c[0] * k, c[1] * k, c[2] * k];
+    const col = u * 22 + 0.45 * Math.sin(v * 6.283 + Math.floor(u * 22) * 1.7), id = Math.floor(col), f = col - id, h = ihash(((id % 22) + 22) % 22, 0, 361), h2 = ihash(((id % 22) + 22) % 22, 3, 367);
+    const edge = smoothstepJS(0, 0.16, f) * (1 - smoothstepJS(0.84, 1, f)), rib = Math.exp(-(((f - 0.5) / 0.05) ** 2)) * 0.22;
+    const gap = smoothstepJS(0.25, 0.6, fb(u, v, 6, 3, 363)), c = mix([26, 52, 18], [118, 150, 46], clamp(0.18 + 0.55 * h + 0.5 * v * (0.6 + 0.6 * h2), 0, 1));
+    const k = (0.28 + 0.72 * edge) * (0.55 + 0.45 * gap) + rib; return [c[0] * k + 14 * rib, c[1] * k + 10 * rib, c[2] * k];
+  }),
+  // corn canopy seen from above: 4 rows per tile (u across), leaf streaks along the row, dark gaps between rows, pale tassels
+  cornTop: () => makeTex(256, (u, v) => {
+    const row = (u * 4) % 1, ridge = 1 - Math.abs(row - 0.5) * 2, sh = 0.32 + 0.68 * smoothstepJS(0.05, 0.75, ridge);
+    const leaf = fb(u * 2, v, 10, 3, 371), streak = tn(u * 4, v * 3, 16, 373);
+    const c = mix([42, 76, 26], [124, 152, 52], clamp(0.25 + 0.6 * leaf + 0.2 * streak, 0, 1));
+    const cell = 20, cx = Math.floor(u * cell), cy = Math.floor(v * cell), hh = ihash(cx, cy, 379);
+    let tas = 0; if (hh > 0.8) { const px = (hh * 977 % 1) * 0.6 + 0.2, py = (hh * 613 % 1) * 0.6 + 0.2, dx = u * cell - cx - px, dy = v * cell - cy - py; tas = Math.exp(-(dx * dx + dy * dy) / 0.05) * sh; }
+    const k = sh * (0.8 + 0.3 * streak); return [c[0] * k + 150 * tas, c[1] * k + 135 * tas, c[2] * k + 60 * tas];
   }),
   cornCard: () => {
     const S = 128, data = new Uint8Array(S * S * 4);
@@ -142,6 +154,7 @@ const FALLBACK = {
   roofTile: () => std({ map: tex('roofTile'), roughness: 0.85, metalness: 0 }),
   concrete: () => std({ map: tex('concrete'), roughness: 0.92, metalness: 0 }),
   cornwall: () => std({ map: tex('cornwall'), roughness: 0.95, metalness: 0, side: THREE.DoubleSide }),
+  cornTop: () => std({ map: tex('cornTop'), roughness: 0.95, metalness: 0, side: THREE.DoubleSide }),
   cornCard: () => std({ map: tex('cornCard'), alphaTest: 0.5, roughness: 0.85, metalness: 0, side: THREE.DoubleSide }),
   kerb: () => std({ map: tex('kerb'), roughness: 0.7, metalness: 0 }),
   glass: () => std({ color: 0x1c2428, roughness: 0.15, metalness: 0.3 }),
@@ -177,7 +190,7 @@ function applySway(m, wind, o) {
 const WX = {
   dirtRoad: { snow: 0.5, wet: 1 }, grass: { snow: 1, wet: 0.5 }, foliage: { snow: 0.6, wet: 0.3 }, blade: { snow: 0.55, wet: 0.2 },
   metalRusted: { snow: 0.9, wet: 0.5 }, woodWeathered: { snow: 0.35, wet: 0.6 }, rock: { snow: 0.5, wet: 0.6 }, straw: { snow: 0.5, wet: 0.3 },
-  barnPaint: { snow: 0.45, wet: 0.4 }, cobbles: { snow: 0.55, wet: 1 }, asphalt: { snow: 0.5, wet: 1 }, asphaltLines: { snow: 0.5, wet: 1 }, plaster: { snow: 0.25, wet: 0.4 }, brickwall: { snow: 0.2, wet: 0.5 }, roofTile: { snow: 0.9, wet: 0.5 }, concrete: { snow: 0.4, wet: 0.5 }, cornwall: { snow: 0.6, wet: 0.3 }, cornCard: { snow: 0.6, wet: 0.3 }, field: { snow: 1, wet: 0.3 }, gravel: { snow: 0.5, wet: 0.8 }, sand: { snow: 0.7, wet: 0.7 }, mud: { snow: 0.4, wet: 0.2 },
+  barnPaint: { snow: 0.45, wet: 0.4 }, cobbles: { snow: 0.55, wet: 1 }, asphalt: { snow: 0.5, wet: 1 }, asphaltLines: { snow: 0.5, wet: 1 }, plaster: { snow: 0.25, wet: 0.4 }, brickwall: { snow: 0.2, wet: 0.5 }, roofTile: { snow: 0.9, wet: 0.5 }, concrete: { snow: 0.4, wet: 0.5 }, cornwall: { snow: 0.6, wet: 0.3 }, cornCard: { snow: 0.6, wet: 0.3 }, cornTop: { snow: 0.7, wet: 0.3 }, field: { snow: 1, wet: 0.3 }, gravel: { snow: 0.5, wet: 0.8 }, sand: { snow: 0.7, wet: 0.7 }, mud: { snow: 0.4, wet: 0.2 },
 };
 function applyWeather(m, wx, o) {
   const prev = m.onBeforeCompile;

@@ -23,7 +23,12 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   // On the slower tracks the terrain, not the driver, sets the speed unless the driver holds back: tier the target speed by skill.
   const TRACK_CAP = { village: (k) => 7.4 + 4.1 * k, corn: (k) => 7.0 + 3.9 * k };
   const capFn = TRACK_CAP[world.trackId];
-  const P = capFn ? { ...profile, speed: { ...profile.speed, cap: Math.min(profile.speed.cap, capFn(profile.skill ?? 0.5)) } } : profile;
+  const flat = !!(world.flags && world.flags.flat);
+  // flat circuit: nothing but paddling moves a cart, so the speed ladder is compressed (the back of the field must not get lapped)
+  const FC = Number(process.env.FC_BASE || 9.8), FK = Number(process.env.FC_K || 0.7);
+  const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
+  const P = capFn ? { ...profile, speed: { ...profile.speed, cap: Math.min(profile.speed.cap, capFn(profile.skill ?? 0.5)) } }
+    : flat ? { ...profile, speed: { ...profile.speed, cap: capOf(profile.speed.cap) } } : profile;
   rng = rng || createRng(1);
   // ---- village: pick a street through every split according to personality (progress-s plan, sampleAt(s, choice)) ----
   let choice;
@@ -47,10 +52,10 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     }
   }
   const plan = buildPlan(world, P, rng, spec, choice);
-  const flat = !!(world.flags && world.flags.flat);
   const WB = spec?.wheelBase ?? 1.7, LOCK = spec?.steerLock ?? 0.5;
   const L = plan.length;
 
+  const FLOOR = Number(process.env.FLOOR || 8.5);
   let t = 0, noise = 0, steerOut = 0, hbOut = 0, extra = 0;
   const queue = []; // delayed commands {t, steer, hb}
   // paddling state
@@ -110,6 +115,12 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (P.pass && t > passUntil) passSide = 0;
     if (P.aggression > 0.5 && alongside) goal = clamp(alongside.lateral - eT, -2.5, 2.5) * 0.35; // shove
     else if (P.carAvoid > 0 && alongside && !goal) goal = (alongside.lateral > self.lateral ? -1 : 1) * (0.5 + Math.max(0, 2.2 - Math.abs(alongside.lateral - self.lateral))) * P.carAvoid; // give room, more when closer
+    // a parked / stopped cart on a wide road (spun car, finished car, idle player): everybody steers round it
+    if (!goal && ahead && !plan.narrow && (ahead.speed || 0) < 1.2 && aheadDs < 16 && Math.abs(ahead.lateral - self.lateral) < 2.3 && speed > 1.5 && hw > 3.2) {
+      const side = ahead.lateral - self.lateral >= 0 ? -1 : 1;
+      goal = clamp(ahead.lateral + side * 2.3 - eT, -3.5, 3.5);
+      if (Math.abs(eT + goal) > hw - 1.0) goal = clamp(ahead.lateral - side * 2.3 - eT, -3.5, 3.5);
+    }
     if (goal !== 0 && plan.costAt(sT, eT + goal) > plan.costAt(sT, eT) + 1) goal = 0; // don't drive into a hazard for it
     extra += (goal - extra) * (1 - Math.exp(-dt / 0.4));
 
@@ -176,7 +187,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     switch (PD.mode) {
       case 'forgetful':
         if (t >= nextToggle) { attentive = rng() < PD.attentive; nextToggle = t + 2 + rng() * 4; }
-        want = s < PD.startDist || speed < (flat ? 6 : 2.5) || attentive || (flat && rng() < 0.5) ? 1 : 0;
+        want = s < PD.startDist || speed < (flat ? FLOOR : 2.5) || attentive || (flat && rng() < 0.5) ? 1 : 0;
         break;
       case 'slow': want = slow ? 1 : 0; break;
       case 'furious': want = 1; break;
@@ -200,7 +211,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const burst = PD.mode === 'rhythm' ? 1 + 0.6 * (1 - clamp(speed / 10, 0, 1)) : PD.mode === 'optimal' ? Math.min(4.6 / PD.cadence, 1 + 0.6 * (1 - clamp(speed / 10, 0, 1))) : 1;
     const warm = PD.warmup && t < PD.warmup.t ? PD.warmup.f : 1; // e.g. Buster's cold start
     // flat tracks (speedway): paddling is the only engine, so everybody digs in, the less skilled a bit harder to stay on the pace
-    const flatCad = Math.min(4.6, (3.0 + 0.6 * (P.skill ?? 0.5)) * (1 + 0.8 * (1 - clamp(speed / 6, 0, 1))));
+    const flatCad = Math.min(4.6, (Number(process.env.CAD0 || 3.7) + 0.5 * (P.skill ?? 0.5)) * (1 + 0.8 * (1 - clamp(speed / 6, 0, 1))));
     const cadence = (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.

@@ -81,7 +81,7 @@ export function buildTerrainNet(net, pads, seed, opts = {}) {
 
   function heightAt(x, z) {
     const g = gridBil(H, x, z);
-    if (gridBil(D, x, z) > 26) return g;
+    if (gridBil(D, x, z) > (O.vergeReach || 26)) return g;
     net.project2(x, z, q);
     const road = q.road; road.params(q.idx, pp);
     const hw = pp.hw, ad = Math.abs(q.d);

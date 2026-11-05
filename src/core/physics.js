@@ -6,6 +6,9 @@ const G = 9.81;
 const RHO = 1.2;
 const PADDLE_DV = 0.22; // m/s per full stroke at standstill
 const PADDLE_V0 = 9;   // speed at which a stroke is worth half
+// Flat closed circuits (flags.flat): no hill to coast on, so asphalt rolls freely and strokes keep their bite at speed.
+const FLAT_ROLL = Number((typeof process !== 'undefined' && process.env && process.env.FLAT_ROLL) || 0.55);
+const FLAT_V0 = Number((typeof process !== 'undefined' && process.env && process.env.FLAT_V0) || 11);
 const MUD_ROLL = 0.045;   // extra rolling-resistance coefficient at drag = 1 (mud)
 const MUD_VISC = 0.12;    // speed-proportional deceleration (1/s) per unit drag
 export const STATE_FLOATS = 20;
@@ -86,6 +89,10 @@ export function createVehicleBody(specIn, world, opts = {}) {
   const good = { p: new THREE.Vector3(), q: new THREE.Quaternion() };
   let paddleCooldownL = 0, paddleCooldownR = 0;
   const hasWorld = !!world;
+  const flatTrack = !!(world && world.flags && world.flags.flat);
+  const wallStop = !!(world && world.flags && world.flags.closed);   // circuit: 'wall' surfaces are barriers, not ramps
+  const crrEff = flatTrack ? crr * FLAT_ROLL : crr;
+  const padV0 = flatTrack ? FLAT_V0 : PADDLE_V0;
 
   function ground(x, z) {
     const surf = world.surfaceAt(x, z) || {};
@@ -161,7 +168,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       const maxF = mu * N, maxFlat = muLat * N;
       const mEff = m / 4;
       // longitudinal
-      let Fx = -crr * N * Math.tanh(vf * 4);
+      let Fx = -crrEff * N * Math.tanh(vf * 4);
       if (rear && hb > 0.01) {
         const lockF = clamp(-vf * mEff / h * 0.5, -brakeMax * 0.75 * hb, brakeMax * 0.75 * hb);
         const lockCap = 0.97 - clamp((speed - 7) / 22, 0, 0.4); // locking the rears flat-out at speed spins you; slow down first
@@ -196,7 +203,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
         _fc.copy(_fwd).addScaledVector(_nSum, -_fwd.dot(_nSum) / Math.max(_nSum.lengthSq(), 1e-6)).normalize();
         const dir = state.reverse ? -1 : 1;
         const vf0 = v.dot(_fc) * dir;
-        const dv = PADDLE_DV * paddleEff * (pL + pR) * (1 + 0.5 * clamp(1 - vf0 / 12, 0, 1)) / (1 + Math.pow(Math.max(vf0, 0) / PADDLE_V0, 2));
+        const dv = PADDLE_DV * paddleEff * (pL + pR) * (1 + 0.5 * clamp(1 - vf0 / 12, 0, 1)) / (1 + Math.pow(Math.max(vf0, 0) / padV0, 2));
         v.addScaledVector(_fc, dv * dir);
       }
     }

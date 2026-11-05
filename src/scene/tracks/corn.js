@@ -1,15 +1,23 @@
 // Corn & Pumpkins: very narrow dirt lanes between tall corn, pumpkin patches, hay, scarecrows, barns and flocks of crows.
+// Map-loop round 1: start gate + finish arch/stands, passing bays, low field banks in the clearings, a real corn canopy
+// (top texture, tassel cards, skirt), varied wall height/colour, sunflower patches, view gaps with farm props, signs, ribbed pumpkins,
+// big black crows, lanterns for dusk/night.
 import * as THREE from 'three';
 import { mulberry32, clamp, smoothstep, lerp, Noise } from '../util.js';
 import { makeRoad, buildNetwork } from '../roadnet.js';
 import { createHazardField, SURFACES } from '../hazards.js';
 import { Batch, boxG, cylG, sphG, xf } from '../batch.js';
 import { buildFarm } from '../farms.js';
+import { figure, buntingMesh } from '../ground.js';
+import { bannerTexture, textureOf } from '../materials.js';
+import { G } from '../../graphics/shared.js';
 import { scatterTrees } from './scatter.js';
 import { createRegistry } from './registry.js';
 
 const PRE = 40, POST = 70, LEN = 3218;
 const CORN_H = 2.7;
+// passing bays: lane widened to BAY_W for 2*BAY_HALF metres (plus BAY_RAMP metre ramps each end)
+const BAY_C = [560, 1040, 1850, 2650], BAY_HALF = 18, BAY_RAMP = 14, BAY_W = 6.9;
 
 function lanePoints() {
   const rng = mulberry32(9917);
@@ -37,9 +45,12 @@ export function planCorn(seed) {
   const ytab = [];
   { let y = 0; for (let s = -PRE; s <= LEN + POST + 2; s++) { ytab.push(y); y -= Math.max(0.03, 0.046 + 0.012 * Math.sin((s / 600) * 6.283 + 2) + 0.006 * Math.sin((s / 190) * 6.283)); } }
   const yAt = (s) => { const f = clamp(s + PRE, 0, ytab.length - 1.001), i = Math.floor(f); return ytab[i] + (ytab[i + 1] - ytab[i]) * (f - i); };
+  const bayW = (s) => { let w = 0; for (const c of BAY_C) w = Math.max(w, smoothstep(c - BAY_HALF - BAY_RAMP, c - BAY_HALF, s) * (1 - smoothstep(c + BAY_HALF, c + BAY_HALF + BAY_RAMP, s))); return w; };
   const main = makeRoad({
     pts: lanePoints(), closed: false, lengthTarget: LEN, pre: PRE, post: POST, id: 0, name: 'Lane',
-    yFn: (s) => yAt(s), widthFn: (s, kap) => clamp(3.45 + 0.35 * nz.n1(s / 60) - 0.4 * Math.min(1, Math.abs(kap) / 0.03), 3.0, 3.8),
+    yFn: (s) => yAt(s),
+    // a touch wider on the bends (room for carts and cameras), 6.9 m in the passing bays
+    widthFn: (s, kap) => lerp(clamp(3.45 + 0.35 * nz.n1(s / 60) + 0.3 * Math.min(1, Math.abs(kap) / 0.03), 3.1, 3.9), BAY_W, bayW(s)),
     camberFn: (s, kap) => clamp(kap * 4, -0.05, 0.05) * smoothstep(-5, 15, s),
   });
   main.surf = { ...SURFACES.dirt };
@@ -47,12 +58,39 @@ export function planCorn(seed) {
   const registry = createRegistry(net);
   main.field = createHazardField(main, seed + 5, { order: ['puddle', 'mud', 'rutpool', 'gravel', 'rock', 'sand', 'puddle', 'rutpool', 'mud', 'gravel'], start: 100, startJit: 30, gap1: 42, gap2: 55, endGap: 100 });
   const hazards = main.field.hazards.map((h) => ({ ...h }));
+  const passingBays = BAY_C.map((c) => ({ s0: c - BAY_HALF, s1: c + BAY_HALF, width: BAY_W, ramp: BAY_RAMP, center: c }));
 
   // ---- clearings (no corn): pumpkin patches, hay yards and two barn yards ----
   const clearings = [
     { s0: 330, s1: 405, side: 1, kind: 'pumpkin' }, { s0: 720, s1: 840, side: -1, kind: 'farm' }, { s0: 1180, s1: 1250, side: 1, kind: 'pumpkin' },
     { s0: 1620, s1: 1700, side: -1, kind: 'hay' }, { s0: 1960, s1: 2080, side: 1, kind: 'farm' }, { s0: 2430, s1: 2505, side: -1, kind: 'pumpkin' }, { s0: 2820, s1: 2890, side: 1, kind: 'hay' },
   ];
+  // view gaps: the corn wall steps back and the lane looks over cut stubble to a prop (tractor, wagon, bales, irrigation pipe)
+  const gaps = [
+    { s0: 200, s1: 240, side: -1, kind: 'tractor' }, { s0: 470, s1: 505, side: 1, kind: 'pipe' }, { s0: 905, s1: 945, side: 1, kind: 'wagon' },
+    { s0: 1100, s1: 1135, side: -1, kind: 'bales' }, { s0: 1395, s1: 1440, side: 1, kind: 'tractor' }, { s0: 1755, s1: 1795, side: 1, kind: 'pipe' },
+    { s0: 2150, s1: 2190, side: -1, kind: 'wagon' }, { s0: 2305, s1: 2345, side: 1, kind: 'bales' }, { s0: 2550, s1: 2582, side: 1, kind: 'pipe' }, { s0: 2955, s1: 2995, side: 1, kind: 'tractor' },
+  ];
+  const sunflowers = [{ s0: 610, s1: 662, side: -1 }, { s0: 1290, s1: 1342, side: 1 }, { s0: 1905, s1: 1950, side: -1 }, { s0: 2200, s1: 2252, side: 1 }, { s0: 2740, s1: 2792, side: -1 }];
+  const zones = [
+    ...clearings.map((c) => ({ s0: c.s0, s1: c.s1, side: c.side, kind: c.kind, fl: c.kind === 'farm' ? 70 : 30 })),
+    ...gaps.map((g) => ({ s0: g.s0, s1: g.s1, side: g.side, kind: 'gap', fl: 16 })),
+    { s0: -48, s1: 40, side: 0, kind: 'plaza', fl: 9 }, { s0: LEN - 40, s1: LEN + 90, side: 0, kind: 'plaza', fl: 9 },
+  ];
+  const zw = (z, s) => smoothstep(z.s0 - 7, z.s0 + 7, s) * (1 - smoothstep(z.s1 - 7, z.s1 + 7, s));
+  const _o = { w: 0, fl: 1.3, kind: null };
+  /** how open the verge is at (s, side): w 0..1 (strongest zone), fl = lateral distance of the corn face from the lane edge, kind of the strongest zone */
+  const openAt = (s, side) => {
+    _o.w = 0; _o.fl = 1.3; _o.kind = null;
+    for (const z of zones) {
+      if (z.side && z.side !== side) continue;
+      if (s < z.s0 - 8 || s > z.s1 + 8) continue;
+      const w = zw(z, s); if (w > _o.w) { _o.w = w; _o.kind = z.kind; }
+      _o.fl = Math.max(_o.fl, 1.3 + w * (z.fl - 1.3));
+    }
+    return _o;
+  };
+  const sunW = (s, side) => { let w = 0; for (const z of sunflowers) if (z.side === side) w = Math.max(w, zw(z, s)); return w; };
   const inClearing = (s, side) => clearings.find((c) => c.side === side && s > c.s0 && s < c.s1);
 
   const pads = [], farms = [], pp = {};
@@ -66,16 +104,20 @@ export function planCorn(seed) {
     farms.push(farm); pads.push(farm);
   }
 
-  // verge like the country road: foot ramp + lip, slippery sticky ground so cars slide back and are held in
+  // verge like the country road: foot ramp + lip, slippery sticky ground so cars slide back and are held in.
+  // In clearings / view gaps / the start and finish plazas the bank is only ~0.4 m so the fields are visible from the lane.
   const verge = (road, s, d, hw) => {
     const ad = Math.abs(d), r = ad - (hw + 0.1);
     if (r <= -0.1) return 0;
-    const ki = clamp(Math.round(s + PRE), 0, road.TN - 1), lip = 1.35 + 0.7 * Math.min(1, Math.abs(road.tables.kap[ki]) / 0.02);
-    const foot = 0.4 * (Math.sqrt(r * r + 0.02) + r) * 0.5, rFoot = 1.4, hFoot = 0.56;
+    const ki = clamp(Math.round(s + PRE), 0, road.TN - 1), ow = openAt(s, d > 0 ? 1 : -1).w;
+    const lip = lerp(1.35 + 0.7 * Math.min(1, Math.abs(road.tables.kap[ki]) / 0.02), 0.16, ow);
+    const foot = 0.4 * (Math.sqrt(r * r + 0.02) + r) * 0.5, rFoot = 1.4, hFoot = lerp(0.56, 0.24, ow);
     const y = Math.min(foot, hFoot) + lip * smoothstep(rFoot, rFoot + 0.55, r);
     return y * (1 - smoothstep(rFoot + 2.0, rFoot + 7.0, r));
   };
-  const terrainOpts = { hillAmp: 3.5, hillFar: 8, hillNear: 70, rutScale: 1, noiseScale: 1, crown: 0.1, sideSlope: 0.08, shoulderOut: 12, verge };
+  // crown < 0: the lane is a very shallow dish (wheel ruts) so a straight-paddling cart tends to stay centred
+  const terrainOpts = { hillAmp: 3.5, hillFar: 8, hillNear: 70, rutScale: 1, noiseScale: 1, crown: -0.07, sideSlope: 0.08, shoulderOut: 12, verge };
+  const KIND_TINT = { pumpkin: [0.8, 0.74, 0.62], hay: [1.1, 0.98, 0.62], gap: [1.08, 0.98, 0.6], farm: [1.0, 1.04, 0.9], plaza: [1.0, 0.96, 0.78] };
   const theme = {
     roadMat: 'dirtRoad', ribbonEnd: 35, terrRow: 4,
     roadUV: (road, s, d, hwe, o) => { o[0] = d / 3.2; o[1] = s / 3.2; },
@@ -88,7 +130,12 @@ export function planCorn(seed) {
     terrMat: 'grass', terrColor: (x, z, off, s, d, cnz, rnz, o) => {
       const k = 0.9 + 0.12 * cnz.n2(x / 17 + 7, z / 17), t = smoothstep(-0.2, 0.6, cnz.n2(x / 80 + 3, z / 80));
       o[0] = lerp(0.9, 1.15, t) * k; o[1] = lerp(0.95, 1.0, t) * k; o[2] = lerp(0.62, 0.55, t) * k;
-      if (off < 30) { const e = 1 - smoothstep(4, 30, off); o[0] = lerp(o[0], 0.85 * k, e); o[1] = lerp(o[1], 0.7 * k, e); o[2] = lerp(o[2], 0.5 * k, e); }
+      const op = openAt(s, d > 0 ? 1 : -1), ow = op.w;
+      if (off < 30) { const e = (1 - smoothstep(4, 30, off)) * (1 - ow); o[0] = lerp(o[0], 0.85 * k, e); o[1] = lerp(o[1], 0.7 * k, e); o[2] = lerp(o[2], 0.5 * k, e); }
+      if (ow > 0.01 && op.kind) {   // field colour in the clearings (tilled soil / stubble / lush grass), faded in over the zone ends
+        const tn = KIND_TINT[op.kind], row = 0.94 + 0.06 * Math.sin(s * 2.1 + d * 0.15), ww = ow * (1 - smoothstep(55, 90, off));
+        o[0] = lerp(o[0], o[0] * tn[0] * row, ww); o[1] = lerp(o[1], o[1] * tn[1] * row, ww); o[2] = lerp(o[2], o[2] * tn[2] * row, ww);
+      }
     },
   };
   const surface = (info) => {
@@ -111,6 +158,21 @@ export function planCorn(seed) {
     const reg = plan.registry;
     const rnd = mulberry32(sd * 53 + 3), items = [], P = {};
     const hwOf = (s) => main.atS(s, P).hw;
+    /** frame at s, lateral offset d (+ = right): world x/z, ground y, half width, yaw of the travel direction (local +z along the lane) */
+    const F = (s, d = 0) => {
+      main.atS(s, P); const px = P.px, pz = P.pz, rx = P.rhx, rz = P.rhz, hw = P.hw;
+      main.atS(s + 0.5, P); let tx = P.px - px, tz = P.pz - pz; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+      const x = px + rx * d, z = pz + rz * d;
+      return { x, z, y: terrain.heightAt(x, z), hw, rx, rz, tx, tz, ry: Math.atan2(tx, tz) };
+    };
+    const addItem = (grp, s, radius, max) => { grp.updateMatrixWorld(true); parent.add(grp); const f = F(s); items.push({ center: new THREE.Vector3(f.x, f.y, f.z), radius, groups: [{ obj: grp, max }] }); };
+    const perch = [];   // spots where crows sit: [x, y, z]
+    const zh = (s) => 1 + 0.17 * nz.n1(s / 70 + 5.5);          // corn height varies in 70 m stretches
+    const zc = (s) => nz.n1(s / 95 + 17);                        // -1 green .. +1 yellow
+    const tint = (s) => { const c = zc(s); return [1 + 0.14 * c, 1 - 0.03 * Math.abs(c), 1 - 0.2 * c]; };
+    const canopyH = (s, lat, side) => CORN_H * zh(s) * (0.93 + 0.07 * nz.n2(s / 2.3 + lat * 0.2 + 11, side * 5.3 + lat * 0.3));
+
+    // ---------------------------------------------------------------- corn: front cards + canopy tassel cards
     const cardGeo = (() => {
       const pos = [], uv = [], nrm = [], idx = [];
       for (let q = 0; q < 2; q++) {
@@ -124,20 +186,35 @@ export function planCorn(seed) {
       g.setIndex(idx); g.computeBoundingSphere(); return g;
     })();
     const cardMat = lib.get('cornCard', { sway: { amp: 0.16, freq: 1.7, hpow: 1.4, hscale: 0.37 } });
-    const wallMat = lib.get('cornwall', { vertexColors: true, side: THREE.FrontSide });
+    const faceMat = lib.get('cornwall', { vertexColors: true, side: THREE.DoubleSide });
+    const topMat = lib.get('cornTop', { vertexColors: true, side: THREE.DoubleSide });
     const q4 = new THREE.Quaternion(), e4 = new THREE.Euler();
     const CH = 100;
     for (let c = 0; c * CH < LEN + 40; c++) {
       const s0 = c * CH, s1 = Math.min(LEN + 40, s0 + CH), ms = [], cols = [];
-      for (const side of [-1, 1]) for (const off of [1.35, 2.15, 3.0]) {
-        for (let s = s0 + rnd() * 0.8; s < s1; s += 0.82 + rnd() * 0.2) {
-          if (inClearing(s, side)) continue;
-          const hw = hwOf(s), o = hw + off + (rnd() - 0.5) * 0.35, x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o, y = terrain.heightAt(x, z) - 0.1;
-          reg.circle('corn', x, z, 0.7, y + 0.1, {}, 4);
-          e4.set((rnd() - 0.5) * 0.08, rnd() * 6.28, (rnd() - 0.5) * 0.08, 'YXZ'); q4.setFromEuler(e4);
-          const sc = 0.95 + rnd() * 0.3;
-          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, CORN_H * (0.9 + rnd() * 0.25), sc)));
-          const t = rnd(); cols.push(new THREE.Color(0.75 + t * 0.35, 0.85 + t * 0.2, 0.55 + rnd() * 0.3));
+      for (const side of [-1, 1]) {
+        for (const off of [1.35, 2.15, 3.0]) {
+          for (let s = s0 + rnd() * 0.8; s < s1; s += 0.82 + rnd() * 0.2) {
+            if (openAt(s, side).w > 0.2) continue;
+            const hw = hwOf(s), o = hw + off + 2.4 * sunW(s, side) + (rnd() - 0.5) * 0.35, x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o, y = terrain.heightAt(x, z) - 0.1;
+            reg.circle('corn', x, z, 0.7, y + 0.1, {}, 4);
+            e4.set((rnd() - 0.5) * 0.08, rnd() * 6.28, (rnd() - 0.5) * 0.08, 'YXZ'); q4.setFromEuler(e4);
+            const sc = 0.95 + rnd() * 0.3, tn = tint(s);
+            ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, CORN_H * zh(s) * (0.9 + rnd() * 0.25), sc)));
+            const t = rnd(); cols.push(new THREE.Color((0.75 + t * 0.35) * tn[0], (0.85 + t * 0.2) * tn[1], (0.55 + rnd() * 0.3) * tn[2]));
+          }
+        }
+        // sparse tassel / leaf cards standing out of the canopy: the field reads as corn from above and from the chase camera
+        for (let s = s0 + rnd() * 1.5; s < s1; s += 2.5 + rnd() * 0.8) {
+          for (let lat0 = 0.5 + rnd() * 1.5; lat0 < 19; lat0 += 3.0 + rnd() * 1.2) {
+            const w = openAt(s, side); if (w.fl > 24) continue;
+            const fl = w.fl + 2.4 * sunW(s, side), hw = hwOf(s), lat = fl + lat0, o = hw + lat, x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o;
+            const y = terrain.heightAt(x, z) + canopyH(s, lat, side) - 0.45;
+            e4.set((rnd() - 0.5) * 0.1, rnd() * 6.28, (rnd() - 0.5) * 0.1, 'YXZ'); q4.setFromEuler(e4);
+            const sc = 0.9 + rnd() * 0.35, tn = tint(s);
+            ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, 0.9 + rnd() * 0.5, sc)));
+            const t = rnd(); cols.push(new THREE.Color((0.72 + t * 0.3) * tn[0], (0.82 + t * 0.2) * tn[1], (0.5 + rnd() * 0.25) * tn[2]));
+          }
         }
       }
       if (!ms.length) continue;
@@ -145,90 +222,340 @@ export function planCorn(seed) {
       ms.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, cols[i]); }); im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.name = 'corn_cards';
       const grp = new THREE.Group(); grp.add(im); parent.add(grp);
       main.atS((s0 + s1) / 2, P);
-      items.push({ center: new THREE.Vector3(P.px, P.py, P.pz), radius: 62, groups: [{ obj: grp, max: 120 }] });
+      items.push({ center: new THREE.Vector3(P.px, P.py, P.pz), radius: 62, groups: [{ obj: grp, max: 130 }] });
     }
-    // wall + canopy strips, 300 m each
+    // ---------------------------------------------------------------- wall face (leaning, textured) + canopy sheet (corn-top texture) + skirt, 300 m strips
+    const RELS = [0, 1.5, 3, 5, 7.5, 10.5, 14, 19, 26, 36, 48], KC = RELS.length + 1;   // + skirt column
     for (let c = 0; c * 300 < LEN + 40; c++) {
-      const s0 = c * 300, s1 = Math.min(LEN + 40, s0 + 300), Pa = [], Na = [], Ua = [], Ca = [], Ia = [];
-      const cols = [5, 12, 22, 34, 48, 64], K = cols.length + 2, rows = Math.round((s1 - s0) / 1.5) + 1;
+      const s0 = c * 300, s1 = Math.min(LEN + 40, s0 + 300), rows = Math.round((s1 - s0) / 1.5) + 1;
+      const FP = [], FN = [], FU = [], FC = [], FI = [], TP = [], TN = [], TU = [], TC = [], TI = [];
       for (const side of [-1, 1]) {
-        const base = Pa.length / 3, rowOK = [];
+        const fb0 = FP.length / 3, tb0 = TP.length / 3, rowOK = [];
         for (let r = 0; r < rows; r++) {
-          const s = s0 + ((s1 - s0) * r) / (rows - 1); rowOK.push(!inClearing(s, side));
-          main.atS(s, P); const hw = P.hw;
-          const wob = 0.3 * nz.n2(s / 2.1 + 11, side * 5.3), ht = CORN_H * (0.9 + 0.16 * nz.n2(s / 1.7 + 3, side * 2.9 + 8));   // ragged face + uneven canopy: not a flat sheet
-          const lat = [hw + 1.3 + wob, hw + 1.3 + wob, ...cols.map((v) => hw + v)], hh = [-0.4, ht, ...cols.map(() => ht)];
-          lat.forEach((l, k) => {
-            const x = P.px + P.rhx * side * l, z = P.pz + P.rhz * side * l, y = terrain.heightAt(x, z) + hh[k];
-            Pa.push(x, y, z); Na.push(0, 1, 0); Ua.push(s / 2.2, k * 0.35); const sh = (0.78 + 0.34 * nz.n2(s / 3.1 + k, side * 3 + k * 5)) * (k === 0 ? 0.62 : 1); Ca.push(0.9 * sh, 1.0 * sh, 0.75 * sh);
+          const s = s0 + ((s1 - s0) * r) / (rows - 1), w = openAt(s, side);
+          rowOK.push(!(w.kind === 'farm' && w.w > 0.97));
+          main.atS(s, P); const hw = P.hw, px = P.px, pz = P.pz, rx = P.rhx, rz = P.rhz;
+          const wob = 0.3 * nz.n2(s / 2.1 + 11, side * 5.3), fl = w.fl + 2.4 * sunW(s, side) + wob, tn = tint(s), sh0 = 0.78 + 0.34 * nz.n2(s / 3.1, side * 3);
+          // face: bottom sunk into the bank, top leaning ~0.35 m over the lane
+          const ht = canopyH(s, fl, side) * 0.97, nxl = -side * rx, nzl = -side * rz;
+          for (const [lat, hh, kk] of [[fl + 0.2, -0.5, 0.6], [fl - 0.35, ht, 1]]) {
+            const x = px + rx * side * (hw + lat), z = pz + rz * side * (hw + lat), y = terrain.heightAt(x, z);
+            FP.push(x, y + hh, z); FN.push(nxl * 0.9, 0.25, nzl * 0.9); FU.push(s / 1.9, (hh + 0.5) / 3.3);
+            const sh = sh0 * kk; FC.push(0.95 * sh * tn[0], 1.0 * sh * tn[1], 0.8 * sh * tn[2]);
+          }
+          // canopy sheet columns
+          const l0 = fl - 0.35;
+          RELS.forEach((rel, k) => {
+            const lat = l0 + rel, x = px + rx * side * (hw + lat), z = pz + rz * side * (hw + lat), y = terrain.heightAt(x, z) + canopyH(s, lat, side) - (k === 0 ? 0.05 : 0);
+            TP.push(x, y, z); TN.push(0, 1, 0); TU.push((lat * side) / 3.0, s / 3.0);
+            const sh = (0.84 + 0.3 * nz.n2(s / 3.1 + k, side * 3 + k * 5)) * (k === 0 ? 0.9 : 1); TC.push(1.0 * sh * tn[0], 1.05 * sh * tn[1], 0.85 * sh * tn[2]);
           });
+          {   // skirt: drop to below ground at the outer edge so there is no ledge
+            const lat = l0 + RELS[RELS.length - 1] + 2.5, x = px + rx * side * (hw + lat), z = pz + rz * side * (hw + lat), y = terrain.heightAt(x, z) - 1.2;
+            TP.push(x, y, z); TN.push(0, 1, 0); TU.push((lat * side) / 3.0, s / 3.0); TC.push(0.5, 0.55, 0.4);
+          }
         }
-        for (let r = 0; r < rows - 1; r++) { if (!rowOK[r] || !rowOK[r + 1]) continue; for (let k = 0; k < K - 1; k++) { const a = base + r * K + k, b = a + 1, d = a + K, e = d + 1; Ia.push(a, d, b, b, d, e, a, b, d, b, e, d); } }
+        for (let r = 0; r < rows - 1; r++) {
+          if (!rowOK[r] || !rowOK[r + 1]) continue;
+          { const a = fb0 + r * 2, b = a + 1, d = a + 2, e = d + 1; FI.push(a, d, b, b, d, e); }
+          for (let k = 0; k < KC - 1; k++) { const a = tb0 + r * KC + k, b = a + 1, d = a + KC, e = d + 1; TI.push(a, d, b, b, d, e); }
+        }
       }
-      if (!Ia.length) continue;
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(Pa, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(Na, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(Ua, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(Ca, 3));
-      g.setIndex(Ia); g.computeBoundingSphere();
-      const m = new THREE.Mesh(g, wallMat); m.name = 'corn_canopy'; parent.add(m);
-      const bs = g.boundingSphere;
-      items.push({ center: bs.center.clone(), radius: bs.radius, groups: [{ obj: m, max: 520 }] });
+      if (!FI.length) continue;
+      const mk = (P_, N_, U_, C_, I_, mat, name) => {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(P_, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N_, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U_, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(C_, 3));
+        g.setIndex(I_); g.computeBoundingSphere();
+        const m = new THREE.Mesh(g, mat); m.name = name; parent.add(m);
+        const bs = g.boundingSphere; items.push({ center: bs.center.clone(), radius: bs.radius, groups: [{ obj: m, max: 560 }] });
+      };
+      mk(FP, FN, FU, FC, FI, faceMat, 'corn_face');
+      mk(TP, TN, TU, TC, TI, topMat, 'corn_canopy');
     }
 
-    // ---- pumpkin patches, hay, scarecrows in the clearings ----
-    const pumpGeo = new THREE.IcosahedronGeometry(1, 1);
+    // ---------------------------------------------------------------- shared little helpers: signs, lanterns, hay bale boxes
+    const signMats = new Map(), signGeo = new THREE.PlaneGeometry(1, 1);
+    const signMat = (text, bg, fg) => { const k = text + bg; if (!signMats.has(k)) signMats.set(k, new THREE.MeshStandardMaterial({ map: bannerTexture(text, bg, fg), roughness: 0.9, side: THREE.DoubleSide })); return signMats.get(k); };
+    const lanternSpots = [];   // per cluster: arrays of [x, y, z]
+    const glowTex = (() => {
+      const S = 64, data = new Uint8Array(S * S * 4);
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const dx = (x + 0.5) / S * 2 - 1, dy = (y + 0.5) / S * 2 - 1, d = Math.hypot(dx, dy), a = Math.pow(Math.max(0, 1 - d), 2.2); const i = (y * S + x) * 4; data[i] = 255; data[i + 1] = 190; data[i + 2] = 110; data[i + 3] = a * 255; }
+      const t = new THREE.DataTexture(data, S, S, THREE.RGBAFormat); t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.needsUpdate = true; return t;
+    })();
+    const glowMat = new THREE.PointsMaterial({ size: 3.4, map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, sizeAttenuation: true });
+    const bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.2, 0.55), toneMapped: false });
+    const bulbGeo = new THREE.SphereGeometry(0.11, 8, 6);
+    /** a lamp post: post + lantern box (merged into b) and a glowing bulb + halo (added to grp) */
+    const lampPost = (b, grp, x, z, h = 2.6, reg_ = true) => {
+      const y = terrain.heightAt(x, z);
+      b.add('woodWeathered', boxG(0.12, h, 0.12, 1), xf(x, y + h / 2 - 0.1, z), [0.55, 0.45, 0.35]);
+      b.add('metalRusted', boxG(0.3, 0.32, 0.3, 1), xf(x, y + h + 0.1, z), [0.18, 0.16, 0.14]);
+      b.add('woodWeathered', boxG(0.4, 0.05, 0.4, 1), xf(x, y + h + 0.3, z), [0.25, 0.2, 0.15]);
+      if (reg_) reg.circle('post', x, z, 0.12, y - 0.1, {}, 4);
+      lanternSpots.push([x, y + h + 0.1, z]);
+      const bulb = new THREE.Mesh(bulbGeo, bulbMat); bulb.position.set(x, y + h + 0.1, z); grp.add(bulb);
+      return new THREE.Vector3(x, y + h + 0.1, z);
+    };
+    const glowPoints = (grp, pts) => {
+      if (!pts.length) return;
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap((p) => [p.x, p.y, p.z]), 3)); g.computeBoundingSphere();
+      const p = new THREE.Points(g, glowMat); p.name = 'lantern_glow'; p.frustumCulled = false; grp.add(p);
+    };
+    const sign = (grp, b, text, s, side, bg = '#e9c46a', fg = '#3a210a', w = 1.5, h = 0.55, yb = 1.35, lat = 1.0) => {
+      const f = F(s, side * (hwOf(s) + lat)), post = (dx) => { b.add('woodWeathered', boxG(0.09, yb + h + 0.1, 0.09, 1), xf(f.x + f.rx * dx, f.y + (yb + h + 0.1) / 2 - 0.1, f.z + f.rz * dx), [0.55, 0.45, 0.35]); };
+      post(-w * 0.4); post(w * 0.4); reg.circle('post', f.x - f.rx * w * 0.4, f.z - f.rz * w * 0.4, 0.1, f.y - 0.1, {}, 4); reg.circle('post', f.x + f.rx * w * 0.4, f.z + f.rz * w * 0.4, 0.1, f.y - 0.1, {}, 4);
+      const m = new THREE.Mesh(signGeo, signMat(text, bg, fg)); m.scale.set(w, h, 1); m.position.set(f.x, f.y + yb + h / 2, f.z); m.rotation.y = f.ry + Math.PI; grp.add(m);
+      perch.push([f.x + f.rx * w * 0.4, f.y + yb + h + 0.05, f.z + f.rz * w * 0.4]);
+    };
+    const straw = (b, x, y, z, ry, sx = 1.25, sy = 0.5, sz = 0.8) => { const t = 0.9 + rnd() * 0.12; b.add('straw', boxG(sx, sy, sz, 1), xf(x, y + sy / 2, z, 0, ry, 0), [t, 0.9 * t, 0.68 * t]); };
+
+    // ---------------------------------------------------------------- start: gate arch, hay bale rows, flags, chequered line, lanterns
+    {
+      const grp = new THREE.Group(), b = new Batch(), glows = [], S0 = 24;
+      const f0 = F(S0), hw = f0.hw, dd = hw + 1.0;
+      for (const sg of [-1, 1]) {
+        const x = f0.x + f0.rx * sg * dd, z = f0.z + f0.rz * sg * dd, y = terrain.heightAt(x, z);
+        b.add('woodWeathered', cylG(0.15, 0.17, 4.8, 8, 2), xf(x, y + 2.3, z), [0.62, 0.5, 0.38]); reg.circle('post', x, z, 0.2, y - 0.1, {}, 6);
+        b.add('woodWeathered', boxG(0.12, 0.12, 0.9, 1), xf(x, y + 3.6, z, 0, f0.ry, 0), [0.55, 0.45, 0.35]);   // brace along the lane
+        for (let k = 0; k < 4; k++) straw(b, x + f0.rx * sg * 0.55, y + k * 0.5, z + f0.rz * sg * 0.55, f0.ry, 0.9, 0.5, 1.1);   // bale stack at the foot
+        glows.push(lampPost(b, grp, x + f0.rx * sg * 0.9 + f0.tx * 1.4, z + f0.rz * sg * 0.9 + f0.tz * 1.4, 2.5));
+      }
+      const yB = f0.y + 4.75, cb = new THREE.Vector3(f0.x, yB, f0.z);
+      b.add('woodWeathered', boxG(2 * dd + 0.5, 0.28, 0.28, 1), xf(cb.x, cb.y, cb.z, 0, f0.ry, 0), [0.62, 0.5, 0.38]);
+      b.add('checker', boxG(2 * dd, 0.28, 0.06, 1.0), xf(cb.x - f0.tx * 0.16, cb.y - 0.1, cb.z - f0.tz * 0.16, 0, f0.ry, 0), [1, 1, 1]);
+      grp.add(b.build(lib, { shadow: false }));
+      const bm = new THREE.Mesh(signGeo, signMat('CORN & PUMPKINS', '#e9a63a', '#3d1f08')); bm.scale.set(2 * dd - 0.2, 1.35, 1); bm.position.set(cb.x - f0.tx * 0.2, yB - 0.95, cb.z - f0.tz * 0.2); bm.rotation.y = f0.ry + Math.PI; grp.add(bm);
+      const bm2 = new THREE.Mesh(signGeo, signMat('GO! GO! GO!', '#c9372c', '#fff4d6')); bm2.scale.set(2 * dd - 0.2, 1.0, 1); bm2.position.set(cb.x + f0.tx * 0.2, yB - 0.8, cb.z + f0.tz * 0.2); bm2.rotation.y = f0.ry; grp.add(bm2);
+      // hay-bale rows along both sides of the grid + a few spectators
+      const b2 = new Batch();
+      for (const sg of [-1, 1]) for (let s = -14; s <= 40; s += 1.35) {
+        if (Math.abs(s - S0) < 1.6) continue;
+        const f = F(s, sg * (hwOf(s) + 2.05)), tall = rnd() < 0.3;
+        straw(b2, f.x, f.y - 0.05, f.z, f.ry + (rnd() - 0.5) * 0.1); reg.circle('hay', f.x, f.z, 0.7, f.y - 0.05, {}, 6);
+        if (tall) straw(b2, f.x, f.y + 0.45, f.z, f.ry);
+        if (rnd() < 0.2) figure(b2, rnd, f.x + f.rx * sg * 1.0, f.y - 0.05, f.z + f.rz * sg * 1.0, f.ry + Math.PI / 2 * -sg, 0.95, true);
+      }
+      // flag poles with pennant strings
+      const lines = [];
+      for (const s of [-10, 6, 40]) { const l = F(s, -(hwOf(s) + 2.3)), r = F(s, hwOf(s) + 2.3); lines.push({ a: [l.x, l.y + 3.6, l.z], b: [r.x, r.y + 3.6, r.z], sag: 0.5 }); for (const q of [l, r]) { b2.add('woodWeathered', cylG(0.06, 0.08, 3.7, 6, 2), xf(q.x, q.y + 1.75, q.z), [0.7, 0.6, 0.5]); reg.circle('post', q.x, q.z, 0.1, q.y - 0.1, {}, 4); } }
+      grp.add(b2.build(lib, { shadow: false })); grp.add(buntingMesh(lines, lib));
+      glowPoints(grp, glows);
+      // start line
+      grp.add(chequer(F, terrain, 15.2, 16.4, 0.12));
+      addItem(grp, 12, 90, 300);
+    }
+
+    // ---------------------------------------------------------------- finish: arch, chequered line, hay-bale stands with a crowd, flags, lanterns
+    {
+      const grp = new THREE.Group(), b = new Batch(), glows = [], fL = F(LEN), hw = fL.hw, dd = hw + 1.3;
+      for (const sg of [-1, 1]) {
+        const x = fL.x + fL.rx * sg * dd, z = fL.z + fL.rz * sg * dd, y = terrain.heightAt(x, z);
+        b.add('woodWeathered', cylG(0.2, 0.24, 5.4, 8, 2), xf(x, y + 2.6, z), [0.75, 0.74, 0.7]); reg.circle('post', x, z, 0.26, y - 0.1, {}, 6);
+        for (let k = 0; k < 8; k++) b.add('dark', boxG(0.42, 0.34, 0.42, 1), xf(x, y + 0.17 + k * 0.68, z), k % 2 ? [1, 1, 1] : [0.08, 0.08, 0.08]);   // chequered post stripes
+        glows.push(lampPost(b, grp, x + fL.rx * sg * 0.9 - fL.tx * 1.2, z + fL.rz * sg * 0.9 - fL.tz * 1.2, 2.7));
+        glows.push(lampPost(b, grp, x + fL.rx * sg * 0.9 + fL.tx * 5.5, z + fL.rz * sg * 0.9 + fL.tz * 5.5, 2.7));
+      }
+      const yB = fL.y + 5.6, cb = new THREE.Vector3(fL.x, yB, fL.z);
+      b.add('woodWeathered', boxG(2 * dd + 0.7, 0.4, 0.4, 1), xf(cb.x, cb.y, cb.z, 0, fL.ry, 0), [0.7, 0.68, 0.62]);
+      b.add('checker', boxG(2 * dd + 0.7, 0.7, 0.08, 1.0), xf(cb.x - fL.tx * 0.22, cb.y + 0.5, cb.z - fL.tz * 0.22, 0, fL.ry, 0), [1, 1, 1]);
+      b.add('checker', boxG(2 * dd + 0.7, 0.7, 0.08, 1.0), xf(cb.x + fL.tx * 0.22, cb.y + 0.5, cb.z + fL.tz * 0.22, 0, fL.ry, 0), [1, 1, 1]);
+      grp.add(b.build(lib, { shadow: false }));
+      const bm = new THREE.Mesh(signGeo, signMat('FINISH', '#f4f1e6', '#111111')); bm.scale.set(2 * dd - 0.1, 1.5, 1); bm.position.set(cb.x - fL.tx * 0.26, yB - 0.95, cb.z - fL.tz * 0.26); bm.rotation.y = fL.ry + Math.PI; grp.add(bm);
+      const bm2 = new THREE.Mesh(signGeo, signMat('WELL DONE!', '#d9552b', '#fff4d6')); bm2.scale.set(2 * dd - 0.1, 1.2, 1); bm2.position.set(cb.x + fL.tx * 0.26, yB - 0.85, cb.z + fL.tz * 0.26); bm2.rotation.y = fL.ry; grp.add(bm2);
+      // hay-bale stands (3 tiers) both sides, with spectators; the near row is registered
+      const b2 = new Batch();
+      for (const sg of [-1, 1]) for (let s = LEN - 30; s <= LEN + 6; s += 1.3) {
+        if (Math.abs(s - LEN) < 1.8) continue;
+        for (let j = 0; j < 3; j++) {
+          const f = F(s, sg * (hwOf(s) + 2.5 + 0.95 * j));
+          for (let k = 0; k <= j; k++) straw(b2, f.x, f.y + k * 0.5 - 0.05, f.z, f.ry);
+          if (j === 0) reg.circle('hay', f.x, f.z, 0.7, f.y - 0.05, {}, 6);
+          if (rnd() < 0.62) figure(b2, rnd, f.x + f.rx * sg * 0.12, f.y + (j + 1) * 0.5 - 0.05, f.z + f.rz * sg * 0.12, f.ry - sg * Math.PI / 2, 0.92 + rnd() * 0.12, true);
+        }
+      }
+      const lines = [];
+      for (const s of [LEN - 16, LEN + 14]) { const l = F(s, -(hwOf(s) + 2.0)), r = F(s, hwOf(s) + 2.0); lines.push({ a: [l.x, l.y + 4.2, l.z], b: [r.x, r.y + 4.2, r.z], sag: 0.6 }); for (const q of [l, r]) { b2.add('woodWeathered', cylG(0.06, 0.08, 4.4, 6, 2), xf(q.x, q.y + 2.1, q.z), [0.7, 0.6, 0.5]); reg.circle('post', q.x, q.z, 0.1, q.y - 0.1, {}, 4); } }
+      grp.add(b2.build(lib, { shadow: false })); grp.add(buntingMesh(lines, lib));
+      glowPoints(grp, glows);
+      grp.add(chequer(F, terrain, LEN - 0.8, LEN + 0.8, 0.14));
+      perch.push([cb.x, cb.y + 0.25, cb.z]);
+      addItem(grp, LEN, 110, 330);
+    }
+
+    // ---------------------------------------------------------------- passing bay markers
+    {
+      const grp = new THREE.Group(), b = new Batch();
+      for (const c of BAY_C) for (const sg of [-1, 1]) { const s = c - BAY_HALF - 6; if (inClearing(s, sg) || sunW(s, sg) > 0.1) continue; sign(grp, b, 'PASSING BAY', s, sg, '#2f6fb0', '#fff7e0', 1.5, 0.5, 1.2, 1.0); }
+      grp.add(b.build(lib, { shadow: false })); addItem(grp, 1500, 2000, 2000);
+    }
+
+    // ---------------------------------------------------------------- sunflower patches
+    for (const sf of sunflowers) {
+      const grp = new THREE.Group(), b = new Batch();
+      for (let s = sf.s0 + 2; s < sf.s1 - 2; s += 1.25 + rnd() * 0.3) {
+        for (let k = 0; k < 2; k++) {
+          const f = F(s, sf.side * (hwOf(s) + 1.45 + k * 1.15 + rnd() * 0.5)), hh = 1.9 + rnd() * 0.9, lean = (rnd() - 0.5) * 0.12;
+          b.add('dark', boxG(0.07, hh, 0.07, 1), xf(f.x, f.y + hh / 2 - 0.05, f.z, 0, 0, lean), [0.18, 0.4, 0.1]);
+          b.add('dark', boxG(0.5, 0.03, 0.22, 1), xf(f.x, f.y + hh * 0.5, f.z, 0.2, rnd() * 6.28, 0), [0.2, 0.45, 0.1]);
+          const fx = -sf.side * f.rx, fz = -sf.side * f.rz, ry = Math.atan2(fx, fz) + (rnd() - 0.5) * 0.7, tilt = 1.05 + rnd() * 0.3;
+          const hx = f.x + fx * 0.07, hz = f.z + fz * 0.07;
+          b.add('dark', cylG(0.5, 0.5, 0.04, 12, 1), xf(hx, f.y + hh + 0.05, hz, tilt, ry, 0), [1.0, 0.62 + rnd() * 0.15, 0.02]);
+          b.add('dark', cylG(0.27, 0.27, 0.08, 10, 1), xf(hx + fx * 0.04, f.y + hh + 0.09, hz + fz * 0.04, tilt, ry, 0), [0.22, 0.12, 0.04]);
+        }
+      }
+      grp.add(b.build(lib, { shadow: false })); addItem(grp, (sf.s0 + sf.s1) / 2, 60, 200);
+    }
+
+    // ---------------------------------------------------------------- view-gap props
+    for (const g of gaps) {
+      const grp = new THREE.Group(), b = new Batch(), sm = (g.s0 + g.s1) / 2, side = g.side;
+      const at = (s, lat) => F(s, side * (hwOf(s) + lat));
+      const wheel = (x, y, z, ry, r, wd, col = [0.07, 0.07, 0.07]) => { b.add('dark', cylG(r, r, wd, 12, 1), xf(x, y + r, z, 0, ry, Math.PI / 2), col); b.add('metalRusted', cylG(r * 0.45, r * 0.45, wd + 0.04, 8, 1), xf(x, y + r, z, 0, ry, Math.PI / 2), [0.7, 0.18, 0.12]); };
+      if (g.kind === 'tractor') {
+        const f = at(sm, 6.5), ry = f.ry + (side > 0 ? 0.35 : -0.35) + (rnd() - 0.5) * 0.3, M = xf(f.x, f.y, f.z, 0, ry, 0), L = (m) => M.clone().multiply(m);
+        reg.circle('prop', f.x, f.z, 1.8, f.y, {}, 8);
+        b.add('dark', boxG(1.15, 0.75, 2.2, 1), L(xf(0, 1.15, 0.9)), [0.15, 0.5, 0.2]); b.add('dark', boxG(1.2, 0.12, 1.0, 1), L(xf(0, 0.7, 1.9)), [0.1, 0.1, 0.1]);
+        b.add('dark', boxG(1.25, 1.35, 1.15, 1), L(xf(0, 1.55, -0.7)), [0.15, 0.5, 0.2]); b.add('glass', boxG(1.18, 0.9, 1.05, 1), L(xf(0, 1.75, -0.72)), [1, 1, 1]); b.add('dark', boxG(1.35, 0.1, 1.3, 1), L(xf(0, 2.3, -0.7)), [0.12, 0.38, 0.15]);
+        b.add('dark', cylG(0.05, 0.05, 1.0, 6, 1), L(xf(0.35, 2.0, 1.4)), [0.1, 0.1, 0.1]);
+        for (const sx of [-1, 1]) { wheel(f.x, f.y, f.z, ry, 0.8, 0.5); }
+        for (const sx of [-1, 1]) { const M2 = L(xf(sx * 0.85, 0, -0.9)).elements, M3 = L(xf(sx * 0.8, 0, 1.7)).elements; b.add('dark', cylG(0.78, 0.78, 0.45, 12, 1), L(xf(sx * 0.85, 0.78, -0.9, 0, 0, Math.PI / 2)), [0.06, 0.06, 0.06]); b.add('dark', cylG(0.45, 0.45, 0.3, 10, 1), L(xf(sx * 0.8, 0.45, 1.7, 0, 0, Math.PI / 2)), [0.06, 0.06, 0.06]); }
+        perch.push([f.x + Math.sin(ry) * 0.2, f.y + 2.45, f.z + Math.cos(ry) * 0.2]);
+      } else if (g.kind === 'wagon') {
+        const f = at(sm, 6.0), ry = f.ry + (rnd() - 0.5) * 0.4, M = xf(f.x, f.y, f.z, 0, ry, 0), L = (m) => M.clone().multiply(m);
+        reg.circle('prop', f.x, f.z, 2.2, f.y, {}, 8);
+        b.add('woodWeathered', boxG(1.6, 0.15, 3.6, 1), L(xf(0, 0.8, 0)), [0.75, 0.55, 0.38]);
+        for (const sx of [-1, 1]) b.add('woodWeathered', boxG(0.1, 0.55, 3.6, 1), L(xf(sx * 0.78, 1.1, 0)), [0.7, 0.5, 0.35]);
+        for (const sz of [-1, 1]) b.add('woodWeathered', boxG(1.6, 0.55, 0.1, 1), L(xf(0, 1.1, sz * 1.75)), [0.7, 0.5, 0.35]);
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.add('dark', cylG(0.45, 0.45, 0.12, 10, 1), L(xf(sx * 0.9, 0.45, sz * 1.2, 0, 0, Math.PI / 2)), [0.12, 0.1, 0.08]);
+        b.add('woodWeathered', boxG(0.12, 0.1, 1.8, 1), L(xf(0, 0.55, 2.6)), [0.5, 0.4, 0.3]);
+        for (let i = 0; i < 16; i++) b.add('dark', sphG(0.28 + rnd() * 0.1, 8, 6, 1), L(xf((rnd() - 0.5) * 1.1, 1.45 + rnd() * 0.25, (rnd() - 0.5) * 3.0, 0, rnd() * 6, 0, 1, 0.82, 1)), [0.85, 0.22 + rnd() * 0.1, 0.02]);
+      } else if (g.kind === 'bales') {
+        for (let i = 0; i < 9; i++) {
+          const s = g.s0 + 6 + rnd() * (g.s1 - g.s0 - 12), f = at(s, 4 + rnd() * 6), up = i % 3 === 2;
+          b.add('straw', cylG(0.72, 0.72, 1.2, 12, 1), xf(f.x, f.y + 0.6, f.z, 0, rnd() * 6, 0), [1, 0.95, 0.75]); reg.circle('hay', f.x, f.z, 0.8, f.y, {}, 6);
+          if (up) b.add('straw', cylG(0.72, 0.72, 1.2, 12, 1), xf(f.x + 0.2, f.y + 1.75, f.z, 0, rnd() * 6, 0), [1, 0.92, 0.72]);
+        }
+      } else if (g.kind === 'pipe') {
+        for (let s = g.s0 + 2; s < g.s1 - 5; s += 6) {
+          const f = at(s + 3, 4.2), ry = f.ry;
+          b.add('metalRusted', cylG(0.1, 0.1, 6.1, 8, 1), xf(f.x, f.y + 0.95, f.z, Math.PI / 2, ry, 0), [0.85, 0.88, 0.92]);
+          for (const o of [-2.6, 0.4]) { const q = at(s + 3 + o, 4.2); b.add('metalRusted', boxG(0.06, 0.95, 0.06, 1), xf(q.x, q.y + 0.45, q.z, 0, 0, 0.4), [0.5, 0.5, 0.52]); b.add('dark', cylG(0.42, 0.42, 0.08, 10, 1), xf(q.x, q.y + 0.42, q.z, 0, ry, Math.PI / 2), [0.1, 0.1, 0.1]); }
+          const sp = at(s + 3, 4.2); b.add('metalRusted', cylG(0.05, 0.05, 0.5, 6, 1), xf(sp.x, sp.y + 1.2, sp.z), [0.6, 0.6, 0.65]); b.add('metalRusted', sphG(0.1, 6, 4, 1), xf(sp.x, sp.y + 1.5, sp.z), [0.7, 0.55, 0.15]);
+        }
+        const f = at(sm, 1.0); sign(grp, b, 'FRESH CORN', sm - 12 * (side > 0 ? 1 : 1), side, '#d9c27a', '#2b4a14', 1.4, 0.5, 1.3, 1.0);
+      }
+      grp.add(b.build(lib, { shadow: false })); addItem(grp, sm, 70, 220);
+    }
+
+    // ---------------------------------------------------------------- road signs along the lane
+    {
+      const grp = new THREE.Group(), b = new Batch();
+      const SIGNS = [
+        ['BEWARE OF CROWS', 120, -1, '#f2d36b', '#2a1a0a'], ['PUMPKIN PATCH 300m', 30, 1, '#e8872a', '#2f1604'], ['FARM STAND AHEAD', 665, -1, '#c9372c', '#fff4d6'],
+        ['PUMPKINS 120m', 1065, 1, '#e8872a', '#2f1604'], ['HAY RIDES', 1560, -1, '#e8c76a', '#3a2108'], ['SLOW: TRACTOR', 1340, 1, '#f2d36b', '#2a1a0a'], ['BARN DANCE TONIGHT', 1900, 1, '#8a3b2a', '#fff4d6'],
+        ['PUMPKINS 80m', 2350, -1, '#e8872a', '#2f1604'], ['BEWARE OF CROWS', 2200, -1, '#f2d36b', '#2a1a0a'], ['SUNFLOWERS', 2700, 1, '#f0c62e', '#3a2a08'], ['HAY FOR SALE', 2770, 1, '#e8c76a', '#3a2108'], ['ALMOST THERE!', 3100, -1, '#2f6fb0', '#fff7e0'],
+      ];
+      for (const [t, s, sg, bg, fg] of SIGNS) { if (openAt(s, sg).w > 0.2 || sunW(s, sg) > 0.1) continue; sign(grp, b, t, s, sg, bg, fg); }
+      grp.add(b.build(lib, { shadow: false }));
+      for (let i = 0; i < SIGNS.length; i++) { /* each sign sits in its own culling item below */ }
+      grp.updateMatrixWorld(true); parent.add(grp);
+      // cull as one low-cost group per 500 m: the signs are tiny, keep them always on within 220 m of the lane centre-line mid points
+      for (let s = 250; s < LEN + 200; s += 500) items.push({ center: new THREE.Vector3(F(s).x, F(s).y, F(s).z), radius: 380, groups: [{ obj: grp, max: 4000 }] });
+    }
+
+    // ---------------------------------------------------------------- pumpkin patches, hay, scarecrows in the clearings
+    // ribbed pumpkin with a stem (stem vertex colour compensates the orange instance colour)
+    const pumpGeo = (() => {
+      const g = new THREE.SphereGeometry(1, 16, 10), pa = g.attributes.position, col = new Float32Array(pa.count * 3);
+      for (let i = 0; i < pa.count; i++) {
+        let x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i); const az = Math.atan2(z, x), rib = 0.5 + 0.5 * Math.cos(10 * az), pole = Math.abs(y), k = 1 - 0.13 * rib * (1 - 0.35 * pole * pole);
+        x *= k; z *= k; if (y > 0.55) y -= 0.22 * smoothstep(0.55, 1, y) * (1 - Math.hypot(x, z) * 0.4);
+        pa.setXYZ(i, x, y, z); col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = 1;
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      const st = new THREE.CylinderGeometry(0.07, 0.13, 0.4, 6); st.translate(0.02, 1.0, 0); st.rotateZ(0.0);
+      const sc = new Float32Array(st.attributes.position.count * 3); for (let i = 0; i < sc.length; i += 3) { sc[i] = 0.55; sc[i + 1] = 1.7; sc[i + 2] = 0.9; }
+      st.setAttribute('color', new THREE.BufferAttribute(sc, 3));
+      const a = g.toNonIndexed(), bb = st.toNonIndexed(); [a, bb].forEach((x) => { x.deleteAttribute('uv'); });
+      const pos = new Float32Array(a.attributes.position.count * 3 + bb.attributes.position.count * 3); pos.set(a.attributes.position.array, 0); pos.set(bb.attributes.position.array, a.attributes.position.array.length);
+      const cc = new Float32Array(pos.length); cc.set(a.attributes.color.array, 0); cc.set(bb.attributes.color.array, a.attributes.color.array.length);
+      const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('color', new THREE.BufferAttribute(cc, 3)); mg.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(pos.length / 3 * 2), 2));
+      mg.computeVertexNormals(); return mg;
+    })();
     for (const cl of clearings) {
       const grp = new THREE.Group(), b = new Batch();
-      const sm = (cl.s0 + cl.s1) / 2, len = cl.s1 - cl.s0;
-      const cx = (s, d) => { main.atS(s, P); return { x: P.px + P.rhx * cl.side * d, z: P.pz + P.rhz * cl.side * d, hw: P.hw, ry: Math.atan2(-P.rhz, P.rhx) }; };
+      const sm = (cl.s0 + cl.s1) / 2, len = cl.s1 - cl.s0, side = cl.side;
+      const cx = (s, d) => F(s, side * d);
       if (cl.kind === 'pumpkin') {
-        const ms = [], cs = [], n = 190;
+        const ms = [], cs = [], n = 210;
         for (let i = 0; i < n; i++) {
-          const s = cl.s0 + 4 + rnd() * (len - 8), d = hwOf(s) + 3 + rnd() * 20, p = cx(s, d), y = terrain.heightAt(p.x, p.z), r = 0.38 + Math.pow(rnd(), 2) * 0.45;
+          const s = cl.s0 + 4 + rnd() * (len - 8), d = hwOf(s) + 2.6 + rnd() * 20, p = cx(s, d), r = 0.38 + Math.pow(rnd(), 2) * 0.45;
           e4.set(0, rnd() * 6.28, 0); q4.setFromEuler(e4);
-          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(p.x, y + r * 0.7, p.z), q4.clone(), new THREE.Vector3(r, r * 0.78, r)));
-          reg.circle('pumpkin', p.x, p.z, r, y + r * 0.7 - r * 0.78, {}, 4);
-          const t = rnd(); cs.push(t < 0.12 ? new THREE.Color(0.9, 0.78, 0.15) : t < 0.2 ? new THREE.Color(0.55, 0.62, 0.25) : new THREE.Color(1.0, 0.42 + rnd() * 0.2, 0.08));
+          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y + r * 0.62, p.z), q4.clone(), new THREE.Vector3(r, r * 0.78, r)));
+          reg.circle('pumpkin', p.x, p.z, r, p.y + r * 0.62 - r * 0.78, {}, 4);
+          const t = rnd(); cs.push(t < 0.1 ? new THREE.Color(0.85, 0.62, 0.05) : t < 0.16 ? new THREE.Color(0.45, 0.55, 0.15) : new THREE.Color(0.85, 0.2 + rnd() * 0.12, 0.02));
         }
-        const im = new THREE.InstancedMesh(pumpGeo, lib.get('dark', {}), ms.length);
+        const im = new THREE.InstancedMesh(pumpGeo, lib.get('dark', { vertexColors: true }), ms.length);
         ms.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, cs[i]); }); im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.castShadow = false; grp.add(im);
-        for (let i = 0; i < 70; i++) { const s = cl.s0 + 4 + rnd() * (len - 8), p = cx(s, hwOf(s) + 3 + rnd() * 20), y = terrain.heightAt(p.x, p.z); b.add('dark', boxG(0.9, 0.05, 0.7, 1), xf(p.x, y + 0.04, p.z, (rnd() - 0.5) * 0.2, rnd() * 6, 0), [0.25, 0.5, 0.15]); }
-        const q = cx(cl.s0 + 3, hwOf(cl.s0) + 1.9), y = terrain.heightAt(q.x, q.z);
-        b.add('woodWeathered', boxG(0.12, 1.9, 0.12, 1), xf(q.x, y + 0.85, q.z), [0.6, 0.5, 0.4]); reg.circle('post', q.x, q.z, 0.1, y - 0.1, {}, 4); b.add('dark', boxG(1.4, 0.7, 0.08, 1), xf(q.x, y + 1.7, q.z, 0, q.ry, 0), [1.0, 0.55, 0.1]);
-        for (let s = cl.s0; s <= cl.s1; s += 4) { const q2 = cx(s, hwOf(s) + 2.6), y2 = terrain.heightAt(q2.x, q2.z); b.add('woodWeathered', boxG(0.12, 1.2, 0.12, 1), xf(q2.x, y2 + 0.5, q2.z), [0.6, 0.5, 0.4]); reg.circle('post', q2.x, q2.z, 0.1, y2 - 0.1, {}, 4); b.add('woodWeathered', boxG(4, 0.08, 0.1, 1), xf(q2.x, y2 + 0.85, q2.z, 0, q2.ry, 0), [0.62, 0.52, 0.42]); }
+        for (let i = 0; i < 90; i++) {   // vine leaves lying between the pumpkins
+          const s = cl.s0 + 4 + rnd() * (len - 8), p = cx(s, hwOf(s) + 2.6 + rnd() * 20), w = 0.5 + rnd() * 0.5;
+          b.add('dark', boxG(w, 0.04, w * 0.8, 1), xf(p.x, p.y + 0.05, p.z, (rnd() - 0.5) * 0.25, rnd() * 6, 0), [0.14 + rnd() * 0.08, 0.4 + rnd() * 0.15, 0.08]);
+          if (rnd() < 0.5) b.add('dark', boxG(0.04, 0.03, 1.4 + rnd(), 1), xf(p.x, p.y + 0.04, p.z, 0, rnd() * 6, 0), [0.2, 0.34, 0.1]);
+        }
+        const q = cx(cl.s0 + 3, hwOf(cl.s0) + 1.9);
+        sign(grp, b, 'PUMPKINS', cl.s0 + 3, side, '#e8872a', '#2f1604', 1.7, 0.6, 1.25, 1.9);
+        // low split-rail fence along the lane edge of the patch, rails follow the lane
+        const post = [];
+        for (let s = cl.s0; s <= cl.s1 + 0.1; s += 4) { const q2 = cx(s, hwOf(s) + 2.5); post.push(q2); b.add('woodWeathered', boxG(0.12, 1.2, 0.12, 1), xf(q2.x, q2.y + 0.5, q2.z), [0.6, 0.5, 0.4]); reg.circle('post', q2.x, q2.z, 0.1, q2.y - 0.1, {}, 4); if (post.length % 2) perch.push([q2.x, q2.y + 1.1, q2.z]); }
+        for (let i = 0; i < post.length - 1; i++) {
+          const a = post[i], c = post[i + 1], len2 = Math.hypot(c.x - a.x, c.z - a.z), ry = Math.atan2(c.x - a.x, c.z - a.z);
+          for (const hy of [0.62, 0.98]) b.add('woodWeathered', boxG(0.08, 0.09, len2, 1), xf((a.x + c.x) / 2, (a.y + c.y) / 2 + hy, (a.z + c.z) / 2, 0, ry, 0), [0.62, 0.52, 0.42]);
+        }
       }
       if (cl.kind === 'pumpkin' || cl.kind === 'hay') {
-        for (let i = 0; i < (cl.kind === 'hay' ? 16 : 6); i++) {
-          const s = cl.s0 + 3 + rnd() * (len - 6), p = cx(s, hwOf(s) + 4 + rnd() * (cl.kind === 'hay' ? 22 : 12)), y = terrain.heightAt(p.x, p.z), up = rnd() < 0.3;
-          b.add('straw', cylG(0.72, 0.72, 1.3, 10, 2), xf(p.x, y + (up ? 0.65 : 0.72), p.z, up ? 0 : Math.PI / 2, rnd() * 6, 0), [0.95 + rnd() * 0.1, 0.9, 0.7]); reg.circle('hay', p.x, p.z, 0.95, y, {}, 6);
-          if (cl.kind === 'hay' && rnd() < 0.45) b.add('straw', cylG(0.72, 0.72, 1.3, 10, 2), xf(p.x + 0.4, y + 1.9, p.z + 0.2, Math.PI / 2, rnd() * 6, 0), [1, 0.92, 0.72]);
+        for (let i = 0; i < (cl.kind === 'hay' ? 18 : 6); i++) {
+          const s = cl.s0 + 3 + rnd() * (len - 6), p = cx(s, hwOf(s) + 3.5 + rnd() * (cl.kind === 'hay' ? 22 : 12)), up = rnd() < 0.3;
+          b.add('straw', cylG(0.72, 0.72, 1.3, 10, 2), xf(p.x, p.y + (up ? 0.65 : 0.72), p.z, up ? 0 : Math.PI / 2, rnd() * 6, 0), [0.95 + rnd() * 0.1, 0.9, 0.7]); reg.circle('hay', p.x, p.z, 0.95, p.y, {}, 6);
+          if (cl.kind === 'hay' && rnd() < 0.45) b.add('straw', cylG(0.72, 0.72, 1.3, 10, 2), xf(p.x + 0.4, p.y + 1.9, p.z + 0.2, Math.PI / 2, rnd() * 6, 0), [1, 0.92, 0.72]);
+          if (cl.kind === 'hay' && rnd() < 0.3) perch.push([p.x, p.y + 1.5, p.z]);
         }
       }
       for (let i = 0; i < (cl.kind === 'farm' ? 1 : 2); i++) {
-        const s = cl.s0 + 8 + rnd() * (len - 16), p = cx(s, hwOf(s) + 4.5 + rnd() * 9), y = terrain.heightAt(p.x, p.z), ry = rnd() * 6;
+        const s = cl.s0 + 8 + rnd() * (len - 16), p = cx(s, hwOf(s) + 4.5 + rnd() * 9), y = p.y, ry = rnd() * 6;
         const M = xf(p.x, y, p.z, 0, ry, 0), L = (m) => M.clone().multiply(m);
         reg.circle('scarecrow', p.x, p.z, 0.9, y - 0.05, {}, 6);
         b.add('woodWeathered', boxG(0.1, 2.3, 0.1, 1), L(xf(0, 1.1, 0)), [0.55, 0.45, 0.35]); b.add('woodWeathered', boxG(1.7, 0.1, 0.1, 1), L(xf(0, 1.75, 0)), [0.55, 0.45, 0.35]);
         b.add('dark', boxG(0.5, 0.85, 0.3, 1), L(xf(0, 1.55, 0)), [0.35 + rnd() * 0.3, 0.3, 0.55]); b.add('straw', sphG(0.22, 6, 4, 1), L(xf(0, 2.2, 0)), [1, 0.9, 0.6]);
         b.add('dark', cylG(0.34, 0.34, 0.05, 8, 1), L(xf(0, 2.38, 0)), [0.45, 0.32, 0.18]); b.add('dark', cylG(0.18, 0.18, 0.22, 8, 1), L(xf(0, 2.5, 0)), [0.45, 0.32, 0.18]);
         for (const sx of [-1, 1]) b.add('straw', boxG(0.07, 0.4, 0.07, 1), L(xf(sx * 0.82, 1.55, 0)), [1, 0.9, 0.6]);
+        for (const sx of [-0.75, 0.75]) perch.push([p.x + Math.cos(ry) * sx, y + 1.85, p.z - Math.sin(ry) * sx]);
+        perch.push([p.x, y + 2.7, p.z]);
       }
       if (b.parts.size) grp.add(b.build(lib, { shadow: false }));
-      if (grp.children.length) { grp.updateMatrixWorld(true); parent.add(grp); main.atS(sm, P); items.push({ center: new THREE.Vector3(P.px, P.py, P.pz), radius: len / 2 + 40, groups: [{ obj: grp, max: 260 }] }); }
+      if (grp.children.length) addItem(grp, sm, len / 2 + 40, 260);
     }
-    // ---- barn yards ----
+    // ---------------------------------------------------------------- barn yards: farms + lanterns / porch lights
     for (const f of farms) {
       const fo = buildFarm(f, { terrain, lib });
       fo.group.name = 'corn_farm'; parent.add(fo.group);
       items.push({ center: new THREE.Vector3(f.x, f.y, f.z), radius: 90, groups: [{ obj: fo.group, max: 330 }], farm: fo });
+      const grp = new THREE.Group(), b = new Batch(), glows = [];
+      for (const ds of [-52, -26, 0, 26, 52]) { const s = f.s + ds, sg = f.side; if (hwOf(s) <= 0) continue; const q = F(s, sg * (hwOf(s) + 3.0)); glows.push(lampPost(b, grp, q.x, q.z, 2.7)); }
+      // two yard lights deeper in the yard, towards the barn and the house
+      for (const [lx, lz] of [[-9, 4], [-34, 14], [-20, -8]]) { const wx = f.x + lx * Math.cos(f.yaw) + lz * Math.sin(f.yaw), wz = f.z - lx * Math.sin(f.yaw) + lz * Math.cos(f.yaw); glows.push(lampPost(b, grp, wx, wz, 2.9, false)); }
+      grp.add(b.build(lib, { shadow: false })); glowPoints(grp, glows);
+      addItem(grp, f.s, 90, 330);
     }
-    // ---- background trees ----
+    // ---------------------------------------------------------------- background trees
     const trees = scatterTrees({ net: nw, terrain, lib, parent, seed: sd, chunk: 125, perChunk: 34, minClear: 42, maxOff: 70, mix: [0.4, 0.3, 1.2, 1, 1, 1, 0.8, 0.8], salt: 14 });
     for (const t of trees) items.push({ center: t.center, radius: t.radius, groups: [{ obj: t.near, max: 80 }, { obj: t.far, min: 70, max: 400 }] });
-    const birds = createBirds({ lib, parent, terrain, main, rnd });
+    const birds = createBirds({ lib, parent, terrain, main, rnd, perch });
     return {
       items,
       update(dt, camPos, time, actors) {
         birds.update(dt, camPos, time, actors);
+        const n = G.gfxNight ? G.gfxNight.value : 0;
+        glowMat.opacity = 0.95 * clamp(n * 1.6, 0, 1);
         for (const it of items) if (it.farm && it.groups[0].obj.visible) it.farm.update(time, dt);
       },
     };
@@ -236,33 +563,59 @@ export function planCorn(seed) {
 
   return {
     id: 'corn', name: 'Corn & Pumpkins', net, registry, pads, terrainOpts, theme, surface, flags: { closed: false, laps: 1, flat: false, noStuckRescue: false },
-    splits: [], hazards, startPos, landmarks: [{ type: 'barn', s: 780, lateral: -24 }, { type: 'barn', s: 2020, lateral: 24 }, { type: 'pumpkins', s: 365, lateral: 10 }, { type: 'finish', s: LEN, lateral: 0 }],
+    splits: [], hazards, startPos, passingBays, landmarks: [{ type: 'barn', s: 780, lateral: -24 }, { type: 'barn', s: 2020, lateral: 24 }, { type: 'pumpkins', s: 365, lateral: 10 }, { type: 'finish', s: LEN, lateral: 0 }],
     decorate, ranges: { ground: 440 },
   };
 }
 
+/** chequered strip draped on the lane between s0 and s1 */
+function chequer(F, terrain, s0, s1, lift) {
+  const rows = 4, cols = 16, Pa = new Float32Array(rows * cols * 3), Na = new Float32Array(rows * cols * 3), Ua = new Float32Array(rows * cols * 2), idx = [];
+  for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
+    const s = s0 + ((s1 - s0) * r) / (rows - 1), f0 = F(s, 0), q = F(s, (k / (cols - 1) * 2 - 1) * (f0.hw - 0.05)), i = r * cols + k;
+    Pa[i * 3] = q.x; Pa[i * 3 + 1] = q.y + lift * 0.3; Pa[i * 3 + 2] = q.z; Na[i * 3 + 1] = 1; Ua[i * 2] = (k / (cols - 1)) * Math.max(2, Math.round(f0.hw * 2 / 0.6) / 1) * 0.5; Ua[i * 2 + 1] = (r / (rows - 1)) * 0.25;
+  }
+  for (let r = 0; r < rows - 1; r++) for (let k = 0; k < cols - 1; k++) { const a = r * cols + k; idx.push(a, a + cols, a + 1, a + 1, a + cols, a + cols + 1); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(Pa, 3)); g.setAttribute('normal', new THREE.BufferAttribute(Na, 3)); g.setAttribute('uv', new THREE.BufferAttribute(Ua, 2)); g.setIndex(idx);
+  const t = textureOf('checker').clone(); t.needsUpdate = true;
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: t, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 })); m.name = 'chequered_line'; return m;
+}
+
 // =========================================================================================
-// Flocks of crows: idle = perched / circling over a field; scatter upward and away when a cart (or the camera) comes within 25 m.
-function createBirds({ lib, parent, terrain, main, rnd }) {
+// Flocks of crows: idle = perched (on posts, scarecrows, the gate, the canopy edge) / circling over the field beside the lane;
+// they scatter upward and away when a cart (or the camera) comes within 25 m.
+function createBirds({ lib, parent, terrain, main, rnd, perch }) {
   const geo = (() => {
     const P = [], N = [];
     const tri = (a, b, c) => { P.push(...a, ...b, ...c); const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2]; const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz) || 1; for (let i = 0; i < 3; i++) N.push(nx / l, ny / l, nz / l); };
-    const body = [[0, 0.02, -0.28], [-0.07, 0, 0.12], [0.07, 0, 0.12], [0, 0.09, 0.0]];
+    const K = 1.9;
+    const body = [[0, 0.02, -0.28], [-0.07, 0, 0.12], [0.07, 0, 0.12], [0, 0.09, 0.0]].map((p) => p.map((v) => v * K));
     tri(body[0], body[1], body[3]); tri(body[0], body[3], body[2]); tri(body[1], body[2], body[3]); tri(body[0], body[2], body[1]);
-    for (const sg of [-1, 1]) { const w = [[0.04 * sg, 0.05, -0.06], [0.04 * sg, 0.05, 0.1], [0.5 * sg, 0.1, 0.02]]; tri(w[0], w[1], w[2]); tri(w[0], w[2], w[1]); }
+    for (const sg of [-1, 1]) { const w = [[0.04 * sg, 0.05, -0.06], [0.04 * sg, 0.05, 0.1], [0.5 * sg, 0.1, 0.02]].map((p) => p.map((v) => v * K)); tri(w[0], w[1], w[2]); tri(w[0], w[2], w[1]); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(P.length / 3 * 2), 2)); g.computeBoundingSphere(); return g;
   })();
-  const flocks = [], pp = {}, N_PER = 13;
-  [180, 520, 910, 1300, 1640, 2000, 2350, 2700, 3010].forEach((s, fi) => {
+  const flocks = [], pp = {}, N_PER = 12;
+  // circling flocks over the corn right beside the lane (wide circles that pass over the lane at 5-8 m)
+  [150, 430, 800, 1130, 1450, 1760, 2090, 2370, 2660, 2900, 3080].forEach((s, fi) => {
     const side = fi % 2 ? 1 : -1; main.atS(s, pp);
-    const off = pp.hw + 9 + rnd() * 14, cx = pp.px + pp.rhx * side * off, cz = pp.pz + pp.rhz * side * off;
-    flocks.push({ cx, cz, gy: terrain.heightAt(cx, cz) + CORN_H, r: 7 + rnd() * 6, hgt: 5 + rnd() * 4, state: 0, t: 0, w: (0.35 + rnd() * 0.3) * (fi % 2 ? 1 : -1), birds: [] });
+    const off = pp.hw + 8.5 + rnd() * 3, cx = pp.px + pp.rhx * side * off, cz = pp.pz + pp.rhz * side * off;
+    flocks.push({ cx, cz, gy: terrain.heightAt(cx, cz) + CORN_H, r: 7 + rnd() * 3, hgt: 3.2 + rnd() * 2.2, state: 0, t: 0, w: (0.35 + rnd() * 0.3) * (fi % 2 ? 1 : -1), birds: [], spots: null });
   });
-  const total = flocks.length * N_PER;
-  for (const f of flocks) for (let i = 0; i < N_PER; i++) f.birds.push({ a: rnd() * 6.28, perched: i % 3 === 0, ph: rnd() * 6.28, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rr: 0.7 + rnd() * 0.6, hh: rnd() * 2.5 });
-  const mesh = new THREE.InstancedMesh(geo, lib.get('dark', {}), total); mesh.name = 'crows'; mesh.frustumCulled = false;
-  for (let i = 0; i < total; i++) { const t = 0.05 + 0.04 * ((i * 7) % 5); mesh.setColorAt(i, new THREE.Color(t, t, t * 1.1)); }
-  mesh.instanceColor.needsUpdate = true; mesh.castShadow = false; parent.add(mesh);
+  // perch flocks: a few crows on each cluster of posts / scarecrow arms / the gate beams
+  const usedSpots = perch.filter((_, i) => i % 2 === 0);
+  for (let i = 0; i < usedSpots.length; i += 3) {
+    const sp = usedSpots.slice(i, i + 3); if (!sp.length) continue;
+    flocks.push({ cx: sp[0][0], cz: sp[0][2], gy: sp[0][1], r: 3, hgt: 3, state: 0, t: 0, w: 0.4, birds: [], spots: sp });
+  }
+  let total = 0;
+  for (const f of flocks) {
+    const n = f.spots ? f.spots.length : N_PER;
+    for (let i = 0; i < n; i++) f.birds.push({ a: rnd() * 6.28, perched: f.spots ? true : i % 4 === 0, ph: rnd() * 6.28, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rr: 0.7 + rnd() * 0.6, hh: rnd() * 2.2, spot: f.spots ? f.spots[i] : null });
+    total += n;
+  }
+  // black, unlit crows (the shared 'dark' material washed them out to grey)
+  const mat = new THREE.MeshBasicMaterial({ color: 0x0a0a0c, side: THREE.DoubleSide });
+  const mesh = new THREE.InstancedMesh(geo, mat, total); mesh.name = 'crows'; mesh.frustumCulled = false; mesh.castShadow = false; parent.add(mesh);
   const q = new THREE.Quaternion(), e = new THREE.Euler(), m4 = new THREE.Matrix4(), pos = new THREE.Vector3(), sc = new THREE.Vector3();
   const FLEE = 25 * 25;
   function update(dt, camPos, time, actors) {
@@ -276,7 +629,8 @@ function createBirds({ lib, parent, terrain, main, rnd }) {
         for (const b of f.birds) {
           const away = Math.atan2(f.cz - who.z, f.cx - who.x) + (rnd() - 0.5) * 2.0, sp = 4 + rnd() * 5;
           b.vx = Math.cos(away) * sp; b.vz = Math.sin(away) * sp; b.vy = 5 + rnd() * 5;
-          b.x = f.cx + Math.cos(b.a) * f.r * b.rr; b.z = f.cz + Math.sin(b.a) * f.r * b.rr; b.y = b.perched ? f.gy + 0.1 : f.gy + f.hgt + b.hh;
+          if (b.spot) { b.x = b.spot[0]; b.y = b.spot[1]; b.z = b.spot[2]; }
+          else { b.x = f.cx + Math.cos(b.a) * f.r * b.rr; b.z = f.cz + Math.sin(b.a) * f.r * b.rr; b.y = b.perched ? f.gy + 0.1 : f.gy + f.hgt + b.hh; }
         }
       }
       if (f.state === 1) { f.t += dt; if (f.t > 14) { f.state = 0; f.t = 0; } }
@@ -285,6 +639,8 @@ function createBirds({ lib, parent, terrain, main, rnd }) {
         if (f.state === 1) {
           b.x += b.vx * dt; b.z += b.vz * dt; b.y += b.vy * dt; b.vy += (2.2 - b.vy) * dt * 0.6; if (f.t > 9) b.vy -= 3 * dt;
           x = b.x; y = Math.max(b.y, f.gy + 0.4); z = b.z; yaw = Math.atan2(-b.vx, -b.vz); flap = 0.45 + 0.55 * Math.abs(Math.sin(time * 15 + b.ph));
+        } else if (b.spot) {
+          x = b.spot[0] + Math.sin(b.ph) * 0.05; y = b.spot[1]; z = b.spot[2]; yaw = b.ph * 3; flap = 0.2;
         } else if (b.perched) {
           const a = b.a + b.ph; x = f.cx + Math.cos(a) * f.r * 0.6 * b.rr; z = f.cz + Math.sin(a) * f.r * 0.6 * b.rr; y = f.gy + 0.05 + 0.04 * Math.max(0, Math.sin(time * 3 + b.ph * 5)); yaw = b.ph; flap = 0.25;
         } else {

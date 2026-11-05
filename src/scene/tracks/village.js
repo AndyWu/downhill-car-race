@@ -122,25 +122,38 @@ export function planVillage(seed) {
     addHaz(b.road, b.road.field);
   }
 
-  // ---- terrain verge: kerb then a 1.5 m wall (house plinths / garden walls) ----
-  const WALL = 2.1, OUT = 9;
+  // ---- terrain verge: vertical kerb (0.13 m) + a short pavement, then a steep wall (house plinths / garden walls / parapets) ----
+  const WALL = 2.1, OUT = 9, LOW = 0.9;
+  const lowEdge = (road, s, sg) => {   // 0..1: how far the street edge is a low parapet instead of a full wall (market square middle third, river side)
+    if (road.kind === 'market') { const u = s / road.length; return smoothstep(0.2, 0.3, u) * (1 - smoothstep(0.7, 0.8, u)); }
+    if (road.kind === 'river' && sg === road.riverSide) return smoothstep(20, 44, s) * smoothstep(20, 44, road.length - s);
+    return 0;
+  };
+  const wallTop = (road, s, sg) => lerp(WALL, LOW, lowEdge(road, s, sg));
   const verge = (road, s, d, hw) => {
     const r = Math.abs(d) - (hw + 0.1);
     if (r < 0) return 0;
-    const kerb = 0.1 * smoothstep(0, 0.08, r) * (1 - smoothstep(0.2, 0.3, r));
-    const wall = WALL * smoothstep(0.3, 1.1, r) * (1 - smoothstep(OUT - 3.5, OUT - 0.4, r));
+    const kerb = 0.13 * smoothstep(0, 0.06, r);
+    const wall = wallTop(road, s, d < 0 ? -1 : 1) * smoothstep(0.55, 0.66, r) * (1 - smoothstep(OUT - 3.5, OUT - 0.4, r));
     return Math.max(kerb, wall);
+  };
+  const roadColsFn = (hw) => {   // road-strip columns: uniform inside, then dense at the kerb / wall so the profile stays crisp
+    const P = []; for (let i = 1; i <= 6; i++) P.push((hw * i) / 7);
+    P.push(hw - 0.04, hw + 0.1, hw + 0.16, hw + 0.65, hw + 0.76, hw + 1.1, hw + 1.5);
+    return [...P.map((v) => -v).reverse(), 0, ...P];
   };
   const terrainOpts = { hillAmp: 6, hillFar: 16, hillNear: 70, rutScale: 0, noiseScale: 0.4, crown: 0.07, sideSlope: 0.18, shoulderOut: OUT, verge };
   const theme = {
-    roadMat: 'cobbles', chunk: 150, tile: 256, cell: 8, terrUV: 6, tileNear: { reach: 9, drop: 0.7 }, tileRadius: 0.5,
+    roadMat: 'cobbles', chunk: 150, tile: 256, cell: 8, terrUV: 6, tileNear: { reach: 9, drop: 0.7 }, tileRadius: 0.5, roadColsFn,
     roadUV: (road, s, d, hwe, o) => { o[0] = d / 2.6; o[1] = s / 2.6; },
     roadColor: (road, s, d, p, rnz, o) => {
       const ad = Math.abs(d), n = 0.88 + 0.22 * (rnz.n2(s * 0.7, d * 0.9) * 0.5 + 0.5);
       let wet = 0; if (road.field) wet = road.field.wet(s, d);
-      const edge = smoothstep(p.hw - 0.2, p.hw + 0.4, ad);
-      const k = n * (1 - 0.5 * wet) * (1 - 0.25 * edge);
+      const edge = smoothstep(p.hw - 0.3, p.hw + 0.1, ad);
+      const k = n * (1 - 0.5 * wet) * (1 - 0.18 * edge);
       o[0] = k; o[1] = k; o[2] = k * (1 - 0.05 * edge);
+      const pave = smoothstep(p.hw + 0.05, p.hw + 0.14, ad);   // kerb stone + pavement: lighter, warmer slabs
+      if (pave > 0) { const pk = 1.18 + 0.1 * rnz.n2(s * 0.5, 3); o[0] = lerp(o[0], 0.98 * pk, pave); o[1] = lerp(o[1], 0.9 * pk, pave); o[2] = lerp(o[2], 0.78 * pk, pave); }
     },
     terrMat: 'grass', terrColor: (x, z, off, s, d, cnz, rnz, o) => {
       const k = 0.9 + 0.14 * cnz.n2(x / 15 + 7, z / 15), t = cnz.n2(x / 70 + 3, z / 70) * 0.5 + 0.5;
@@ -163,7 +176,7 @@ export function planVillage(seed) {
   function decorate({ net: nw, terrain, lib, parent, seed: sd, plan }) {
     const rnd = mulberry32(sd * 71 + 5);
     const reg = plan.registry;
-    const ROW = 0.66;   // house / wall front plane, metres beyond the road edge (corridor = edge + 0.3, doorsteps/awnings protrude <= 0.3)
+    const ROW = 0.64;   // house / wall front plane, metres beyond the road edge (corridor = edge + 0.3, doorsteps/awnings protrude <= 0.3); kerb + pavement sit in front of it; the terrain wall rises just behind this plane
     const items = [];
     const pp = {}, qq = {};
     const CH = 120;
