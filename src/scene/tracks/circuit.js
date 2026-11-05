@@ -114,7 +114,7 @@ export function planCircuit(seed) {
     const k = tab(kapT, u);
     return Math.abs(k) > 0.03 && (d < 0 ? k > 0 : k < 0);
   };
-  const HPF = 0.38;
+  const HPF = 0.25;
   const hairpinW = (s) => { const u = ((s % LAP) + LAP) % LAP; return u < 405 || u > 500 ? 0 : smoothstep(0.028, 0.05, Math.abs(tab(kapT, u))); };
   const surface = (info) => {
     const ad = Math.abs(info.d), hw = info.hw;
@@ -145,7 +145,8 @@ export function planCircuit(seed) {
 
     // ---- materials that glow at night (colour is animated in update) ----
     const warmMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 0.55, 0.42) });
-    const lampMats = Array.from({ length: 5 }, () => new THREE.MeshBasicMaterial({ color: new THREE.Color(0.1, 0.02, 0.02) }));
+    const lampMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    let lampAttr = null, lampVerts = 0;   // one merged mesh, one colour per lamp (vertex colours) = a single draw call
     const poolMat = new THREE.MeshBasicMaterial({ map: poolTexture(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(1.0, 0.86, 0.6), polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
     const merged = (list) => { const gs = list.map(([g, m]) => { const c = g.clone(); c.applyMatrix4(m); return c; }); const g = mergeGeometries(gs, false); g.computeBoundingSphere(); return g; };
 
@@ -195,7 +196,7 @@ export function planCircuit(seed) {
     // ---- tyre walls: upright stacks of three black tyres (white / red painted every few stacks), per 120 m chunk ----
     {
       const prof = [new THREE.Vector2(0.12, 0), new THREE.Vector2(0.33, 0), new THREE.Vector2(0.355, 0.14), new THREE.Vector2(0.33, 0.28), new THREE.Vector2(0.15, 0.28)];
-      const tyreGeo = new THREE.LatheGeometry(prof, 9);
+      const tyreGeo = new THREE.LatheGeometry(prof, 7);
       const chunks = new Map();
       for (const sg of [-1, 1]) {
         const si = sg < 0 ? 0 : 1;
@@ -222,7 +223,7 @@ export function planCircuit(seed) {
         ch.m.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, ch.col[i]); });
         im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.castShadow = false; im.name = 'tyres_' + c;
         const grp = new THREE.Group(); grp.add(im);
-        addItem(grp, cOf(c * 120 + 60), 95, 220);
+        addItem(grp, cOf(c * 120 + 60), 95, 120);
       }
     }
 
@@ -534,7 +535,12 @@ export function planCircuit(seed) {
     {
       const gl = new THREE.Group(); gl.name = 'glow';
       if (glowGeos.length) { const m = new THREE.Mesh(merged(glowGeos), warmMat); m.name = 'glow_warm'; gl.add(m); }
-      redGeos.forEach(([g, mx], i) => { const lg = g.clone(); lg.applyMatrix4(mx); lg.computeBoundingSphere(); const m = new THREE.Mesh(lg, lampMats[i]); m.name = 'glow_start_' + i; gl.add(m); });
+      if (redGeos.length) {
+        lampVerts = redGeos[0][0].attributes.position.count;
+        const gs = redGeos.map(([g, mx]) => { const c = g.clone(); c.applyMatrix4(mx); c.deleteAttribute('uv'); c.setAttribute('color', new THREE.BufferAttribute(new Float32Array(lampVerts * 3), 3)); return c; });
+        const lg = mergeGeometries(gs, false); lg.computeBoundingSphere(); lampAttr = lg.attributes.color;
+        const m = new THREE.Mesh(lg, lampMat); m.name = 'glow_start'; gl.add(m);
+      }
       if (poolGeos.length) { const m = new THREE.Mesh(mergeGeometries(poolGeos, false), poolMat); m.name = 'light_pools'; m.renderOrder = 3; gl.add(m); }
       addItem(gl, cOf(LAP / 2), 700, 420);
     }
@@ -548,9 +554,12 @@ export function planCircuit(seed) {
     const startLights = {
       set(state) {
         lampState = state;
-        lampMats.forEach((m, i) => { const c = state === 'green' ? LAMP_GREEN : (typeof state === 'number' && i < state) ? LAMP_RED : LAMP_OFF; m.color.setRGB(c[0], c[1], c[2]); });
+        if (!lampAttr) return;
+        for (let i = 0; i < 5; i++) { const c = state === 'green' ? LAMP_GREEN : (typeof state === 'number' && i < state) ? LAMP_RED : LAMP_OFF; for (let v = i * lampVerts; v < (i + 1) * lampVerts; v++) lampAttr.setXYZ(v, c[0], c[1], c[2]); }
+        lampAttr.needsUpdate = true;
       },
     };
+    startLights.set('off');
     function setRaceState(o = {}) {
       const cd = o.countdown ?? 0;
       if (cd > 0) { greenT = 0; startLights.set(clamp(1 + Math.floor(5 * (1 - cd / 3.0001)), 1, 5)); }
@@ -580,7 +589,7 @@ export function planCircuit(seed) {
     const qq = {};
     const keepOut = (x, z) => { nw.project2(x, z, qq); const sm = ((qq.s % LAP) + LAP) % LAP; return (sm < 270 || sm > LAP - 60) && qq.dist < 62; };
     const trees = scatterTrees({ net: nw, terrain, lib, parent, seed: sd, chunk: 125, perChunk: 60, minClear: 14, maxOff: 90, mix: [1.4, 1.2, 0.6, 0.6, 0.2, 1, 1.2, 1], salt: 5, exclude: keepOut });
-    for (const t of trees) items.push({ center: t.center, radius: t.radius, groups: [{ obj: t.near, max: 80 }, { obj: t.far, min: 70, max: 380 }] });
+    for (const t of trees) items.push({ center: t.center, radius: t.radius, groups: [{ obj: t.near, max: 80 }, { obj: t.far, min: 70, max: 300 }] });
     return { items, update, startLights, setRaceState };
   }
 

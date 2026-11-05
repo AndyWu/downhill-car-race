@@ -643,7 +643,7 @@ export function planVillage(seed) {
         const rs = road.riverSide, sA = 16, sB = road.length - 16, WA = 0.8, WB = 7.2;   // water from 0.8 m beyond the street edge to the far-bank wall at 7.2 m
         // water: flat ribbon just below the street level (the parapet is only 0.5 m high, so it shows from the cockpit)
         const P = [], I = [], U = []; let rows = 0;
-        for (let sx = sA; sx <= sB + 1e-6; sx += 3) { road.atS(sx, pp); for (const dd of [WA, WB]) { const d = rs * (pp.hw + dd); P.push(pp.px + pp.rhx * d, pp.py - 0.13, pp.pz + pp.rhz * d); U.push(dd > 3 ? 1.6 : 0, sx / 3); } rows++; }
+        for (let sx = sA; sx <= sB + 1e-6; sx += 3) { road.atS(sx, pp); for (const dd of [WA, WB]) { const d = rs * (pp.hw + dd); P.push(pp.px + pp.rhx * d, pp.py + 0.02, pp.pz + pp.rhz * d); U.push(dd > 3 ? 1.6 : 0, sx / 3); } rows++; }
         for (let r = 0; r < rows - 1; r++) { const a = r * 2; I.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setIndex(I); g.computeVertexNormals();
         const wm = lib.get('water', { polygonOffset: -3 }), wmesh = new THREE.Mesh(g, wm); wmesh.name = 'river_' + bd.splitId; wmesh.receiveShadow = true; parent.add(wmesh); waters.push(wm);
@@ -669,8 +669,8 @@ export function planVillage(seed) {
           road.atS(sx, pp); const d = rs * (pp.hw + WB + 2.2), x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, y = pp.py - 0.5, b = batchOf(progOf(road, sx)), cl = reg.clear(x, z);
           if (cl < 2.5) continue;
           b.add('woodWeathered', cylG(0.22, 0.42, 3.4, 6, 1), xf(x, y + 1.7, z, 0, 0, 0.08), [0.36, 0.3, 0.24]);
-          b.add('dark', sphG(1.9, 7, 5, 1), xf(x, y + 4.2, z, 0, 0, 0, 1, 0.62, 1), [0.3, 0.42, 0.2]);
-          for (let i = 0; i < 9; i++) { const a = i * 0.698 + sx, rr = 1.6 + 0.3 * ((i * 7) % 3); b.add('dark', sphG(1, 5, 4, 1), xf(x + Math.cos(a) * rr, y + 2.6, z + Math.sin(a) * rr, 0, 0, 0, 0.5, 1.75, 0.5), i % 2 ? [0.26, 0.38, 0.2] : [0.34, 0.46, 0.24]); }
+          b.add('dark', sphG(1.9, 7, 5, 1), xf(x, y + 4.2, z, 0, 0, 0, 1, 0.62, 1), [0.1, 0.17, 0.07]);
+          for (let i = 0; i < 9; i++) { const a = i * 0.698 + sx, rr = 1.6 + 0.3 * ((i * 7) % 3); b.add('dark', sphG(1, 5, 4, 1), xf(x + Math.cos(a) * rr, y + 2.6, z + Math.sin(a) * rr, 0, 0, 0, 0.5, 1.75, 0.5), i % 2 ? [0.1, 0.16, 0.07] : [0.14, 0.21, 0.09]); }
         }
       } else if (k === 'market') {
         const apron = [], aI = []; let rows = 0;
