@@ -86,7 +86,7 @@ export function planVillage(seed) {
         yFn: (s, x, z, total) => yMain(fromS + (clamp(s, 0, total) / total) * (toS - fromS)),
         widthFn: (s, kap, total) => lerp(MAIN_W, w0, smoothstep(0, 28, s) * smoothstep(0, 28, total - s)), camberFn: () => 0,
       });
-      road.surf = pd.kind === 'alley' ? { type: 'cobble', friction: 0.78, drag: 0.03, bump: 0.38 } : pd.kind === 'river' ? { type: 'cobble', friction: 0.86, drag: 0.0, bump: 0.1 } : { type: 'cobble', friction: 0.8, drag: 0.02, bump: 0.22 };
+      road.surf = pd.kind === 'alley' ? { type: 'cobble', friction: 0.8, drag: 0.02, bump: 0.3 } : pd.kind === 'river' ? { type: 'cobble', friction: 0.86, drag: 0.0, bump: 0.1 } : { type: 'cobble', friction: 0.8, drag: 0.02, bump: 0.22 };
       road.kind = pd.kind;
       branches.push({ road, splitId: sp.id, pathIndex, fromS, toS, name: pd.name, note: pd.note });
       for (let k = 0.3; k <= 0.7; k += 0.2) { road.atS(road.length * k, mq); builtMid.push([mq.px, mq.pz]); }
@@ -124,7 +124,7 @@ export function planVillage(seed) {
   for (const b of branches) {
     const kind = b.road.kind;
     const opts = kind === 'market' ? { order: ['stall', 'puddle', 'stall', 'stall'], start: 92, startJit: 8, gap1: 14, gap2: 8, endGap: 24 }
-      : kind === 'alley' ? { order: ['steps', 'rock', 'steps', 'puddle'], start: 28, startJit: 8, gap1: 16, gap2: 10, endGap: 28 }
+      : kind === 'alley' ? { order: ['steps', 'puddle', 'rock'], start: 34, startJit: 8, gap1: 30, gap2: 22, endGap: 30 }
         : { order: ['puddle', 'puddle', 'rock'], start: 45, startJit: 15, gap1: 60, gap2: 30, endGap: 40 };
     b.road.field = createHazardField(b.road, seed + 31 + b.road.id, opts);
     softRocks(b.road.field);
@@ -603,7 +603,8 @@ export function planVillage(seed) {
       b.add('woodWeathered', cylG(0.1, 0.13, 3.4, 6, 1), xf(x, y + 1.7, z), [0.45, 0.33, 0.22]);
       b.add('concrete', cylG(0.34, 0.4, 0.5, 8, 1), xf(x, y + 0.25, z), [0.85, 0.82, 0.75]);
       b.add('dark', sphG(0.14, 6, 5, 1), xf(x, y + 3.45, z), [0.25, 0.2, 0.15]);
-      reg.circle('fingerpost', x, z, 0.4, y - 0.3, { sunk: true }, 8);
+      b.add('concrete', cylG(0.3, 0.3, 3.0, 8, 1), xf(x, y - 1.4, z), [0.8, 0.77, 0.7]);
+      reg.circle('fingerpost', x, z, 0.4, y - 2.9, { sunk: true }, 8);
       if (typeof document === 'undefined') continue;
       fk.rows.forEach((r, i) => {
         const cv = document.createElement('canvas'); cv.width = 512; cv.height = 128; const g = cv.getContext('2d');
