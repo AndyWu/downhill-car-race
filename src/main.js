@@ -251,14 +251,23 @@ async function boot() {
 
   const actorPos = [];
   // outside cameras stay inside the road corridor on maps whose walls are meshes (heightfield marching cannot see them)
-  const CAM_MARGIN = { corn: 0.9, circuit: 3.0 };
+  const CAM_MARGIN = { corn: 0.9, circuit: 3.0, village: 0.3 };
+  // measured in the cart's own street: the camera's along-road position is cart.s + (cam - cart).tangent, its lateral comes from that street's frame
+  // (so a camera beside a junction or inside a house is judged against the right road). Allowed lateral: max(hw + margin, |cartLat| + 1.5).
   function camClamp(v, hint) {
     const m = CAM_MARGIN[builtFor];
-    if (m == null || !world || !world.track || !world.track.project) return;
-    const pr = world.track.project(v, hint); if (!pr) return;
-    const sm = world.track.sampleAt(Math.max(0, Math.min(world.track.length, pr.s)));
-    const lim = (sm.width || 6) / 2 + m, L = pr.lateral;
-    if (Math.abs(L) > lim) { const dd = (L > 0 ? lim : -lim) - L; v.x += sm.right.x * dd; v.z += sm.right.z * dd; }
+    if (m == null || !world || !world.track || !world.track.project || !playerV) return;
+    const cp = playerV.body.state.position, cs = playerV.body.state;
+    const pr = world.track.project(cp, cs.s); if (!pr) return;
+    const ch = pr.splitId != null ? { [pr.splitId]: pr.pathIndex } : undefined;
+    const L = world.track.length;
+    const c0 = world.track.sampleAt(Math.max(0, Math.min(L, pr.s)), ch);
+    const sCam = Math.max(0, Math.min(L, pr.s + (v.x - cp.x) * c0.tangent.x + (v.z - cp.z) * c0.tangent.z));
+    const sm = world.track.sampleAt(sCam, ch);
+    const L2 = (v.x - sm.position.x) * sm.right.x + (v.z - sm.position.z) * sm.right.z;
+    const hwC = builtFor === 'circuit' ? (sm.width || 6) / 2 : Math.min(sm.width || 6, c0.width || 6) / 2;   // lanes: the narrower of camera / cart half-width (bay corners)
+    const lim = Math.max(hwC + m, Math.abs(pr.lateral) + 1.5);
+    if (Math.abs(L2) > lim) { const dd = (L2 > 0 ? lim : -lim) - L2; v.x += sm.right.x * dd; v.z += sm.right.z * dd; }
   }
   let mapMain = null;
   const MAP_K = 6, MAP_MAX = 70;
@@ -687,6 +696,7 @@ async function boot() {
     if (mp.goAtLocal) game.state.countdown = Math.max(0, (mp.goAtLocal - performance.now()) / 1000);
     else if (game.state.countdown > 0) game.state.countdown = Math.max(0, game.state.countdown - STEP);
     const cd = game.state.countdown;
+    if (world && world.setRaceState) world.setRaceState({ countdown: cd });
     const ct = Math.ceil(cd);
     if (cd > 0 && ct < lastCountdownTick) { lastCountdownTick = ct; audioOnce('countdown'); }
     else if (cd === 0 && lastCountdownTick > 0) { lastCountdownTick = 0; audioOnce('go'); input.calibrate(); if (ui && ui.raceStarted) safe(() => ui.raceStarted(), 'ui.raceStarted'); }
@@ -732,7 +742,7 @@ async function boot() {
         others.length = 0; for (const o of vs) if (o !== v) others.push(o.body.state);
         inp = safe(() => v.ai.think(STEP, v.body.state, others), 'ai.think') || idle;
         if (inp.honk) honkCar(v);
-        if (!v.finished && v.ai.needsRescue) { v.body.recover(8); if (v.ai.clearStuck) v.ai.clearStuck(); }
+        if (!v.finished && v.ai.needsRescue) { v.body.recover(v.ai.rescueAhead ? v.ai.rescueAhead() : 12, 3); if (v.ai.clearStuck) v.ai.clearStuck(); }
         if (v.finished) inp = { ...idle, handbrake: 0.7 };
       }
       inp.draft = draftFactor(v.body, bodies);
@@ -922,7 +932,7 @@ async function boot() {
       if (v.setLOD) {
         _sph.center.copy(v.group.position); _sph.radius = 2.5;
         const visible = _fr.intersectsSphere(_sph);
-        const nearD = countdown ? 18 : 27, farD = countdown ? 20 : 33;
+        const nearD = countdown ? 11 : 27, farD = countdown ? 13 : 33;
         const want = v.lod === 'far' ? (d < nearD && visible ? 'near' : 'far') : ((d > farD || (!visible && d > 5)) ? 'far' : 'near');
         if (want !== v.lod) { v.lod = want; v.setLOD(want); }
       }

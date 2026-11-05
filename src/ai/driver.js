@@ -21,11 +21,11 @@ export function forwardXZ(q) {
  */
 export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, human, headlight } = {}) {
   // On the slower tracks the terrain, not the driver, sets the speed unless the driver holds back: tier the target speed by skill.
-  const TRACK_CAP = { village: (k) => 8.2 + 6.6 * k, corn: (k) => 9.0 + 5.6 * k };
+  const TRACK_CAP = { village: (k) => 8.2 + 7.6 * k, corn: (k) => 9.0 + 8.0 * k };
   const capFn = TRACK_CAP[world.trackId];
   const flat = !!(world.flags && world.flags.flat);
   // flat circuit: nothing but paddling moves a cart, so the speed ladder is compressed (the back of the field must not get lapped)
-  const FC = 9.8, FK = 0.7;
+  const FC = 9.8, FK = 0.8;
   const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
   const P = capFn ? { ...profile, speed: { ...profile.speed, cap: capFn(profile.skill ?? 0.5) } }
     : flat ? { ...profile, speed: { ...profile.speed, cap: capOf(profile.speed.cap) } } : profile;
@@ -57,7 +57,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
 
   const FLOOR = 8.5;
   const CU = 0.4;
-  let dbg = null;
+  let dbg = null, lastS = 0;
   let t = 0, noise = 0, steerOut = 0, hbOut = 0, extra = 0;
   const queue = []; // delayed commands {t, steer, hb}
   // paddling state
@@ -70,6 +70,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
 
   function think(dt, self, others = []) {
     t += dt;
+    lastS = Math.max(lastS, self.s);
     const s = self.s, speed = Math.max(0, self.speed || 0);
     const px = self.position.x, pz = self.position.z;
     const [fx, fz] = forwardXZ(self.quaternion);
@@ -158,7 +159,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       const hs = typeof human === 'function' ? human() : null;
       if (hs && hs !== self) ref = hs.s;
       else { ref = 0; for (const o of others) ref += o.s; ref /= others.length; }
-      rb = 1 + 0.05 * rubberBand * clamp((ref - s) / 60, -1, 1);
+      rb = 1 + (world.trackId !== 'country' && (P.skill ?? 0.5) > 0.7 ? 0.09 : 0.05) * rubberBand * clamp((ref - s) / 60, -1, 1); // new maps: the best AI chase a fleeing human harder
     }
     // leader ease: a car clear of the next AI behind it matches that chaser's pace (minus a little) so races stay close.
     // Strength scales with the gap (20 m -> 60 m) and the profile's leaderEase; it never raises speed.
@@ -221,7 +222,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const flatCad = Math.min(4.6, (3.7 + 0.5 * (P.skill ?? 0.5)) * (1 + 0.8 * (1 - clamp(speed / 6, 0, 1))));
     let catchUp = 1; // flat: backmarkers dig in when the field is pulling away, so nobody gets lapped
     if (flat && others.length) { let lead = s; for (const o of others) if (o.s > lead) lead = o.s; catchUp = 1 + CU * clamp((lead - s - 100) / 250, 0, 1); }
-    const cadence = (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
+    const standing = flat && t < 7 ? 1 + 0.3 * (1 - t / 7) : 1; // flat start: everybody is off the line promptly (the player starts mid-grid)
+    const cadence = standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;
@@ -281,7 +283,19 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       reverse,
     };
   }
-  return { think, get dbg() { return dbg; }, profile: P, plan, get choice() { return choice; }, get recoveries() { return recoveries; },
+  /** how far past the trap a rescued cart should be put: >= 12 m, clear of hazards, past tight corners (planned speed < 7 m/s) so it is not re-rescued */
+  function rescueAhead() {
+    let a = 12;
+    for (let k = 0; k < 14; k++) {
+      const x = clamp(lastS + a, 0, L);
+      let bad = plan.speedAt(x) < 7 || plan.speedAt(clamp(x + 8, 0, L)) < 6;
+      for (const h of plan.hazards) if (Math.abs(h.s - x) < h.ra + 3) bad = true;
+      if (!bad) break;
+      a += 3;
+    }
+    return Math.min(a, 40);
+  }
+  return { think, rescueAhead, get dbg() { return dbg; }, profile: P, plan, get choice() { return choice; }, get recoveries() { return recoveries; },
     /** seconds continuously below 1.5 m/s (recovery manoeuvres didn't free the car). Host should call body.recover(~8) when needsRescue. */
     get stuckFor() { return stuckTotal; }, get needsRescue() { return stuckTotal > 2.5; },
     clearStuck() { stuckTotal = 0; stuckT = 0; consec = 0; } };

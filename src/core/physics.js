@@ -378,7 +378,13 @@ export function createVehicleBody(specIn, world, opts = {}) {
         // hysteresis: a cart pinned nose-in bounces between 0.1 and 1.2 m/s, so the timer drains slowly instead of resetting
         const offAsph = state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall'));
         state.pin = offAsph && state.speed < 1.5 && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.4);
-        if (state.pin > 4) { state.pin = 0; state.stuck = 0; this.recover(3); }
+        if (state.pin > 4) { state.pin = 0; state.stuck = 0; this.recover(9); }
+      } else if (wallStop && !this.noRecover) {
+        // village / corn: same slow-draining pinned-cart timer as the speedway, but also for a cart nose-in at the lane edge (any surface)
+        if ((state._pc = (state._pc || 0) + 1) % 8 === 1) { const sm = world.track && world.track.sampleAt ? world.track.sampleAt(Math.max(0, state.s)) : null; state._edge = sm ? Math.abs(state.lateral) > (sm.width || 6) / 2 - 0.6 : false; }
+        const offRd = state._edge || state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall' || c.surface === 'corn'));
+        state.pin = offRd && state.speed < 1.5 && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.4);
+        if (state.pin > 3.5 || state.stuck > 4) { state.pin = 0; state.stuck = 0; this.recover(8); }
       } else if (state.stuck > (state.surface === 'wall' || state.surface === 'corn' ? 3.5 : 5) && !this.noRecover) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);
@@ -394,15 +400,18 @@ export function createVehicleBody(specIn, world, opts = {}) {
       } else state.wetSteps = 0;
       state.mudCoat = Math.max(0, state.mudCoat - dt * 0.02);
     },
-    recover(ahead = 0) {
+    recover(ahead = 0, speed = 0) {
       const tr = world && world.track;
       state.upsideDown = 0; state.respawns = (state.respawns || 0) + 1;
       if (!tr) { state.quaternion.identity(); state.position.y += 1; return; }
+      // remember the street (village branches) before the position is moved
+      let choice;
+      if (tr.project) { const pr = tr.project(state.position, state.s); if (pr && pr.splitId != null) choice = { [pr.splitId]: pr.pathIndex }; }
       this.updateTrack();
       // never move backwards along the track: resets go to the furthest point reached (or the current s if that is further) + ahead
-      const smp = tr.sampleAt(Math.min(tr.length - 2, Math.max(0, Math.max(state.s, state.maxS) + ahead)));
+      const smp = tr.sampleAt(Math.min(tr.length - 2, Math.max(0, Math.max(state.s, state.maxS) + ahead)), choice);
       const x = smp.position.x, z = smp.position.z;
-      placeOnGround(this, world, x, z, smp.tangent, new THREE.Vector3(0, 0, 0));
+      placeOnGround(this, world, x, z, smp.tangent, speed > 0 ? smp.tangent.clone().multiplyScalar(speed) : new THREE.Vector3(0, 0, 0));
     },
     applyImpulseAt(J, point) {
       state.velocity.addScaledVector(J, 1 / m);
@@ -482,8 +491,12 @@ export function collideBodies(a, b) {
     if (vn < 0) {
       const jn = -(1 + 0.25) * vn / (1 / ma + 1 / mb);
       _J.copy(_nn).multiplyScalar(jn);
-      b.applyImpulseAt(_J, _cpt);
-      a.applyImpulseAt(_J.negate(), _cpt);
+      // bumps shove rather than spin: most of the impulse acts through the centres (a rear-ender must not swap ends)
+      const LEV = 0.3;
+      _tmp.copy(_cpt).sub(b.state.position).multiplyScalar(LEV).add(b.state.position);
+      b.applyImpulseAt(_J, _tmp);
+      _tmp.copy(_cpt).sub(a.state.position).multiplyScalar(LEV).add(a.state.position);
+      a.applyImpulseAt(_J.negate(), _tmp);
     }
     hit = true;
   }

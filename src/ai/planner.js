@@ -157,7 +157,7 @@ export function buildPlan(world, P, rng, spec = null, choice = undefined) {
   const v = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     const fr = S.useSurface ? surfFric[i * K + slot[i]] : 1;
-    v[i] = Math.min(S.cap, Math.sqrt((S.mu * gripK * Math.min(1, fr) * G) / Math.max(1e-5, kS[i])) * S.cornerFactor * (narrow ? 0.88 : 1));
+    v[i] = Math.min(S.cap, Math.sqrt((S.mu * gripK * Math.min(1, fr) * G) / Math.max(1e-5, kS[i])) * S.cornerFactor * (narrow ? 0.86 + 0.2 * (P.skill ?? 0.5) : 1));
   }
   if (S.hazV) { // the planned line still goes through a hazard (it cannot be avoided): slow down for it
     for (let i = 0; i < n; i++) if (hc[i * K + slot[i]] >= 12 && hc[i * K + slot[i]] < BIG) v[i] = Math.min(v[i], S.hazV);
