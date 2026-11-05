@@ -109,11 +109,11 @@ export function planCorn(seed) {
   const verge = (road, s, d, hw) => {
     const ad = Math.abs(d), r = ad - (hw + 0.1);
     if (r <= -0.1) return 0;
-    const ki = clamp(Math.round(s + PRE), 0, road.TN - 1), ow = openAt(s, d > 0 ? 1 : -1).w;
-    const lip = lerp(1.35 + 0.7 * Math.min(1, Math.abs(road.tables.kap[ki]) / 0.02), 0.16, ow);
-    const foot = 0.4 * (Math.sqrt(r * r + 0.02) + r) * 0.5, rFoot = 1.4, hFoot = lerp(0.56, 0.24, ow);
-    const y = Math.min(foot, hFoot) + lip * smoothstep(rFoot, rFoot + 0.55, r);
-    return y * (1 - smoothstep(rFoot + 2.0, rFoot + 7.0, r));
+    const ki = clamp(Math.round(s + PRE), 0, road.TN - 1), op = openAt(s, d > 0 ? 1 : -1), ow = op.kind === 'farm' ? 0 : op.w;   // barn yards keep the full bank (flat pad, would let carts roam)
+    const lip = lerp(1.35 + 0.7 * Math.min(1, Math.abs(road.tables.kap[ki]) / 0.02), 0.4, ow);
+    const foot = 0.4 * (Math.sqrt(r * r + 0.02) + r) * 0.5, rFoot = 1.4, hFoot = lerp(0.56, 0.4, ow);
+    const y = Math.min(foot, hFoot) + lip * smoothstep(rFoot, rFoot + 0.55, r) + ow * 1.0 * smoothstep(2.5, 6, r);   // open zones: low bank, then the field rises gently so wandering carts roll back
+    return y * (1 - smoothstep(rFoot + 2.0 + ow * 9, rFoot + 7.0 + ow * 14, r));
   };
   // crown < 0: the lane is a very shallow dish (wheel ruts) so a straight-paddling cart tends to stay centred
   const terrainOpts = { hillAmp: 3.5, hillFar: 8, hillNear: 70, rutScale: 1, noiseScale: 1, crown: -0.07, sideSlope: 0.08, shoulderOut: 12, verge };
@@ -257,8 +257,8 @@ export function planCorn(seed) {
         }
         for (let r = 0; r < rows - 1; r++) {
           if (!rowOK[r] || !rowOK[r + 1]) continue;
-          { const a = fb0 + r * 2, b = a + 1, d = a + 2, e = d + 1; FI.push(a, d, b, b, d, e); }
-          for (let k = 0; k < KC - 1; k++) { const a = tb0 + r * KC + k, b = a + 1, d = a + KC, e = d + 1; TI.push(a, d, b, b, d, e); }
+          { const a = fb0 + r * 2, b = a + 1, d = a + 2, e = d + 1; if (side < 0) FI.push(a, d, b, b, d, e); else FI.push(a, b, d, b, e, d); }
+          for (let k = 0; k < KC - 1; k++) { const a = tb0 + r * KC + k, b = a + 1, d = a + KC, e = d + 1; if (side < 0) TI.push(a, d, b, b, d, e); else TI.push(a, b, d, b, e, d); }
         }
       }
       if (!FI.length) continue;
@@ -301,9 +301,12 @@ export function planCorn(seed) {
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap((p) => [p.x, p.y, p.z]), 3)); g.computeBoundingSphere();
       const p = new THREE.Points(g, glowMat); p.name = 'lantern_glow'; p.frustumCulled = false; grp.add(p);
     };
-    const sign = (grp, b, text, s, side, bg = '#e9c46a', fg = '#3a210a', w = 1.5, h = 0.55, yb = 1.35, lat = 1.0) => {
-      const f = F(s, side * (hwOf(s) + lat)), post = (dx) => { b.add('woodWeathered', boxG(0.09, yb + h + 0.1, 0.09, 1), xf(f.x + f.rx * dx, f.y + (yb + h + 0.1) / 2 - 0.1, f.z + f.rz * dx), [0.55, 0.45, 0.35]); };
-      post(-w * 0.4); post(w * 0.4); reg.circle('post', f.x - f.rx * w * 0.4, f.z - f.rz * w * 0.4, 0.1, f.y - 0.1, {}, 4); reg.circle('post', f.x + f.rx * w * 0.4, f.z + f.rz * w * 0.4, 0.1, f.y - 0.1, {}, 4);
+    const sign = (grp, b, text, s, side, bg = '#e9c46a', fg = '#3a210a', w = 1.5, h = 0.55, yb = 1.35, lat = 0.9) => {
+      const f = F(s, side * (hwOf(s) + lat + w * 0.4));
+      for (const dx of [-w * 0.4, w * 0.4]) {
+        const x = f.x + f.rx * dx, z = f.z + f.rz * dx, y = terrain.heightAt(x, z), ph = yb + h + 0.1 + (f.y - y);
+        b.add('woodWeathered', boxG(0.09, ph, 0.09, 1), xf(x, y + ph / 2 - 0.1, z), [0.55, 0.45, 0.35]); reg.circle('post', x, z, 0.1, y - 0.1, {}, 4);
+      }
       const m = new THREE.Mesh(signGeo, signMat(text, bg, fg)); m.scale.set(w, h, 1); m.position.set(f.x, f.y + yb + h / 2, f.z); m.rotation.y = f.ry + Math.PI; grp.add(m);
       perch.push([f.x + f.rx * w * 0.4, f.y + yb + h + 0.05, f.z + f.rz * w * 0.4]);
     };
@@ -385,7 +388,7 @@ export function planCorn(seed) {
     // ---------------------------------------------------------------- passing bay markers
     {
       const grp = new THREE.Group(), b = new Batch();
-      for (const c of BAY_C) for (const sg of [-1, 1]) { const s = c - BAY_HALF - 6; if (inClearing(s, sg) || sunW(s, sg) > 0.1) continue; sign(grp, b, 'PASSING BAY', s, sg, '#2f6fb0', '#fff7e0', 1.5, 0.5, 1.2, 1.0); }
+      for (const c of BAY_C) for (const sg of [-1, 1]) { const s = c - BAY_HALF - 6; if (inClearing(s, sg) || sunW(s, sg) > 0.1) continue; sign(grp, b, 'PASSING BAY', s, sg, '#2f6fb0', '#fff7e0', 1.5, 0.5, 1.2, 0.9); }
       grp.add(b.build(lib, { shadow: false })); addItem(grp, 1500, 2000, 2000);
     }
 
@@ -442,7 +445,7 @@ export function planCorn(seed) {
           for (const o of [-2.6, 0.4]) { const q = at(s + 3 + o, 4.2); b.add('metalRusted', boxG(0.06, 0.95, 0.06, 1), xf(q.x, q.y + 0.45, q.z, 0, 0, 0.4), [0.5, 0.5, 0.52]); b.add('dark', cylG(0.42, 0.42, 0.08, 10, 1), xf(q.x, q.y + 0.42, q.z, 0, ry, Math.PI / 2), [0.1, 0.1, 0.1]); }
           const sp = at(s + 3, 4.2); b.add('metalRusted', cylG(0.05, 0.05, 0.5, 6, 1), xf(sp.x, sp.y + 1.2, sp.z), [0.6, 0.6, 0.65]); b.add('metalRusted', sphG(0.1, 6, 4, 1), xf(sp.x, sp.y + 1.5, sp.z), [0.7, 0.55, 0.15]);
         }
-        const f = at(sm, 1.0); sign(grp, b, 'FRESH CORN', sm - 12 * (side > 0 ? 1 : 1), side, '#d9c27a', '#2b4a14', 1.4, 0.5, 1.3, 1.0);
+        const f = at(sm, 1.0); sign(grp, b, 'FRESH CORN', sm - 12 * (side > 0 ? 1 : 1), side, '#d9c27a', '#2b4a14', 1.4, 0.5, 1.3, 0.9);
       }
       grp.add(b.build(lib, { shadow: false })); addItem(grp, sm, 70, 220);
     }
@@ -503,7 +506,7 @@ export function planCorn(seed) {
           if (rnd() < 0.5) b.add('dark', boxG(0.04, 0.03, 1.4 + rnd(), 1), xf(p.x, p.y + 0.04, p.z, 0, rnd() * 6, 0), [0.2, 0.34, 0.1]);
         }
         const q = cx(cl.s0 + 3, hwOf(cl.s0) + 1.9);
-        sign(grp, b, 'PUMPKINS', cl.s0 + 3, side, '#e8872a', '#2f1604', 1.7, 0.6, 1.25, 1.9);
+        sign(grp, b, 'PUMPKINS', cl.s0 + 3, side, '#e8872a', '#2f1604', 1.7, 0.6, 1.25, 1.6);
         // low split-rail fence along the lane edge of the patch, rails follow the lane
         const post = [];
         for (let s = cl.s0; s <= cl.s1 + 0.1; s += 4) { const q2 = cx(s, hwOf(s) + 2.5); post.push(q2); b.add('woodWeathered', boxG(0.12, 1.2, 0.12, 1), xf(q2.x, q2.y + 0.5, q2.z), [0.6, 0.5, 0.4]); reg.circle('post', q2.x, q2.z, 0.1, q2.y - 0.1, {}, 4); if (post.length % 2) perch.push([q2.x, q2.y + 1.1, q2.z]); }

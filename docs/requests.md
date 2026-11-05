@@ -161,3 +161,9 @@ Append requests as `- [from Agent N → Agent M] ...`
 - New `src/scene/tracks-clearance.mjs` (`node src/scene/tracks-clearance.mjs [village|corn|circuit]`): every prop footprint registered by the decorators (`plan.registry`, exposed as `world.debug.registry`) must stay out of the union of all road corridors (half-width + 0.3 m), sit on `heightAt` (+-0.15 m) AND on the rendered ground meshes (ray cast), heightAt must have no step/bump > 0.25 m across each corridor outside hazard zones, and obstacle hazards must leave a clear lane.
 - `terrainnet.js`: verge walls fade out inside any other road's corridor (junction mouths stay open). Corn/circuit get exact near-field terrain ribbons (`theme.ribbonEnd`) so rendered ground == `heightAt`.
 - Main-street stall hazards are now low hay carts / crate stacks pushed to the kerb (>= 4 m clear) and never within 70 m of a split/merge.
+
+### Map loop — corn fixer, round 1
+- [corn fixer → gameplay fixer] `world.passingBays = [{s0,s1,width:6.9,ramp:14,center}]` at s 560, 1040, 1850, 2650 (flat 36 m each, +14 m ramps; lane width there 6.9 m). Let patient AI pass in them (lift the `plan.narrow` cap where width > 6).
+- [corn fixer → gameplay fixer] Chase/hood camera: keep within |lateral| <= hw + 0.8 of the lane on corn; main.js should call `world.update(dt, camera, actors)` with AI cart positions so crows scatter for all carts. Crows are black/larger now and circle over the lane.
+- Shared edits (small): `materials.js` rewrote the `cornwall` fallback texture and added `cornTop` (corn only); `world2.js` exposes `passingBays`. corn.js imports `G` from graphics/shared.js (lantern glow follows `gfxNight`).
+- Barn yards keep the full 1.9 m bank (flat pads let carts roam); pumpkin/hay/gap zones use a ~0.8 m bank with a gentle rise behind it. containment.mjs corn: only 14 m/s full-lock into s=340 still overshoots (9 m).
