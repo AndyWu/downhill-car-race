@@ -1,0 +1,819 @@
+{
+ "track": "circuit",
+ "race": {
+  "t": 420,
+  "len": 3218,
+  "lapLen": 1072.6666666666667,
+  "order90": [
+   "You(1098)",
+   "Ace(701)",
+   "Vance(701)",
+   "Maeve(683)",
+   "Rosco(627)",
+   "Buster(601)",
+   "Dot(560)",
+   "Tilly(530)",
+   "Clementine(511)",
+   "Barnaby(491)"
+  ],
+  "finish": {
+   "You": 272.6,
+   "Ace": 380.6,
+   "Vance": 380.7,
+   "Maeve": 383.2
+  },
+  "leadChanges": 0,
+  "rescues": [
+   {
+    "who": "Barnaby",
+    "t": 48.2,
+    "s": 223,
+    "kind": "respawn"
+   },
+   {
+    "who": "Barnaby",
+    "t": 174.7,
+    "s": 1057,
+    "kind": "respawn"
+   },
+   {
+    "who": "Clementine",
+    "t": 175.3,
+    "s": 1056,
+    "kind": "respawn"
+   },
+   {
+    "who": "Clementine",
+    "t": 178.6,
+    "s": 1064,
+    "kind": "respawn"
+   },
+   {
+    "who": "Barnaby",
+    "t": 179.1,
+    "s": 1066,
+    "kind": "respawn"
+   },
+   {
+    "who": "Tilly",
+    "t": 184.8,
+    "s": 1172,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 385.4,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 385.4,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 387.1,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 387.9,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 387.9,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 389.6,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 390.4,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 390.4,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 392.1,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 392.9,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 393,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 394.7,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 395.4,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 395.5,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 397.2,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 397.9,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 398,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 399.7,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 400.5,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 400.5,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 402.2,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 403,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 403,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 404.7,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 405.5,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 405.5,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 407.2,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 408,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 408.1,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 409.8,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 410.5,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 410.6,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 412.3,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 413,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 413.1,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 414.8,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 415.6,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 415.6,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 417.3,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Vance",
+    "t": 418.1,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Ace",
+    "t": 418.1,
+    "s": 3216,
+    "kind": "respawn"
+   },
+   {
+    "who": "Maeve",
+    "t": 419.8,
+    "s": 3216,
+    "kind": "respawn"
+   }
+  ],
+  "stuckEv": [
+   {
+    "who": "Barnaby",
+    "t": 45.80000000000038,
+    "s": 214,
+    "lat": -1.7,
+    "dur": 3.1
+   },
+   {
+    "who": "Clementine",
+    "t": 172.79999999999447,
+    "s": 1046,
+    "lat": -0.6,
+    "dur": 2.5
+   },
+   {
+    "who": "Barnaby",
+    "t": 176.59999999999425,
+    "s": 1057,
+    "lat": -0.5,
+    "dur": 3.8
+   },
+   {
+    "who": "Clementine",
+    "t": 176.09999999999428,
+    "s": 1056,
+    "lat": 0.3,
+    "dur": 4.7
+   },
+   {
+    "who": "Tilly",
+    "t": 182.29999999999393,
+    "s": 1162,
+    "lat": -1.7,
+    "dur": 3.8
+   }
+  ],
+  "offRoad": {
+   "You": 0,
+   "Barnaby": 0,
+   "Tilly": 0,
+   "Clementine": 0,
+   "Dot": 0,
+   "Buster": 0,
+   "Rosco": 0,
+   "Maeve": 0,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "slow": {
+   "You": 0,
+   "Barnaby": 10.7,
+   "Tilly": 3.8,
+   "Clementine": 7.7,
+   "Dot": 0,
+   "Buster": 0,
+   "Rosco": 0,
+   "Maeve": 0,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "aiRecov": {
+   "Barnaby": 3,
+   "Tilly": 1,
+   "Clementine": 2,
+   "Dot": 0,
+   "Buster": 0,
+   "Rosco": 0,
+   "Maeve": 10,
+   "Vance": 10,
+   "Ace": 10
+  },
+  "choices": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "final": [
+   "You 3225 F273",
+   "Barnaby 2656",
+   "Tilly 2788",
+   "Clementine 2615",
+   "Dot 2936",
+   "Buster 3124",
+   "Rosco 3213",
+   "Maeve 3216 F383",
+   "Vance 3216 F381",
+   "Ace 3216 F381"
+  ],
+  "ranks": [
+   {
+    "t": 30,
+    "rankText": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": true,
+    "playerS": 378
+   },
+   {
+    "t": 60,
+    "rankText": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": true,
+    "playerS": 721
+   },
+   {
+    "t": 330,
+    "rankText": "1/10",
+    "lap": "Lap 3/3",
+    "lapOn": true,
+    "playerS": 3225
+   },
+   {
+    "t": 360,
+    "rankText": "1/10",
+    "lap": "Lap 3/3",
+    "lapOn": true,
+    "playerS": 3225
+   },
+   {
+    "t": 390,
+    "rankText": "1/10",
+    "lap": "Lap 3/3",
+    "lapOn": true,
+    "playerS": 3225
+   },
+   {
+    "t": 420,
+    "rankText": "1/10",
+    "lap": "Lap 3/3",
+    "lapOn": true,
+    "playerS": 3225
+   }
+  ]
+ },
+ "bad": {
+  "res": [
+   {
+    "s0": 86,
+    "side": -1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 90,
+     "lat": -3.6,
+     "sp": 5.4
+    },
+    "recover": 0.6,
+    "respawns": 0,
+    "sEnd": 100
+   },
+   {
+    "s0": 86,
+    "side": 1,
+    "maxLat": 8.1,
+    "afterBad": {
+     "s": 91,
+     "lat": 3.2,
+     "sp": 5.2
+    },
+    "recover": 0.7,
+    "respawns": 0,
+    "sEnd": 101
+   },
+   {
+    "s0": 215,
+    "side": -1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 220,
+     "lat": -2.8,
+     "sp": 5.6
+    },
+    "recover": 0.5,
+    "respawns": 0,
+    "sEnd": 229
+   },
+   {
+    "s0": 215,
+    "side": 1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 220,
+     "lat": 2.7,
+     "sp": 5.5
+    },
+    "recover": 0.5,
+    "respawns": 0,
+    "sEnd": 230
+   },
+   {
+    "s0": 354,
+    "side": -1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 364,
+     "lat": -5.7,
+     "sp": 2.8
+    },
+    "recover": 1.5,
+    "respawns": 0,
+    "sEnd": 376
+   },
+   {
+    "s0": 354,
+    "side": 1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 365,
+     "lat": 2.6,
+     "sp": 5.9
+    },
+    "recover": 0.8,
+    "respawns": 0,
+    "sEnd": 378
+   },
+   {
+    "s0": 483,
+    "side": -1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 496,
+     "lat": -5.4,
+     "sp": 4.6
+    },
+    "recover": 2.6,
+    "respawns": 0,
+    "sEnd": 511
+   },
+   {
+    "s0": 483,
+    "side": 1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 493,
+     "lat": 2.9,
+     "sp": 5.7
+    },
+    "recover": 0.9,
+    "respawns": 0,
+    "sEnd": 507
+   },
+   {
+    "s0": 622,
+    "side": -1,
+    "maxLat": 7.9,
+    "afterBad": {
+     "s": 631,
+     "lat": -6.5,
+     "sp": 3.2
+    },
+    "recover": 3.2,
+    "respawns": 0,
+    "sEnd": 641
+   },
+   {
+    "s0": 622,
+    "side": 1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 634,
+     "lat": 3,
+     "sp": 5.9
+    },
+    "recover": 0.6,
+    "respawns": 0,
+    "sEnd": 647
+   },
+   {
+    "s0": 751,
+    "side": -1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 755,
+     "lat": -3.8,
+     "sp": 5.3
+    },
+    "recover": 0.7,
+    "respawns": 0,
+    "sEnd": 766
+   },
+   {
+    "s0": 751,
+    "side": 1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 754,
+     "lat": 4.1,
+     "sp": 5.4
+    },
+    "recover": 0.7,
+    "respawns": 0,
+    "sEnd": 765
+   },
+   {
+    "s0": 880,
+    "side": -1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 888,
+     "lat": -5,
+     "sp": 2.1
+    },
+    "recover": 2.2,
+    "respawns": 0,
+    "sEnd": 904
+   },
+   {
+    "s0": 880,
+    "side": 1,
+    "maxLat": 7.9,
+    "afterBad": {
+     "s": 886,
+     "lat": 1.6,
+     "sp": 5.1
+    },
+    "recover": 0.3,
+    "respawns": 0,
+    "sEnd": 895
+   },
+   {
+    "s0": 998,
+    "side": -1,
+    "maxLat": 8,
+    "afterBad": {
+     "s": 1006,
+     "lat": -4.7,
+     "sp": 1.9
+    },
+    "recover": 2.4,
+    "respawns": 0,
+    "sEnd": 1021
+   },
+   {
+    "s0": 998,
+    "side": 1,
+    "maxLat": 7.9,
+    "afterBad": {
+     "s": 1008,
+     "lat": 2.2,
+     "sp": 5.8
+    },
+    "recover": 0.7,
+    "respawns": 0,
+    "sEnd": 1020
+   }
+  ],
+  "wedge": [
+   {
+    "s0": 322,
+    "speed": 0.07,
+    "rescuedAt": 4.3
+   },
+   {
+    "s0": 644,
+    "speed": 0.01,
+    "rescuedAt": null
+   }
+  ],
+  "solo": {
+   "finished": true,
+   "t": 257,
+   "s": 3216,
+   "respawns": 0,
+   "offRoad": 0
+  }
+ },
+ "cost": [
+  {
+   "s": 11,
+   "calls": 128,
+   "tris": 269034,
+   "geoms": 149,
+   "tex": 51,
+   "ms": 10
+  },
+  {
+   "s": 215,
+   "calls": 67,
+   "tris": 144464,
+   "geoms": 195,
+   "tex": 61,
+   "ms": 3
+  },
+  {
+   "s": 429,
+   "calls": 82,
+   "tris": 167022,
+   "geoms": 237,
+   "tex": 71,
+   "ms": 3
+  },
+  {
+   "s": 644,
+   "calls": 126,
+   "tris": 252672,
+   "geoms": 280,
+   "tex": 81,
+   "ms": 8
+  },
+  {
+   "s": 858,
+   "calls": 97,
+   "tris": 202430,
+   "geoms": 319,
+   "tex": 91,
+   "ms": 3
+  },
+  {
+   "s": 1040,
+   "calls": 106,
+   "tris": 201590,
+   "geoms": 367,
+   "tex": 101,
+   "ms": 3
+  }
+ ],
+ "phone": {
+  "rects": {
+   ".sbd-padbox.l": {
+    "x": 25,
+    "y": 66,
+    "w": 253,
+    "h": 183,
+    "op": "1",
+    "text": "Paddle"
+   },
+   ".sbd-padbox.r": {
+    "x": 473,
+    "y": 66,
+    "w": 245,
+    "h": 183,
+    "op": "1",
+    "text": "Paddle"
+   },
+   ".sbd-map": {
+    "x": 763,
+    "y": 55,
+    "w": 72,
+    "h": 199,
+    "op": "1",
+    "text": ""
+   },
+   ".sbd-rank": {
+    "x": 10,
+    "y": 8,
+    "w": 66,
+    "h": 43,
+    "op": "0",
+    "text": "1/10"
+   },
+   ".sbd-lap": {
+    "x": 13,
+    "y": 61,
+    "w": 62,
+    "h": 25,
+    "op": "0",
+    "text": "Lap 1/3"
+   },
+   ".sbd-horn": {
+    "x": 403,
+    "y": 8,
+    "w": 39,
+    "h": 25,
+    "op": "1",
+    "text": ""
+   },
+   ".sbd-view": {
+    "x": 447,
+    "y": 8,
+    "w": 33,
+    "h": 25,
+    "op": "1",
+    "text": "Cockpit"
+   },
+   ".sbd-peg": {
+    "x": 789,
+    "y": 9,
+    "w": 44,
+    "h": 44,
+    "op": "0.55",
+    "text": ""
+   },
+   ".sbd-toast": {
+    "x": 413,
+    "y": 11,
+    "w": 19,
+    "h": 8,
+    "op": "0",
+    "text": ""
+   }
+  },
+  "overlaps": [
+   ".sbd-padbox.l x .sbd-lap (50x20)",
+   ".sbd-horn x .sbd-toast (19x8)"
+  ],
+  "vw": 844,
+  "vh": 390
+ }
+}
