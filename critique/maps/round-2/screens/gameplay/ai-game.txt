@@ -1,0 +1,4 @@
+player truck 0: rho(skill,s@90) 0.98  Ace 961 > Vance 851 > Rosco 772 > Maeve 772 > Buster 733 > Clementine 687 > Dot 673 > Tilly 665 > Barnaby 582
+player truck 0: rho(skill,s@90) 0.85  Ace 926 > Rosco 814 > Vance 760 > Maeve 749 > Buster 739 > Clementine 702 > Tilly 695 > Barnaby 658 > Dot 625
+player truck 0: rho(skill,s@90) 0.85  Ace 1037 > Maeve 953 > Vance 932 > Rosco 868 > Dot 784 > Clementine 762 > Barnaby 708 > Buster 705 > Tilly 697
+player truck 0: rho(skill,s@90) 0.82  Ace 965 > Maeve 836 > Buster 783 > Rosco 772 > Tilly 769 > Vance 769 > Clementine 730 > Dot 688 > Barnaby 679
