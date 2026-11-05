@@ -96,7 +96,7 @@ async function race(seed, { profiles = AI_ROSTER, maxT = 1100, truck = null, rub
     if (trace && racing && Math.round((t - CD) / dt) % 1200 === 0) console.log(`t${(t - CD).toFixed(0)} ` + cars.map((c) => `${c.name.slice(0, 3)}:${c.body.state.s.toFixed(0)}`).join(' '));
     t += dt;
   }
-  return cars.map((c) => ({ choice: c.driver.choice, name: c.name, skill: c.p.skill, truck: c.truck, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, snap: c.snap, maxStall: c.maxStall, stallS: c.stallS, resets: c.resets, honks: c.honks, lead90, leadAll, s20: s20 ? s20[cars.indexOf(c)] : null, s0: c.s0 }));
+  return cars.map((c) => ({ choice: c.driver.choice, name: c.name, skill: c.p.skill, truck: c.truck, time: c.finished ?? Infinity, hits: c.hits, offroad: c.offroad, s: c.body.state.s, snap: c.snap, maxStall: c.maxStall, stallS: c.stallS, resets: c.body.state.respawns || c.resets, honks: c.honks, lead90, leadAll, s20: s20 ? s20[cars.indexOf(c)] : null, s0: c.s0 }));
 }
 
 // ---------------- run ----------------

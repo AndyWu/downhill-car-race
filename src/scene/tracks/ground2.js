@@ -54,6 +54,7 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
     const idx = []; gridIdx(P, rows, cols, 0, idx);
     return mkGeo(P, N, UV, C, idx);
   }
+  const rq = {}, rpq = {};
   function terrGeo(road, sA, sB, rowStep, offsAll, lo, hi) {
     const offs = offsAll.slice(lo, hi), rowsT = Math.ceil((sB - sA) / rowStep - 1e-6) + 1, S = offs.length, per = rowsT * S, n = per * 2;
     const P = new Float32Array(n * 3), N = new Float32Array(n * 3), UV = new Float32Array(n * 2), C = new Float32Array(n * 3), idx = [];
@@ -62,8 +63,15 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
       for (let r = 0; r < rowsT; r++) {
         const s = sA + ((sB - sA) * r) / (rowsT - 1); road.atS(s, pp);
         const hwe = pp.hw + SHOULDER_IN;
+        let dPrev = 0, clipped = false;   // T.ribbonClip (circuit): stop extruding sideways once a vertex runs into any road's corridor (the other leg of a hairpin), so grass never lies over asphalt
         for (let j = 0; j < S; j++) {
-          const d = sg * (hwe + offs[j]), x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, i = base + r * S + j;
+          let d = sg * (hwe + offs[j]), x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d;
+          if (T.ribbonClip && !clipped && offs[j] > 2.5) {
+            net.project2(x, z, rq); rq.road.params(rq.idx, rpq);
+            if (Math.abs(rq.d) - rpq.hw < 3.5) clipped = true;
+          }
+          if (clipped) { d = dPrev; x = pp.px + pp.rhx * d; z = pp.pz + pp.rhz * d; } else dPrev = d;
+          const i = base + r * S + j;
           P[i * 3] = x; P[i * 3 + 1] = terrain.heightAt(x, z); P[i * 3 + 2] = z;
           const nrm = terrain.normalAt(x, z, 0.8 + offs[j] * 0.04); N[i * 3] = nrm.x; N[i * 3 + 1] = nrm.y; N[i * 3 + 2] = nrm.z;
           UV[i * 2] = x / (T.terrUV || 6); UV[i * 2 + 1] = z / (T.terrUV || 6);

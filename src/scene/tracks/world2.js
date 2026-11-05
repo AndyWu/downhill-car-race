@@ -99,6 +99,7 @@ export async function createTrackWorld(scene, { trackId, seed = 1, materials, on
     trackId, name: plan.name, flags: plan.flags, splits: plan.splits || [],
     landmarks: plan.landmarks, hazards: plan.hazards, passingBays: plan.passingBays || [],
     track: { length: net.length, lapLength: net.lapLength, sampleAt: net.sampleAt, project: net.project },
+    startLights: decor.startLights || null, setRaceState: (o) => { if (decor.setRaceState) decor.setRaceState(o); },
     heightAt: terrain.heightAt, normalAt: (x, z) => terrain.normalAt(x, z), surfaceAt, startTransform, setWeather, weather, update, mapPaths,
     group: root, seed, info: { drop: net.drop, farms: [] }, debug: { registry: plan.registry || null, net, terrain },
     dispose() { scene.remove(root); root.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); },

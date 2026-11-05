@@ -35,9 +35,10 @@ export function buildTerrainNet(net, pads, seed, opts = {}) {
   // verge of the winning road, faded out wherever the point lies inside (or hugging) ANOTHER road's corridor: walls never rise inside a junction mouth
   const verge = (road, s, d, hw, x, z, ri) => {
     if (!O.verge) return 0;
-    const v = O.verge(road, s, d, hw);
-    if (!clearOf || v < 0.005) return v;
-    return v * smoothstep(0.25, 0.8, clearOf(x, z, ri));
+    const c2 = clearOf ? clearOf(x, z, ri) : 99;   // clearance to the nearest OTHER road's edge (the verge may use it: village junction gores)
+    const v = O.verge(road, s, d, hw, c2);
+    if (!clearOf || v < 0.005 || O.vergeNoFade) return v;
+    return v * smoothstep(0.25, 0.8, c2);
   };
 
   const side = (s, d, hw) => O.sideSlope * nz.n1(s / 130 + 3) * clamp(d, -22, 22) * smoothstep(hw + 3, hw + 12, Math.abs(d));

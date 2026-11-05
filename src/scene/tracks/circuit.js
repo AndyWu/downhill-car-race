@@ -94,7 +94,7 @@ export function planCircuit(seed) {
   const terrainOpts = { hillAmp: 2.5, hillFar: 7, hillNear: 60, rutScale: 0, noiseScale: 0.15, crown: 0.05, sideSlope: 0.04, shoulderOut: 62, vergeReach: 62, verge };
 
   const theme = {
-    roadMat: 'asphaltLines', rowStep: 2, terrRow: 4, tileRadius: 0.55, ribbonEnd: 35,
+    roadMat: 'asphaltLines', rowStep: 2, terrRow: 4, tileRadius: 0.55, ribbonEnd: 35, ribbonClip: true,
     roadUV: (road, s, d, hwe, o) => { o[0] = (d / hwe + 1) / 2; o[1] = s / 8; },
     roadColor: (road, s, d, p, rnz, o) => {
       const ad = Math.abs(d), n = 0.95 + 0.08 * (rnz.n2(s * 0.5, d * 0.7) * 0.5 + 0.5);
@@ -107,11 +107,24 @@ export function planCircuit(seed) {
     },
   };
 
+  // hairpin gravel trap: the run-off on the OUTSIDE of the hairpin (not the other bends) is draggy gravel, so taking it flat out costs ~2 s
+  const gravelAt = (s, d) => {
+    const u = ((s % LAP) + LAP) % LAP;
+    if (u < 410 || u > 494) return false;
+    const k = tab(kapT, u);
+    return Math.abs(k) > 0.03 && (d < 0 ? k > 0 : k < 0);
+  };
+  const HPF = 0.38;
+  const hairpinW = (s) => { const u = ((s % LAP) + LAP) % LAP; return u < 405 || u > 500 ? 0 : smoothstep(0.028, 0.05, Math.abs(tab(kapT, u))); };
   const surface = (info) => {
     const ad = Math.abs(info.d), hw = info.hw;
-    if (ad <= hw + 0.05) return { type: 'asphalt', friction: 1.0, drag: 0, bump: 0.02 };
-    if (ad <= hw + 1.5) return { type: 'asphalt', friction: 0.85, drag: 0.02, bump: 0.1 };      // kerbs
-    if (ad < hw + offAt(info.s, info.d < 0 ? -1 : 1) - 0.05) return { type: 'grass', friction: 0.55, drag: 0.3, bump: 0.2 };   // run-off
+    const hpF = 1 - HPF * hairpinW(info.s);   // the hairpin apex is dusty (gravel thrown onto the line): less grip, so it has to be braked for
+    if (ad <= hw + 0.05) return { type: 'asphalt', friction: hpF, drag: 0, bump: 0.02 };
+    if (ad <= hw + 1.5) return { type: 'asphalt', friction: 0.85 * hpF, drag: 0.02, bump: 0.1 };      // kerbs
+    if (ad < hw + offAt(info.s, info.d < 0 ? -1 : 1) - 0.05) {
+      if (gravelAt(info.s, info.d)) return { type: 'gravel', friction: 0.45, drag: 1.0, bump: 0.25 };
+      return { type: 'grass', friction: 0.55, drag: 0.3, bump: 0.2 };   // run-off
+    }
     return { type: 'wall', friction: 0.3, drag: 1.4, bump: 0.5 };
   };
   const startPos = (slot) => ({ s: -(5.5 + 5.6 * (slot >> 1) + ((slot & 1) ? 2.4 : 0)), d: (slot & 1) ? 2.0 : -2.0 });
@@ -132,7 +145,7 @@ export function planCircuit(seed) {
 
     // ---- materials that glow at night (colour is animated in update) ----
     const warmMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 0.55, 0.42) });
-    const redMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 0.0, 0.0) });
+    const lampMats = Array.from({ length: 5 }, () => new THREE.MeshBasicMaterial({ color: new THREE.Color(0.1, 0.02, 0.02) }));
     const poolMat = new THREE.MeshBasicMaterial({ map: poolTexture(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(1.0, 0.86, 0.6), polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
     const merged = (list) => { const gs = list.map(([g, m]) => { const c = g.clone(); c.applyMatrix4(m); return c; }); const g = mergeGeometries(gs, false); g.computeBoundingSphere(); return g; };
 
@@ -231,6 +244,25 @@ export function planCircuit(seed) {
       }
     }
 
+    // ---- hairpin gravel trap (decal exactly over the 'gravel' surface zone: outside of the hairpin, kerb .. wall) ----
+    for (const sg of [-1, 1]) {
+      let a = null;
+      const flush = (b) => {
+        if (a == null || b - a < 4) { a = null; return; }
+        const rows = Math.round(b - a) + 1, cols = 3, Pa = new Float32Array(rows * cols * 3), Na = new Float32Array(rows * cols * 3), Ua = new Float32Array(rows * cols * 2), idx = [];
+        for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
+          const s = a + ((b - a) * r) / (rows - 1), t = k / (cols - 1), q = P(s, sg * lerp(HW + 1.45, HW + offAt(s, sg) - 0.05, t)), i = r * cols + k;
+          Pa[i * 3] = q.x; Pa[i * 3 + 1] = q.y + 0.03; Pa[i * 3 + 2] = q.z; Na[i * 3 + 1] = 1; Ua[i * 2] = t * 0.9; Ua[i * 2 + 1] = s / 6;
+        }
+        for (let r = 0; r < rows - 1; r++) for (let k = 0; k < cols - 1; k++) { const i0 = r * cols + k; if (sg > 0) idx.push(i0, i0 + cols, i0 + 1, i0 + 1, i0 + cols, i0 + cols + 1); else idx.push(i0, i0 + 1, i0 + cols, i0 + 1, i0 + cols + 1, i0 + cols); }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(Pa, 3)); g.setAttribute('normal', new THREE.BufferAttribute(Na, 3)); g.setAttribute('uv', new THREE.BufferAttribute(Ua, 2)); g.setIndex(idx); g.computeBoundingSphere();
+        const m = new THREE.Mesh(g, decal(textureOf('gravel'), { side: THREE.DoubleSide, polygonOffsetFactor: -3, polygonOffsetUnits: -3, color: new THREE.Color(1.5, 1.38, 1.15) })); m.name = 'gravel_trap'; m.receiveShadow = true;
+        const grp = new THREE.Group(); grp.add(m); addItem(grp, cOf((a + b) / 2), (b - a) / 2 + 40, 240); a = null;
+      };
+      for (let s = 400; s <= 500; s += 1) { const g = gravelAt(s, sg); if (g && a == null) a = s; else if (!g && a != null) flush(s - 1); }
+      flush(500);
+    }
+
     // ---- sign textures ----
     const hasDoc = typeof document !== 'undefined';
     const SIGNS = [['PADDLE POWER', '#e8c21a', '#16130c'], ['SOAPBOX GP', '#c8261c', '#f8f4e8'], ["GRAN'S JAM", '#2b7d3f', '#fff6d8'], ['BOLTS & CO', '#1f4f9a', '#fdfdf4'], ['TURBO TEA', '#f4f1e6', '#a3191a'], ["KIDS' CUP", '#7a2d8c', '#ffe9a8']];
@@ -295,7 +327,7 @@ export function planCircuit(seed) {
       b.add('dark', boxG(WIDTH * 0.62, 1.15, 0.5, 1), lightBar(0), [0.05, 0.05, 0.06]);
       for (let i = 0; i < 5; i++) {
         const lx = (i - 2) * 2.5;
-        redGeos.push([new THREE.CylinderGeometry(0.42, 0.42, 0.14, 14), lightBar(0).multiply(xf(lx, 0, 0.3, Math.PI / 2, 0, 0))]);
+        redGeos.push([new THREE.CylinderGeometry(0.42, 0.42, 0.14, 14), lightBar(0).multiply(xf(lx, 0, 0.3, Math.PI / 2, 0, 0))]);   // one lamp each (own material)
         b.add('dark', cylG(0.5, 0.5, 0.1, 14, 1), lightBar(0).multiply(xf(lx, 0, 0.26, Math.PI / 2, 0, 0)), [0.02, 0.02, 0.02]);
       }
       if (hasDoc) {
@@ -502,18 +534,34 @@ export function planCircuit(seed) {
     {
       const gl = new THREE.Group(); gl.name = 'glow';
       if (glowGeos.length) { const m = new THREE.Mesh(merged(glowGeos), warmMat); m.name = 'glow_warm'; gl.add(m); }
-      if (redGeos.length) { const m = new THREE.Mesh(merged(redGeos), redMat); m.name = 'glow_start'; gl.add(m); }
+      redGeos.forEach(([g, mx], i) => { const lg = g.clone(); lg.applyMatrix4(mx); lg.computeBoundingSphere(); const m = new THREE.Mesh(lg, lampMats[i]); m.name = 'glow_start_' + i; gl.add(m); });
       if (poolGeos.length) { const m = new THREE.Mesh(mergeGeometries(poolGeos, false), poolMat); m.name = 'light_pools'; m.renderOrder = 3; gl.add(m); }
       addItem(gl, cOf(LAP / 2), 700, 420);
     }
     // real light from the 3 nearest towers at night
     const lights = [];
-    for (let i = 0; i < 3 && towers.length; i++) { const L = new THREE.PointLight(0xffe2b0, 0, 70, 1.6); L.visible = false; L.name = 'flood' + i; parent.add(L); lights.push(L); }
+    for (let i = 0; i < 3 && towers.length; i++) { const L = new THREE.PointLight(0xffe2b0, 0, 45, 2); L.visible = false; L.name = 'flood' + i; parent.add(L); lights.push(L); }
     let lightT = 0, lightsOn = false;
+    // start lights: 'off' | 'green' | 1..5 red lamps. setRaceState({countdown}) maps the 3 s countdown onto 1..5 red lamps, then green for 2.5 s after GO, then off.
+    const LAMP_RED = [1.5, 0, 0], LAMP_GREEN = [0.1, 1.5, 0.25], LAMP_OFF = [0.1, 0.02, 0.02];
+    let lampState = 'off', greenT = 0, lastCd = 0;
+    const startLights = {
+      set(state) {
+        lampState = state;
+        lampMats.forEach((m, i) => { const c = state === 'green' ? LAMP_GREEN : (typeof state === 'number' && i < state) ? LAMP_RED : LAMP_OFF; m.color.setRGB(c[0], c[1], c[2]); });
+      },
+    };
+    function setRaceState(o = {}) {
+      const cd = o.countdown ?? 0;
+      if (cd > 0) { greenT = 0; startLights.set(clamp(1 + Math.floor(5 * (1 - cd / 3.0001)), 1, 5)); }
+      else if (lastCd > 0) { greenT = 2.5; startLights.set('green'); }
+      lastCd = cd;
+    }
     function update(dt, camPos) {
+      if (greenT > 0) { greenT -= dt; if (greenT <= 0) startLights.set('off'); }
       const n = night();
       warmMat.color.setRGB(0.55 + n * 3.0, 0.5 + n * 2.7, 0.38 + n * 2.0);
-      poolMat.opacity = n * 0.5;
+      poolMat.opacity = n * 0.18;
       if (signMat) signMat.emissiveIntensity = n * 0.75;
       const want = n > 0.05 && lights.length > 0;
       if (want !== lightsOn) { lightsOn = want; for (const L of lights) L.visible = want; }
@@ -524,7 +572,7 @@ export function planCircuit(seed) {
           const order = towers.map((t, i) => [t.distanceToSquared(camPos), i]).sort((a, b2) => a[0] - b2[0]);
           lights.forEach((L, i) => { if (order[i]) L.position.copy(towers[order[i][1]]); });
         }
-        for (const L of lights) L.intensity = n * 900;
+        for (const L of lights) L.intensity = n * 90;
       }
     }
 
@@ -533,7 +581,7 @@ export function planCircuit(seed) {
     const keepOut = (x, z) => { nw.project2(x, z, qq); const sm = ((qq.s % LAP) + LAP) % LAP; return (sm < 270 || sm > LAP - 60) && qq.dist < 62; };
     const trees = scatterTrees({ net: nw, terrain, lib, parent, seed: sd, chunk: 125, perChunk: 60, minClear: 14, maxOff: 90, mix: [1.4, 1.2, 0.6, 0.6, 0.2, 1, 1.2, 1], salt: 5, exclude: keepOut });
     for (const t of trees) items.push({ center: t.center, radius: t.radius, groups: [{ obj: t.near, max: 80 }, { obj: t.far, min: 70, max: 380 }] });
-    return { items, update };
+    return { items, update, startLights, setRaceState };
   }
 
   return {

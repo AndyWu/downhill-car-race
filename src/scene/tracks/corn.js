@@ -16,8 +16,9 @@ import { createRegistry } from './registry.js';
 
 const PRE = 40, POST = 70, LEN = 3218;
 const CORN_H = 2.7;
+const WALL_R = 1.6;   // lateral distance from the lane edge where the invisible barrier ('wall' surface) starts
 // passing bays: lane widened to BAY_W for 2*BAY_HALF metres (plus BAY_RAMP metre ramps each end)
-const BAY_C = [560, 1040, 1850, 2650], BAY_HALF = 18, BAY_RAMP = 14, BAY_W = 6.9;
+const BAY_C = [560, 1040, 1850, 2650], BAY_HALF = 18, BAY_RAMP = 22, BAY_W = 6.9;
 
 function lanePoints() {
   const rng = mulberry32(9917);
@@ -109,14 +110,16 @@ export function planCorn(seed) {
   const verge = (road, s, d, hw) => {
     const ad = Math.abs(d), r = ad - (hw + 0.1);
     if (r <= -0.1) return 0;
-    const ki = clamp(Math.round(s + PRE), 0, road.TN - 1), op = openAt(s, d > 0 ? 1 : -1), ow = op.kind === 'farm' ? 0 : op.w;   // barn yards keep the full bank (flat pad, would let carts roam)
+    const ki = clamp(Math.round(s + PRE), 0, road.TN - 1), op = openAt(s, d > 0 ? 1 : -1), ow = op.w;   // barn yards are open too: the 'wall' surface from hw + WALL_R keeps carts in
     const lip = lerp(1.35 + 0.7 * Math.min(1, Math.abs(road.tables.kap[ki]) / 0.02), 0.4, ow);
-    const foot = 0.4 * (Math.sqrt(r * r + 0.02) + r) * 0.5, rFoot = 1.4, hFoot = lerp(0.56, 0.4, ow);
-    const y = Math.min(foot, hFoot) + lip * smoothstep(rFoot, rFoot + 0.55, r) + ow * 1.0 * smoothstep(2.5, 6, r);   // open zones: low bank, then the field rises gently so wandering carts roll back
-    return y * (1 - smoothstep(rFoot + 2.0 + ow * 9, rFoot + 7.0 + ow * 14, r));
+    // gentle foot (~16 deg) so a cart riding the verge tilts little; the real barrier is the 'wall' surface from hw + WALL_R (flags.wallSurface:
+    // sideways stop, never a ramp), so the bank behind it only has to hide the field and can rise as steeply as it likes without tripping carts
+    const foot = 0.28 * (Math.sqrt(r * r + 0.02) + r) * 0.5, rFoot = 1.6, hFoot = 0.45;
+    const y = Math.min(foot, hFoot) + lip * smoothstep(rFoot, rFoot + 2.5, r);   // open zones: just a low lip, the field is flat behind it (matches the coarse ribbon rows)
+    return y * (1 - smoothstep(rFoot + 2.0 + ow * 1, rFoot + 7.0 + ow * 2, r));
   };
   // crown < 0: the lane is a very shallow dish (wheel ruts) so a straight-paddling cart tends to stay centred
-  const terrainOpts = { hillAmp: 3.5, hillFar: 8, hillNear: 70, rutScale: 1, noiseScale: 1, crown: -0.07, sideSlope: 0.08, shoulderOut: 12, verge };
+  const terrainOpts = { hillAmp: 3.5, hillFar: 8, hillNear: 70, rutScale: 1, noiseScale: 1, crown: -0.15, sideSlope: 0.08, shoulderOut: 12, verge };
   const KIND_TINT = { pumpkin: [0.8, 0.74, 0.62], hay: [1.1, 0.98, 0.62], gap: [1.08, 0.98, 0.6], farm: [1.0, 1.04, 0.9], plaza: [1.0, 0.96, 0.78] };
   const theme = {
     roadMat: 'dirtRoad', ribbonEnd: 35, terrRow: 4,
@@ -126,6 +129,7 @@ export function planCorn(seed) {
       const nzv = 0.92 + 0.14 * (rnz.n2(s * 0.8, d * 1.1) * 0.5 + 0.5), wet = road.field ? road.field.wet(s, d) : 0;
       const base = nzv * (1 - rut) * (1 - 0.62 * wet);
       o[0] = lerp(base, 0.8 * base, edge * 0.7); o[1] = lerp(base, 0.9 * base, edge * 0.7); o[2] = lerp(base, 0.55 * base, edge * 0.7);
+      o[0] *= 1.1; o[1] *= 1.1; o[2] *= 1.1;   // a touch lighter overall (dusk readability)
     },
     terrMat: 'grass', terrColor: (x, z, off, s, d, cnz, rnz, o) => {
       const k = 0.9 + 0.12 * cnz.n2(x / 17 + 7, z / 17), t = smoothstep(-0.2, 0.6, cnz.n2(x / 80 + 3, z / 80));
@@ -140,6 +144,7 @@ export function planCorn(seed) {
   };
   const surface = (info) => {
     const ad = Math.abs(info.d), hw = info.hw;
+    if (ad > hw + WALL_R) return { type: 'wall', friction: 0.5, drag: 0.65, bump: 0.4 };   // invisible barrier under the corn / along the field fences
     if (ad > hw + 0.5) {
       const slick = 1 - Math.min(1, Math.max(0, (ad - (hw + 4.2)) / 2));
       return { type: 'corn', friction: lerp(0.5, 0.06, slick), drag: 0.65, bump: 0.5 };
@@ -204,6 +209,25 @@ export function planCorn(seed) {
             const t = rnd(); cols.push(new THREE.Color((0.75 + t * 0.35) * tn[0], (0.85 + t * 0.2) * tn[1], (0.55 + rnd() * 0.3) * tn[2]));
           }
         }
+        // layered face: a thin row of shorter stalk cards standing proud of the face (breaks the flat plane up close), and a jagged row of leaf
+        // cards sticking out of the canopy edge (broken silhouette from the chase / far cameras)
+        for (let s = s0 + rnd() * 1.2; s < s1; s += 1.3 + rnd() * 0.6) {
+          if (openAt(s, side).w > 0.2) continue;
+          const hw = hwOf(s), o = hw + 1.02 + rnd() * 0.35 + 2.4 * sunW(s, side), x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o, y = terrain.heightAt(x, z) - 0.1;
+          e4.set((rnd() - 0.5) * 0.14, rnd() * 6.28, (rnd() - 0.5) * 0.14, 'YXZ'); q4.setFromEuler(e4);
+          const sc = 0.5 + rnd() * 0.22, tn = tint(s), hh = CORN_H * zh(s) * (0.62 + rnd() * 0.34);
+          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, hh, sc)));
+          const tt = rnd(); cols.push(new THREE.Color((0.7 + tt * 0.3) * tn[0], (0.8 + tt * 0.2) * tn[1], (0.5 + rnd() * 0.25) * tn[2]));
+        }
+        for (let s = s0 + rnd() * 1.5; s < s1; s += 1.1 + rnd() * 0.7) {
+          const w = openAt(s, side); if (w.w > 0.2) continue;
+          const hw = hwOf(s), lat = w.fl + 2.4 * sunW(s, side) - 0.2 + rnd() * 1.4, o = hw + lat, x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o;
+          const y = terrain.heightAt(x, z) + canopyH(s, lat, side) - 0.55 + (rnd() - 0.3) * 0.35;
+          e4.set((rnd() - 0.5) * 0.5, rnd() * 6.28, (rnd() - 0.5) * 0.5, 'YXZ'); q4.setFromEuler(e4);
+          const sc = 0.55 + rnd() * 0.35, tn = tint(s);
+          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, 0.9 + rnd() * 0.9, sc)));
+          const tt = rnd(); cols.push(new THREE.Color((0.78 + tt * 0.3) * tn[0], (0.88 + tt * 0.2) * tn[1], (0.5 + rnd() * 0.25) * tn[2]));
+        }
         // sparse tassel / leaf cards standing out of the canopy: the field reads as corn from above and from the chase camera
         for (let s = s0 + rnd() * 1.5; s < s1; s += 2.5 + rnd() * 0.8) {
           for (let lat0 = 0.5 + rnd() * 1.5; lat0 < 19; lat0 += 3.0 + rnd() * 1.2) {
@@ -235,12 +259,12 @@ export function planCorn(seed) {
           const s = s0 + ((s1 - s0) * r) / (rows - 1), w = openAt(s, side);
           rowOK.push(!(w.kind === 'farm' && w.w > 0.97));
           main.atS(s, P); const hw = P.hw, px = P.px, pz = P.pz, rx = P.rhx, rz = P.rhz;
-          const wob = 0.3 * nz.n2(s / 2.1 + 11, side * 5.3), fl = w.fl + 2.4 * sunW(s, side) + wob, tn = tint(s), sh0 = 0.78 + 0.34 * nz.n2(s / 3.1, side * 3);
+          const wob = 0.3 * nz.n2(s / 2.1 + 11, side * 5.3) + 0.2 * nz.n2(s * 0.93 + 3.7, side * 7.1), fl = w.fl + 2.4 * sunW(s, side) + wob, tn = tint(s), sh0 = 0.78 + 0.34 * nz.n2(s / 3.1, side * 3);
           // face: bottom sunk into the bank, top leaning ~0.35 m over the lane
           const ht = canopyH(s, fl, side) * 0.97, nxl = -side * rx, nzl = -side * rz;
           for (const [lat, hh, kk] of [[fl + 0.2, -0.5, 0.6], [fl - 0.35, ht, 1]]) {
             const x = px + rx * side * (hw + lat), z = pz + rz * side * (hw + lat), y = terrain.heightAt(x, z);
-            FP.push(x, y + hh, z); FN.push(nxl * 0.9, 0.25, nzl * 0.9); FU.push(s / 1.9, (hh + 0.5) / 3.3);
+            FP.push(x, y + hh, z); FN.push(nxl * 0.9, 0.25, nzl * 0.9); FU.push(s / 1.9, (hh + 0.5) / 1.3);
             const sh = sh0 * kk; FC.push(0.95 * sh * tn[0], 1.0 * sh * tn[1], 0.8 * sh * tn[2]);
           }
           // canopy sheet columns
@@ -301,16 +325,25 @@ export function planCorn(seed) {
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap((p) => [p.x, p.y, p.z]), 3)); g.computeBoundingSphere();
       const p = new THREE.Points(g, glowMat); p.name = 'lantern_glow'; p.frustumCulled = false; grp.add(p);
     };
-    const sign = (grp, b, text, s, side, bg = '#e9c46a', fg = '#3a210a', w = 1.5, h = 0.55, yb = 1.35, lat = 0.9) => {
-      const f = F(s, side * (hwOf(s) + lat + w * 0.4));
+    // Signs hang on the corn face (centre hw + lat from the lane edge), tilted ~35 deg towards the driver, with the posts hidden behind the
+    // face: nothing stands in the driving line (the 'wall' surface starts at hw + 1.6). Free-standing signs in the clearings use lat >= 2.6.
+    const sign = (grp, b, text, s, side, bg = '#e9c46a', fg = '#3a210a', w = 1.5, h = 0.55, yb = 1.35, lat = 1.2) => {
+      const f = F(s, side * (hwOf(s) + lat)), ph0 = 0.38;
+      const nx = Math.cos(ph0) * -f.tx + Math.sin(ph0) * -side * f.rx, nz = Math.cos(ph0) * -f.tz + Math.sin(ph0) * -side * f.rz, ang = Math.atan2(nx, nz);
+      const ux = Math.cos(ang), uz = -Math.sin(ang);   // board direction (perpendicular to its normal, horizontal)
       for (const dx of [-w * 0.4, w * 0.4]) {
-        const x = f.x + f.rx * dx, z = f.z + f.rz * dx, y = terrain.heightAt(x, z), ph = yb + h + 0.1 + (f.y - y);
-        b.add('woodWeathered', boxG(0.09, ph, 0.09, 1), xf(x, y + ph / 2 - 0.1, z), [0.55, 0.45, 0.35]); reg.circle('post', x, z, 0.1, y - 0.1, {}, 4);
+        const x = f.x + ux * dx + side * f.rx * 0.28, z = f.z + uz * dx + side * f.rz * 0.28, y = terrain.heightAt(x, z), ph = yb + h + 0.1 + (f.y - y);
+        b.add('woodWeathered', boxG(0.09, ph, 0.09, 1), xf(x, y + ph / 2 - 0.1, z), [0.55, 0.45, 0.35]);
+        if (lat > 2) reg.circle('post', x, z, 0.1, y - 0.1, {}, 4);
       }
-      const m = new THREE.Mesh(signGeo, signMat(text, bg, fg)); m.scale.set(w, h, 1); m.position.set(f.x, f.y + yb + h / 2, f.z); m.rotation.y = f.ry + Math.PI; grp.add(m);
-      perch.push([f.x + f.rx * w * 0.4, f.y + yb + h + 0.05, f.z + f.rz * w * 0.4]);
+      const m = new THREE.Mesh(signGeo, signMat(text, bg, fg)); m.scale.set(w, h, 1); m.position.set(f.x, f.y + yb + h / 2, f.z); m.rotation.y = ang; grp.add(m);
+      perch.push([f.x + ux * w * 0.4, f.y + yb + h + 0.05, f.z + uz * w * 0.4]);
     };
-    const straw = (b, x, y, z, ry, sx = 1.25, sy = 0.5, sz = 0.8) => { const t = 0.9 + rnd() * 0.12; b.add('straw', boxG(sx, sy, sz, 1), xf(x, y + sy / 2, z, 0, ry, 0), [t, 0.9 * t, 0.68 * t]); };
+    const straw = (b, x, y, z, ry, sx = 1.25, sy = 0.5, sz = 0.8) => {
+      const t = 0.82 + rnd() * 0.3, k = 0.94 + rnd() * 0.12;
+      b.add('straw', boxG(sx * k, sy, sz, 0.55), xf(x, y + sy / 2, z, 0, ry, 0), [t, 0.88 * t, 0.62 * t]);
+      for (const o of [-0.3, 0.3]) b.add('dark', boxG(0.07, sy + 0.03, sz + 0.03, 1), xf(x + Math.cos(ry) * o * sx, y + sy / 2, z - Math.sin(ry) * o * sx, 0, ry, 0), [0.42, 0.3, 0.13]);   // twine bands
+    };
 
     // ---------------------------------------------------------------- start: gate arch, hay bale rows, flags, chequered line, lanterns
     {
@@ -363,8 +396,8 @@ export function planCorn(seed) {
       b.add('checker', boxG(2 * dd + 0.7, 0.7, 0.08, 1.0), xf(cb.x - fL.tx * 0.22, cb.y + 0.5, cb.z - fL.tz * 0.22, 0, fL.ry, 0), [1, 1, 1]);
       b.add('checker', boxG(2 * dd + 0.7, 0.7, 0.08, 1.0), xf(cb.x + fL.tx * 0.22, cb.y + 0.5, cb.z + fL.tz * 0.22, 0, fL.ry, 0), [1, 1, 1]);
       grp.add(b.build(lib, { shadow: false }));
-      const bm = new THREE.Mesh(signGeo, signMat('FINISH', '#f4f1e6', '#111111')); bm.scale.set(2 * dd - 0.1, 1.5, 1); bm.position.set(cb.x - fL.tx * 0.26, yB - 0.95, cb.z - fL.tz * 0.26); bm.rotation.y = fL.ry + Math.PI; grp.add(bm);
-      const bm2 = new THREE.Mesh(signGeo, signMat('WELL DONE!', '#d9552b', '#fff4d6')); bm2.scale.set(2 * dd - 0.1, 1.2, 1); bm2.position.set(cb.x + fL.tx * 0.26, yB - 0.85, cb.z + fL.tz * 0.26); bm2.rotation.y = fL.ry; grp.add(bm2);
+      const bm = new THREE.Mesh(signGeo, signMat('FINISH', '#f4f1e6', '#111111')); bm.scale.set(2 * dd - 0.1, 2.3, 1); bm.position.set(cb.x - fL.tx * 0.26, yB - 1.4, cb.z - fL.tz * 0.26); bm.rotation.y = fL.ry + Math.PI; grp.add(bm);
+      const bm2 = new THREE.Mesh(signGeo, signMat('WELL DONE!', '#d9552b', '#fff4d6')); bm2.scale.set(2 * dd - 0.1, 1.8, 1); bm2.position.set(cb.x + fL.tx * 0.26, yB - 1.2, cb.z + fL.tz * 0.26); bm2.rotation.y = fL.ry; grp.add(bm2);
       // hay-bale stands (3 tiers) both sides, with spectators; the near row is registered
       const b2 = new Batch();
       for (const sg of [-1, 1]) for (let s = LEN - 30; s <= LEN + 6; s += 1.3) {
@@ -385,10 +418,44 @@ export function planCorn(seed) {
       addItem(grp, LEN, 110, 330);
     }
 
+    // ---------------------------------------------------------------- passing bays: pale gravel overlay (soft edges) + dashed straw centre line
+    {
+      const R = 1.5, NC = 11;
+      for (const c of BAY_C) {
+        const Pp = [], Cc = [], Ii = [], Pd = [], Id = [];
+        const sA = c - BAY_HALF - BAY_RAMP, sB = c + BAY_HALF + BAY_RAMP, rows = Math.round((sB - sA) / R) + 1, b0 = Pp.length / 3;
+        for (let r = 0; r < rows; r++) {
+          const s = sA + r * R, bw = bayW(s);
+          for (let k = 0; k < NC; k++) {
+            const u = (k / (NC - 1)) * 2 - 1, f0 = F(s, 0), f = F(s, u * f0.hw * 0.98), au = Math.abs(u), n = 0.5 + 0.5 * nz.n2(s * 0.7, u * 5);
+            Pp.push(f.x, f.y + 0.035, f.z);
+            const al = smoothstep(0.0, 0.35, bw) * (0.82 - 0.82 * smoothstep(0.72, 1.0, au)) * (0.8 + 0.2 * n);
+            Cc.push(1.0, 0.82 + 0.06 * n, 0.5 + 0.06 * n, al);
+          }
+        }
+        for (let r = 0; r < rows - 1; r++) for (let k = 0; k < NC - 1; k++) { const a = b0 + r * NC + k, bb = a + 1, d = a + NC, e = d + 1; Ii.push(a, d, bb, bb, d, e); }
+        for (let s = sA + 10; s < sB - 10; s += 5) {   // centre dashes
+          const a = F(s, 0), bq = F(s + 2.5, 0), w = 0.1, i0 = Pd.length / 3;
+          Pd.push(a.x - a.rx * w, a.y + 0.045, a.z - a.rz * w, a.x + a.rx * w, a.y + 0.045, a.z + a.rz * w, bq.x + bq.rx * w, bq.y + 0.045, bq.z + bq.rz * w, bq.x - bq.rx * w, bq.y + 0.045, bq.z - bq.rz * w);
+          Id.push(i0, i0 + 2, i0 + 1, i0, i0 + 3, i0 + 2);
+        }
+      const grp = new THREE.Group();
+      const mk = (P_, I_, col, mat, name) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P_, 3)); if (col) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4)); g.setIndex(I_); g.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(P_.length).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3)); g.computeBoundingSphere(); const m = new THREE.Mesh(g, mat); m.name = name; m.receiveShadow = true; grp.add(m); };
+      mk(Pp, Ii, Cc, new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, roughness: 1, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 'bay_gravel');
+      mk(Pd, Id, null, new THREE.MeshStandardMaterial({ color: 0xe6d8a0, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), 'bay_line');
+      parent.add(grp); grp.updateMatrixWorld(true);
+      items.push({ center: new THREE.Vector3(F(c).x, F(c).y, F(c).z), radius: 60, groups: [{ obj: grp, max: 260 }] });
+      }
+    }
+
     // ---------------------------------------------------------------- passing bay markers
     {
       const grp = new THREE.Group(), b = new Batch();
-      for (const c of BAY_C) for (const sg of [-1, 1]) { const s = c - BAY_HALF - 6; if (inClearing(s, sg) || sunW(s, sg) > 0.1) continue; sign(grp, b, 'PASSING BAY', s, sg, '#2f6fb0', '#fff7e0', 1.5, 0.5, 1.2, 0.9); }
+      for (const c of BAY_C) for (const sg of [-1, 1]) {
+        const s = c - BAY_HALF - BAY_RAMP - 3, s2 = c - BAY_HALF - BAY_RAMP - 42;
+        if (!(inClearing(s, sg) || sunW(s, sg) > 0.1)) sign(grp, b, 'PASSING BAY', s, sg, '#2f6fb0', '#fff7e0', 1.7, 0.6, 1.25, 1.2);
+        if (!(inClearing(s2, sg) || sunW(s2, sg) > 0.1 || openAt(s2, sg).w > 0.2)) sign(grp, b, 'PASSING BAY 40m >>', s2, sg, '#2f6fb0', '#fff7e0', 2.6, 0.95, 1.45, 1.2);
+      }
       grp.add(b.build(lib, { shadow: false })); addItem(grp, 1500, 2000, 2000);
     }
 
@@ -410,15 +477,17 @@ export function planCorn(seed) {
     }
 
     // ---------------------------------------------------------------- view-gap props
+    const TRACTORS = [[0.15, 0.5, 0.2], [0.78, 0.14, 0.1], [0.2, 0.34, 0.7]]; let tIdx = 0;   // green, red, blue
     for (const g of gaps) {
       const grp = new THREE.Group(), b = new Batch(), sm = (g.s0 + g.s1) / 2, side = g.side;
       const at = (s, lat) => F(s, side * (hwOf(s) + lat));
       const wheel = (x, y, z, ry, r, wd, col = [0.07, 0.07, 0.07]) => { b.add('dark', cylG(r, r, wd, 12, 1), xf(x, y + r, z, 0, ry, Math.PI / 2), col); b.add('metalRusted', cylG(r * 0.45, r * 0.45, wd + 0.04, 8, 1), xf(x, y + r, z, 0, ry, Math.PI / 2), [0.7, 0.18, 0.12]); };
       if (g.kind === 'tractor') {
+        const tc = TRACTORS[tIdx++ % TRACTORS.length], tcd = tc.map((v) => v * 0.8);
         const f = at(sm, 6.5), ry = f.ry + (side > 0 ? 0.35 : -0.35) + (rnd() - 0.5) * 0.3, M = xf(f.x, f.y, f.z, 0, ry, 0), L = (m) => M.clone().multiply(m);
         reg.circle('prop', f.x, f.z, 1.8, f.y, {}, 8);
-        b.add('dark', boxG(1.15, 0.75, 2.2, 1), L(xf(0, 1.15, 0.9)), [0.15, 0.5, 0.2]); b.add('dark', boxG(1.2, 0.12, 1.0, 1), L(xf(0, 0.7, 1.9)), [0.1, 0.1, 0.1]);
-        b.add('dark', boxG(1.25, 1.35, 1.15, 1), L(xf(0, 1.55, -0.7)), [0.15, 0.5, 0.2]); b.add('glass', boxG(1.18, 0.9, 1.05, 1), L(xf(0, 1.75, -0.72)), [1, 1, 1]); b.add('dark', boxG(1.35, 0.1, 1.3, 1), L(xf(0, 2.3, -0.7)), [0.12, 0.38, 0.15]);
+        b.add('dark', boxG(1.15, 0.75, 2.2, 1), L(xf(0, 1.15, 0.9)), tc); b.add('dark', boxG(1.2, 0.12, 1.0, 1), L(xf(0, 0.7, 1.9)), [0.1, 0.1, 0.1]);
+        b.add('dark', boxG(1.25, 1.35, 1.15, 1), L(xf(0, 1.55, -0.7)), tc); b.add('glass', boxG(1.18, 0.9, 1.05, 1), L(xf(0, 1.75, -0.72)), [1, 1, 1]); b.add('dark', boxG(1.35, 0.1, 1.3, 1), L(xf(0, 2.3, -0.7)), tcd);
         b.add('dark', cylG(0.05, 0.05, 1.0, 6, 1), L(xf(0.35, 2.0, 1.4)), [0.1, 0.1, 0.1]);
         for (const sx of [-1, 1]) { wheel(f.x, f.y, f.z, ry, 0.8, 0.5); }
         for (const sx of [-1, 1]) { const M2 = L(xf(sx * 0.85, 0, -0.9)).elements, M3 = L(xf(sx * 0.8, 0, 1.7)).elements; b.add('dark', cylG(0.78, 0.78, 0.45, 12, 1), L(xf(sx * 0.85, 0.78, -0.9, 0, 0, Math.PI / 2)), [0.06, 0.06, 0.06]); b.add('dark', cylG(0.45, 0.45, 0.3, 10, 1), L(xf(sx * 0.8, 0.45, 1.7, 0, 0, Math.PI / 2)), [0.06, 0.06, 0.06]); }
@@ -445,7 +514,7 @@ export function planCorn(seed) {
           for (const o of [-2.6, 0.4]) { const q = at(s + 3 + o, 4.2); b.add('metalRusted', boxG(0.06, 0.95, 0.06, 1), xf(q.x, q.y + 0.45, q.z, 0, 0, 0.4), [0.5, 0.5, 0.52]); b.add('dark', cylG(0.42, 0.42, 0.08, 10, 1), xf(q.x, q.y + 0.42, q.z, 0, ry, Math.PI / 2), [0.1, 0.1, 0.1]); }
           const sp = at(s + 3, 4.2); b.add('metalRusted', cylG(0.05, 0.05, 0.5, 6, 1), xf(sp.x, sp.y + 1.2, sp.z), [0.6, 0.6, 0.65]); b.add('metalRusted', sphG(0.1, 6, 4, 1), xf(sp.x, sp.y + 1.5, sp.z), [0.7, 0.55, 0.15]);
         }
-        const f = at(sm, 1.0); sign(grp, b, 'FRESH CORN', sm - 12 * (side > 0 ? 1 : 1), side, '#d9c27a', '#2b4a14', 1.4, 0.5, 1.3, 0.9);
+        const f = at(sm, 1.0); sign(grp, b, 'FRESH CORN', sm - 12, side, '#d9c27a', '#2b4a14', 1.4, 0.5, 1.3, openAt(sm - 12, side).w > 0.3 ? 3.4 : 1.2);
       }
       grp.add(b.build(lib, { shadow: false })); addItem(grp, sm, 70, 220);
     }
@@ -456,7 +525,7 @@ export function planCorn(seed) {
       const SIGNS = [
         ['BEWARE OF CROWS', 120, -1, '#f2d36b', '#2a1a0a'], ['PUMPKIN PATCH 300m', 30, 1, '#e8872a', '#2f1604'], ['FARM STAND AHEAD', 665, -1, '#c9372c', '#fff4d6'],
         ['PUMPKINS 120m', 1065, 1, '#e8872a', '#2f1604'], ['HAY RIDES', 1560, -1, '#e8c76a', '#3a2108'], ['SLOW: TRACTOR', 1340, 1, '#f2d36b', '#2a1a0a'], ['BARN DANCE TONIGHT', 1900, 1, '#8a3b2a', '#fff4d6'],
-        ['PUMPKINS 80m', 2350, -1, '#e8872a', '#2f1604'], ['BEWARE OF CROWS', 2200, -1, '#f2d36b', '#2a1a0a'], ['SUNFLOWERS', 2700, 1, '#f0c62e', '#3a2a08'], ['HAY FOR SALE', 2770, 1, '#e8c76a', '#3a2108'], ['ALMOST THERE!', 3100, -1, '#2f6fb0', '#fff7e0'],
+        ['PUMPKINS 80m', 2350, -1, '#e8872a', '#2f1604'], ['BEWARE OF CROWS', 2200, -1, '#f2d36b', '#2a1a0a'], ['SUNFLOWERS', 2700, 1, '#f0c62e', '#3a2a08'], ['HAY FOR SALE', 2770, 1, '#e8c76a', '#3a2108'], ['ALMOST THERE!', 3100, -1, '#2f6fb0', '#fff7e0'], ['FINISH 40m', LEN - 42, -1, '#f4f1e6', '#111111'], ['FINISH 40m', LEN - 42, 1, '#f4f1e6', '#111111'],
       ];
       for (const [t, s, sg, bg, fg] of SIGNS) { if (openAt(s, sg).w > 0.2 || sunW(s, sg) > 0.1) continue; sign(grp, b, t, s, sg, bg, fg); }
       grp.add(b.build(lib, { shadow: false }));
@@ -506,7 +575,7 @@ export function planCorn(seed) {
           if (rnd() < 0.5) b.add('dark', boxG(0.04, 0.03, 1.4 + rnd(), 1), xf(p.x, p.y + 0.04, p.z, 0, rnd() * 6, 0), [0.2, 0.34, 0.1]);
         }
         const q = cx(cl.s0 + 3, hwOf(cl.s0) + 1.9);
-        sign(grp, b, 'PUMPKINS', cl.s0 + 3, side, '#e8872a', '#2f1604', 1.7, 0.6, 1.25, 1.6);
+        sign(grp, b, 'PUMPKINS', cl.s0 + 3, side, '#e8872a', '#2f1604', 1.7, 0.6, 1.25, 3.2);
         // low split-rail fence along the lane edge of the patch, rails follow the lane
         const post = [];
         for (let s = cl.s0; s <= cl.s1 + 0.1; s += 4) { const q2 = cx(s, hwOf(s) + 2.5); post.push(q2); b.add('woodWeathered', boxG(0.12, 1.2, 0.12, 1), xf(q2.x, q2.y + 0.5, q2.z), [0.6, 0.5, 0.4]); reg.circle('post', q2.x, q2.z, 0.1, q2.y - 0.1, {}, 4); if (post.length % 2) perch.push([q2.x, q2.y + 1.1, q2.z]); }
@@ -534,6 +603,11 @@ export function planCorn(seed) {
         for (const sx of [-0.75, 0.75]) perch.push([p.x + Math.cos(ry) * sx, y + 1.85, p.z - Math.sin(ry) * sx]);
         perch.push([p.x, y + 2.7, p.z]);
       }
+      if (cl.kind === 'pumpkin' || cl.kind === 'hay') {   // two lanterns per patch (lit at dusk / night)
+        const gl = [];
+        for (const s of [cl.s0 + 10, cl.s1 - 10]) { const q = cx(s, hwOf(s) + 3.2); gl.push(lampPost(b, grp, q.x, q.z, 2.5)); }
+        glowPoints(grp, gl);
+      }
       if (b.parts.size) grp.add(b.build(lib, { shadow: false }));
       if (grp.children.length) addItem(grp, sm, len / 2 + 40, 260);
     }
@@ -553,19 +627,22 @@ export function planCorn(seed) {
     const trees = scatterTrees({ net: nw, terrain, lib, parent, seed: sd, chunk: 125, perChunk: 34, minClear: 42, maxOff: 70, mix: [0.4, 0.3, 1.2, 1, 1, 1, 0.8, 0.8], salt: 14 });
     for (const t of trees) items.push({ center: t.center, radius: t.radius, groups: [{ obj: t.near, max: 80 }, { obj: t.far, min: 70, max: 400 }] });
     const birds = createBirds({ lib, parent, terrain, main, rnd, perch });
+    // corn-only dusk fill: a warm hemisphere light that lifts the lane and the corn walls around dusk (night ~0.55), fading out again at full night
+    const duskFill = new THREE.HemisphereLight(0xffb98a, 0x9a5a3c, 0); duskFill.name = 'corn_dusk_fill'; parent.add(duskFill);
     return {
       items,
       update(dt, camPos, time, actors) {
         birds.update(dt, camPos, time, actors);
         const n = G.gfxNight ? G.gfxNight.value : 0;
         glowMat.opacity = 0.95 * clamp(n * 1.6, 0, 1);
+        duskFill.intensity = 1.6 * smoothstep(0.12, 0.5, n) * (1 - smoothstep(0.75, 1.0, n));
         for (const it of items) if (it.farm && it.groups[0].obj.visible) it.farm.update(time, dt);
       },
     };
   }
 
   return {
-    id: 'corn', name: 'Corn & Pumpkins', net, registry, pads, terrainOpts, theme, surface, flags: { closed: false, laps: 1, flat: false, noStuckRescue: false },
+    id: 'corn', name: 'Corn & Pumpkins', net, registry, pads, terrainOpts, theme, surface, flags: { closed: false, laps: 1, flat: false, noStuckRescue: false, wallSurface: true },
     splits: [], hazards, startPos, passingBays, landmarks: [{ type: 'barn', s: 780, lateral: -24 }, { type: 'barn', s: 2020, lateral: 24 }, { type: 'pumpkins', s: 365, lateral: 10 }, { type: 'finish', s: LEN, lateral: 0 }],
     decorate, ranges: { ground: 440 },
   };
@@ -591,7 +668,7 @@ function createBirds({ lib, parent, terrain, main, rnd, perch }) {
   const geo = (() => {
     const P = [], N = [];
     const tri = (a, b, c) => { P.push(...a, ...b, ...c); const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2]; const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz) || 1; for (let i = 0; i < 3; i++) N.push(nx / l, ny / l, nz / l); };
-    const K = 1.9;
+    const K = 2.9;
     const body = [[0, 0.02, -0.28], [-0.07, 0, 0.12], [0.07, 0, 0.12], [0, 0.09, 0.0]].map((p) => p.map((v) => v * K));
     tri(body[0], body[1], body[3]); tri(body[0], body[3], body[2]); tri(body[1], body[2], body[3]); tri(body[0], body[2], body[1]);
     for (const sg of [-1, 1]) { const w = [[0.04 * sg, 0.05, -0.06], [0.04 * sg, 0.05, 0.1], [0.5 * sg, 0.1, 0.02]].map((p) => p.map((v) => v * K)); tri(w[0], w[1], w[2]); tri(w[0], w[2], w[1]); }

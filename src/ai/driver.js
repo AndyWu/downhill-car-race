@@ -57,6 +57,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
 
   const FLOOR = 8.5;
   const CU = 0.4;
+  let dbg = null;
   let t = 0, noise = 0, steerOut = 0, hbOut = 0, extra = 0;
   const queue = []; // delayed commands {t, steer, hb}
   // paddling state
@@ -139,6 +140,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const dist = Math.max(1, Math.hypot(dx, dz));
     const err = Math.atan2(yl, Math.max(xl, 0.01));
     const curv = (2 * Math.sin(clamp(err, -1.5, 1.5))) / dist;
+    dbg = { err, goal, extra, eT, sT, xl, yl, outBy, hd: 0, ahead: ahead && ahead.s, aheadDs };
     // yaw-rate damping (Y-up: +yaw = turning left, so a right-hand path wants negative yaw)
     const yaw = self.angularVelocity ? self.angularVelocity.y : 0;
     const yawDes = -speed * curv;
@@ -175,6 +177,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
     if (P.brake.tap && hbRaw > 0 && over < 1.2) hbRaw = ((t * 6) % 1) < 0.5 ? Math.min(0.4, hbRaw * 2) : 0; // light taps
+    // a locked rear axle while steering swings the tail round (spin-outs in village junctions): ease the brake as the wheel turns
+    if (hbRaw > 0 && world.trackId !== 'country' && speed > 4) hbRaw *= 1 - 0.85 * clamp((Math.abs(steerOut) - 0.1) / 0.35, 0, 1);
     queue.push({ t, steer: rawSteer, hb: hbRaw });
     let cmd = queue[0];
     while (queue.length > 1 && queue[1].t <= t - P.reactionTime) { queue.shift(); cmd = queue[0]; }
@@ -277,7 +281,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       reverse,
     };
   }
-  return { think, profile: P, plan, get choice() { return choice; }, get recoveries() { return recoveries; },
+  return { think, get dbg() { return dbg; }, profile: P, plan, get choice() { return choice; }, get recoveries() { return recoveries; },
     /** seconds continuously below 1.5 m/s (recovery manoeuvres didn't free the car). Host should call body.recover(~8) when needsRescue. */
     get stuckFor() { return stuckTotal; }, get needsRescue() { return stuckTotal > 2.5; },
     clearStuck() { stuckTotal = 0; stuckT = 0; consec = 0; } };
