@@ -85,7 +85,7 @@ export function planCircuit(seed) {
 
   // verge: gentle slope back to the track over the grass, then a flat-topped wall (vertical face, no back-slope ramp), plateau behind
   const verge = (road, s, d) => {
-    const si = d < 0 ? 0 : 1, ad = Math.abs(d), off = offAt(s, si), te = teAt(s, si);
+    const sg = d < 0 ? -1 : 1, ad = Math.abs(d), off = offAt(s, sg), te = teAt(s, sg);
     const r = ad - (HW + off + te), liftMax = 0.055 * Math.max(0, off - 1.5);
     if (r < 0) return 0.055 * clamp(ad - HW - 1.5, 0, Math.max(0, off - 1.5));
     const sm = ((s % LAP) + LAP) % LAP, hold = 4 + 18 * pitW(sm);
@@ -126,12 +126,13 @@ export function planCircuit(seed) {
     const addItem = (group, center, radius, max = 260, min = -1e9) => { parent.add(group); items.push({ center, radius, groups: [{ obj: group, max, min }] }); };
     const cOf = (s) => { main.atS(s, pp); return new THREE.Vector3(pp.px, pp.py, pp.pz); };
     const night = () => G.gfxNight.value;
+    const lowY = (pts, y) => { for (const p of pts) y = Math.min(y, terrain.heightAt(p[0], p[1])); return y; };
     const kapAt = (s) => kapT[((Math.floor(((s % LAP) + LAP) % LAP)) % NSL)];
     const outsideSide = (s) => (kapAt(s) >= 0 ? -1 : 1);
 
     // ---- materials that glow at night (colour is animated in update) ----
     const warmMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 0.55, 0.42) });
-    const redMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 0.12, 0.08) });
+    const redMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 0.0, 0.0) });
     const poolMat = new THREE.MeshBasicMaterial({ map: poolTexture(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(1.0, 0.86, 0.6), polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
     const merged = (list) => { const gs = list.map(([g, m]) => { const c = g.clone(); c.applyMatrix4(m); return c; }); const g = mergeGeometries(gs, false); g.computeBoundingSphere(); return g; };
 
@@ -156,8 +157,8 @@ export function planCircuit(seed) {
       const rowPts = (s, sg) => {
         main.atS(s, pp); const wd = wallD(s, sg), d0 = sg * (wd + 0.02), d1 = sg * (wd + 0.85), dm = sg * (wd - 0.3);
         const x0 = pp.px + pp.rhx * d0, z0 = pp.pz + pp.rhz * d0, x1 = pp.px + pp.rhx * d1, z1 = pp.pz + pp.rhz * d1, xm = pp.px + pp.rhx * dm, zm = pp.pz + pp.rhz * dm;
-        const hm = terrain.heightAt(xm, zm), top = Math.max(hm + WALLH, terrain.heightAt(x1, z1) + 0.1);
-        return [[x0, hm - 0.6, z0, 0], [x0, top, z0, 1.4], [x1, top, z1, 1.4], [x1, terrain.heightAt(x1, z1) - 0.1, z1, 0.4]];
+        const hm = terrain.heightAt(xm, zm), h1 = terrain.heightAt(x1, z1), h0 = terrain.heightAt(x0, z0), top = Math.max(hm + WALLH, h1 + 0.1), bot = Math.min(hm, h0, h1) - 0.6;
+        return [[x0, bot, z0, 0], [x0, top, z0, 1.4], [x1, top, z1, 1.4], [x1, Math.min(h1, bot + 0.6) - 0.1, z1, 0.4]];
       };
       for (const sg of [-1, 1]) {
         for (let r = 0; r < rows - 1; r++) {
@@ -165,7 +166,7 @@ export function planCircuit(seed) {
           const paint = Math.floor((sa + 0.01) / 9) % 3, col = paint === 0 ? [1.9, 0.4, 0.35] : paint === 1 ? [1.8, 1.8, 1.75] : [1.0, 1.0, 1.0];
           const A = rowPts(sa, sg), B = rowPts(sb, sg), base = Pa.length / 3;
           for (const row of [A, B]) for (let k = 0; k < 4; k++) { const v = row[k]; Pa.push(v[0], v[1], v[2]); Na.push(0, 1, 0); Ua.push(sa / 3, v[3]); Ca.push(...(k === 3 ? [0.7, 0.7, 0.7] : col)); }
-          reg.poly('barrier', [[A[0][0], A[0][2]], [A[2][0], A[2][2]], [B[2][0], B[2][2]], [B[0][0], B[0][2]]], A[0][1], [A[0][0], A[0][2]], { sunk: true });
+          reg.poly('barrier', [[A[0][0], A[0][2]], [A[2][0], A[2][2]], [B[2][0], B[2][2]], [B[0][0], B[0][2]]], Math.min(A[0][1], B[0][1]), [A[0][0], A[0][2]], { sunk: true });
           for (let q = 0; q < 3; q++) { const a = base + q, b2 = a + 1, c2 = a + 4, d2 = c2 + 1; Ia.push(a, c2, b2, b2, c2, d2); }
         }
       }
@@ -214,7 +215,7 @@ export function planCircuit(seed) {
 
     // ---- kerbs: crisp red/white blocks on both sides through every corner ----
     {
-      const mat = decal(textureOf('kerb'));
+      const mat = decal(textureOf('kerb'), { side: THREE.DoubleSide, roughness: 0.7, color: new THREE.Color(1.4, 1.4, 1.4) });
       const ranges = []; let cur = null;
       for (let i = 0; i <= NSL; i++) {
         const on = Math.abs(kapT[i % NSL]) > 0.0055;
@@ -284,11 +285,11 @@ export function planCircuit(seed) {
       // ---- gantry at s = 0: steel legs, beam with a banner on both faces, start-light bar facing the grid ----
       for (const sg of [-1, 1]) {
         const q = P(0, sg * (hw + 2.4));
-        put('metalRusted', 0.6, 10.2, 0.6, q, 0, q.y, [0.78, 0.8, 0.86], 'gantry', 0.5);
+        put('dark', 0.6, 10.2, 0.6, q, 0, q.y, [0.72, 0.74, 0.8], 'gantry', 0.5);
         put('concrete', 1.4, 0.6, 1.4, q, 0, q.y, [1, 1, 1], 'gantry', 0.3);
       }
       const c0 = P(0, 0), yb = c0.y + 9.7;
-      b.add('metalRusted', boxG(WIDTH + 5.6, 1.2, 0.7, 2), xf(c0.x, yb, c0.z, 0, c0.ry, 0), [0.78, 0.8, 0.86]);
+      b.add('dark', boxG(WIDTH + 5.6, 1.2, 0.7, 2), xf(c0.x, yb, c0.z, 0, c0.ry, 0), [0.72, 0.74, 0.8]);
       b.add('checker', boxG(WIDTH + 5.6, 0.5, 0.12, 2.4), xf(c0.x, yb - 0.85, c0.z, 0, c0.ry, 0), [1, 1, 1]);
       const lightBar = (k) => xf(c0.x, c0.y + 8.45, c0.z, 0, c0.ry, 0).multiply(xf(0, 0, k));
       b.add('dark', boxG(WIDTH * 0.62, 1.15, 0.5, 1), lightBar(0), [0.05, 0.05, 0.06]);
@@ -330,9 +331,9 @@ export function planCircuit(seed) {
       // ---- pit lane (behind the pit wall) + 12 individual garage bays with doors and team signs ----
       const pitA = hw + 4.7, pitB = hw + 9.7;
       {
-        const pit = new THREE.Mesh(drape(-6, 128, pitA, pitB, { step: 2, dy: 0.04, vLen: 6 }), decal(textureOf('asphalt'), { color: new THREE.Color(0.8, 0.8, 0.82) }));
+        const pit = new THREE.Mesh(drape(-6, 128, pitA, pitB, { step: 2, dy: 0.04, vLen: 6 }), decal(textureOf('asphalt'), { side: THREE.DoubleSide, color: new THREE.Color(0.8, 0.8, 0.82) }));
         pit.name = 'pitlane'; grp.add(pit);
-        const lines = new THREE.Mesh(mergeGeometries([drape(-6, 128, pitB - 0.5, pitB - 0.35, { step: 4, dy: 0.06 }), drape(-6, 128, pitA + 0.35, pitA + 0.5, { step: 4, dy: 0.06 })], false), new THREE.MeshStandardMaterial({ color: 0xf2f2ea, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }));
+        const lines = new THREE.Mesh(mergeGeometries([drape(-6, 128, pitB - 0.5, pitB - 0.35, { step: 4, dy: 0.06 }), drape(-6, 128, pitA + 0.35, pitA + 0.5, { step: 4, dy: 0.06 })], false), new THREE.MeshStandardMaterial({ color: 0xf2f2ea, roughness: 0.8, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }));
         lines.name = 'pitlines'; grp.add(lines);
       }
       const TEAM = [[0.9, 0.2, 0.15], [0.2, 0.4, 0.8], [0.95, 0.75, 0.2], [0.2, 0.6, 0.3], [0.85, 0.4, 0.1], [0.55, 0.25, 0.7]];
@@ -371,7 +372,7 @@ export function planCircuit(seed) {
         const van = (s, d, col, yaw) => {
           const q = P(s, d); const c = Math.cos(q.ry), sn = Math.sin(q.ry);
           const pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => [q.x + c * u * 1.1 - sn * 0 + sn * v * 2.6, q.z - sn * u * 1.1 + c * v * 2.6]);
-          reg.poly('van', pts, q.y, [q.x, q.z], { sunk: true });
+          reg.poly('van', pts, lowY(pts, q.y), [q.x, q.z], { sunk: true });
           b.add('dark', boxG(2.2, 1.9, 4.2, 1), xf(q.x, q.y + 1.15, q.z, 0, q.ry, 0), col);
           b.add('dark', boxG(2.2, 1.1, 1.5, 1), xf(q.x + Math.sin(q.ry) * 2.2, q.y + 0.8, q.z + Math.cos(q.ry) * 2.2, 0, q.ry, 0), col);
           b.add('dark', boxG(2.0, 0.5, 0.06, 1), xf(q.x + Math.sin(q.ry) * 2.95, q.y + 1.2, q.z + Math.cos(q.ry) * 2.95, 0, q.ry, 0), [0.1, 0.14, 0.18]);
@@ -389,9 +390,9 @@ export function planCircuit(seed) {
         // car park rows with painted bays
         for (let r = 0; r < 3; r++) for (let k = 0; k < 9; k++) {
           if (rnd() < 0.25) continue;
-          const q = P(135 + k * 3.6, hw + 38 + r * 7), cc = [[0.8, 0.8, 0.82], [0.15, 0.2, 0.45], [0.7, 0.12, 0.1], [0.12, 0.35, 0.2], [0.85, 0.7, 0.2]][Math.floor(rnd() * 5)];
+          const q = P(135 + k * 3.6, hw + 29 + r * 6.5), cc = [[0.8, 0.8, 0.82], [0.15, 0.2, 0.45], [0.7, 0.12, 0.1], [0.12, 0.35, 0.2], [0.85, 0.7, 0.2]][Math.floor(rnd() * 5)];
           const c = Math.cos(q.ry), sn = Math.sin(q.ry), pts = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => [q.x + c * u * 0.95 - sn * 0 + sn * v * 2.1, q.z - sn * u * 0.95 + c * v * 2.1]);
-          reg.poly('parkedcar', pts, q.y, [q.x, q.z], { sunk: true });
+          reg.poly('parkedcar', pts, lowY(pts, q.y), [q.x, q.z], { sunk: true });
           b.add('dark', boxG(1.8, 0.9, 4.0, 1), xf(q.x, q.y + 0.75, q.z, 0, q.ry, 0), cc);
           b.add('dark', boxG(1.6, 0.6, 2.0, 1), xf(q.x, q.y + 1.5, q.z, 0, q.ry, 0), [0.1, 0.13, 0.17]);
         }
@@ -462,7 +463,7 @@ export function planCircuit(seed) {
       grp.add(buntingMesh(lines, lib));
       // chequered line (draped)
       const chk = textureOf('checker').clone(); chk.needsUpdate = true;
-      const cm = new THREE.Mesh(drape(-0.6, 0.6, -hw, hw, { step: 0.4, cols: 20, dy: 0.035, vLen: 2.4 }), decal(chk, { polygonOffsetFactor: -8, polygonOffsetUnits: -8 }));
+      const cm = new THREE.Mesh(drape(-0.6, 0.6, -hw, hw, { step: 0.4, cols: 20, dy: 0.035, vLen: 2.4 }), decal(chk, { side: THREE.DoubleSide, polygonOffsetFactor: -8, polygonOffsetUnits: -8 }));
       { const uv = cm.geometry.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 6, uv.getY(i) * 0.5 * 2.4 / 1.2 * 0.5); }
       grp.add(cm);
       grp.add(b.build(lib, { shadow: false }));
@@ -528,10 +529,6 @@ export function planCircuit(seed) {
     }
 
     // ---- trees outside the barriers, kept out of the built-up zones ----
-    const exclude = (x, z) => {
-      nw.project2(x, z, { }); // (cheap guard, result unused)
-      return false;
-    };
     const qq = {};
     const keepOut = (x, z) => { nw.project2(x, z, qq); const sm = ((qq.s % LAP) + LAP) % LAP; return (sm < 270 || sm > LAP - 60) && qq.dist < 62; };
     const trees = scatterTrees({ net: nw, terrain, lib, parent, seed: sd, chunk: 125, perChunk: 60, minClear: 14, maxOff: 90, mix: [1.4, 1.2, 0.6, 0.6, 0.2, 1, 1.2, 1], salt: 5, exclude: keepOut });
