@@ -147,6 +147,7 @@ async function boot() {
     setDebugInput: (i) => input.setDebugInput(i),
     teleport: (s, speed = 0) => teleport(s, speed),
     advance: (sec) => advance(sec),
+    setView: (n) => setView(n),
     startRace: (o) => startRace(o),
   };
   if (netMod && netMod.onOfflineReady) safe(() => netMod.onOfflineReady(() => { game.state.offlineReady = true; if (game.ui) { if (game.ui.setOfflineReady) game.ui.setOfflineReady(true); else if (game.ui.toast && game.state.mode === 'title') game.ui.toast('Ready to play offline', 2600); } }), 'onOfflineReady');
@@ -238,6 +239,9 @@ async function boot() {
   function clearRace() {
     for (const v of game.vehicles) {
       scene.remove(v.group);
+      // free GPU buffers between races (geometries are per-vehicle; the flag's canvas texture + material are too)
+      v.group.traverse((o) => { if (o.geometry && o.geometry.dispose) o.geometry.dispose(); });
+      if (v.flag && v.flag.mesh) v.flag.mesh.traverse((o) => { if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
       if (v.headlight && v.headlight.dispose) safe(() => v.headlight.dispose(), 'headlight.dispose');
     }
     game.vehicles.length = 0; playerV = null;
@@ -245,6 +249,27 @@ async function boot() {
     cockpit = null;
   }
 
+  const actorPos = [];
+  // outside cameras stay inside the road corridor on maps whose walls are meshes (heightfield marching cannot see them)
+  const CAM_MARGIN = { corn: 0.9, circuit: 3.0 };
+  function camClamp(v, hint) {
+    const m = CAM_MARGIN[builtFor];
+    if (m == null || !world || !world.track || !world.track.project) return;
+    const pr = world.track.project(v, hint); if (!pr) return;
+    const sm = world.track.sampleAt(Math.max(0, Math.min(world.track.length, pr.s)));
+    const lim = (sm.width || 6) / 2 + m, L = pr.lateral;
+    if (Math.abs(L) > lim) { const dd = (L > 0 ? lim : -lim) - L; v.x += sm.right.x * dd; v.z += sm.right.z * dd; }
+  }
+  let mapMain = null;
+  const MAP_K = 6, MAP_MAX = 70;
+  function mapWarp(x, z) {
+    if (!mapMain) return { x, z };
+    let bi = 0, bd = Infinity;
+    for (let i = 0; i < mapMain.length; i++) { const dx = mapMain[i][0] - x, dz = mapMain[i][1] - z, d = dx * dx + dz * dz; if (d < bd) { bd = d; bi = i; } }
+    const d = Math.sqrt(bd); if (d < 9) return { x, z };   // on the main road (samples are 10 m apart)
+    const k = Math.min(9 + (d - 9) * MAP_K, MAP_MAX) / d, m = mapMain[bi];
+    return { x: m[0] + (x - m[0]) * k, z: m[1] + (z - m[1]) * k };
+  }
   const _t = new THREE.Vector3();
   function teleportVehicle(v, s, lateral = 0, speed = 0) {
     s = Math.max(0, Math.min(TRACK_LENGTH - 5, s));
@@ -291,12 +316,14 @@ async function boot() {
     game.state.truck = truckIdx; game.state.role = role;
     const vs = game.vehicles;
     if (role === 'solo') {
-      playerV = makeVehicle(truckIdx, 0, 'local', 0, 'You'); vs.push(playerV);
+      const midGrid = builtFor && builtFor !== 'country' && Math.min(cfg.ai, 9) >= 6;   // new maps: the player starts mid-grid (slot 4), the AI fill slot 0 and the rest
+      const pSlot = midGrid ? 4 : 0;
+      playerV = makeVehicle(truckIdx, pSlot, 'local', 0, 'You'); vs.push(playerV);
       // AI_ROSTER is ordered worst -> best; with fewer than 9 AI an evenly spaced subset is used. The best AI start in the front rows.
       const nAI = Math.min(cfg.ai, 9);
       for (let i = 0; i < nAI; i++) {
         const ri = nAI <= 1 ? 4 : Math.round(i * (ROSTER.length - 1) / (nAI - 1));
-        vs.push(makeVehicle(aiTruckIndex(ri, truckIdx + 1 + i), aiMod && aiMod.aiSlot ? aiMod.aiSlot(i, nAI, builtFor) : nAI - i, 'ai', ri, rosterName(ri)));
+        vs.push(makeVehicle(aiTruckIndex(ri, truckIdx + 1 + i), (() => { const k = aiMod && aiMod.aiSlot ? aiMod.aiSlot(i, nAI, builtFor) : nAI - i; return midGrid && k === pSlot ? 0 : k; })(), 'ai', ri, rosterName(ri)));
       }
     } else {
       // multiplayer: 10 cars; humans from players[] first, then AI backfill in roster order (slot k >= humans gets AI_ROSTER[k - humans])
@@ -318,7 +345,7 @@ async function boot() {
       }
     }
     chaseT = null; lastRespawns = 0;
-    cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam, heightAt: () => (world && world.heightAt ? world.heightAt.bind(world) : null) });
+    cockpit = createCockpitCamera(camera, { group: playerV.group, parts: playerV.parts }, { mode: P.cam, heightAt: () => (world && world.heightAt ? world.heightAt.bind(world) : null), clampLat: camClamp });
     setView(params.get('cam') || savedView());
     const cd = o.countdown ?? 3;
     Object.assign(game.state, { mode: 'race', raceTime: 0, finished: false, finishTime: 0, place: 0, countdown: cd, paused: false });
@@ -336,7 +363,11 @@ async function boot() {
       if (world.mapPaths) {
         const paths = world.mapPaths() || [];
         const main = paths.find((p) => p.main) || paths[0];
-        if (main) { ui.setMapTrack(main.pts, paths.filter((p) => p !== main).map((p) => p.pts), { closed: !!(world.flags && world.flags.closed) }); return; }
+        if (main) {
+          // village streets run only 16-40 m apart on a 3 km line: pull the branches away from the main road on the map only (cars on them use the same warp)
+          mapMain = main.pts.length && paths.length > 1 ? main.pts : null;
+          ui.setMapTrack(main.pts, paths.filter((p) => p !== main).map((p) => (mapMain ? p.pts.map((q) => { const w = mapWarp(q[0], q[1]); return [w.x, w.z]; }) : p.pts)), { closed: !!(world.flags && world.flags.closed) }); return;
+        }
       }
       const L = world.track.length, pts = [];
       for (let s = 0; s <= L; s += 12) { const p = world.track.sampleAt(Math.min(s, L)).position; pts.push([p.x, p.z]); }
@@ -701,7 +732,7 @@ async function boot() {
         others.length = 0; for (const o of vs) if (o !== v) others.push(o.body.state);
         inp = safe(() => v.ai.think(STEP, v.body.state, others), 'ai.think') || idle;
         if (inp.honk) honkCar(v);
-        if (v.ai.needsRescue) { v.body.recover(8); if (v.ai.clearStuck) v.ai.clearStuck(); }
+        if (!v.finished && v.ai.needsRescue) { v.body.recover(8); if (v.ai.clearStuck) v.ai.clearStuck(); }
         if (v.finished) inp = { ...idle, handbrake: 0.7 };
       }
       inp.draft = draftFactor(v.body, bodies);
@@ -800,7 +831,7 @@ async function boot() {
     mapTimer += dt; if (mapTimer < 0.1) return; mapTimer = 0;
     const m = game.state.mode;
     if (!ui || !ui.setMapCars || (m !== 'race' && m !== 'finish')) return;
-    safe(() => ui.setMapCars(game.vehicles.map((v) => ({ x: v.group.position.x, z: v.group.position.z, color: cssColor(v.spec && (v.spec.flagColor ?? v.spec.color)), me: v === playerV }))), 'ui.setMapCars');
+    safe(() => ui.setMapCars(game.vehicles.map((v) => ({ ...mapWarp(v.group.position.x, v.group.position.z), color: cssColor(v.spec && (v.spec.flagColor ?? v.spec.color)), me: v === playerV }))), 'ui.setMapCars');
   }
   function updateRank(dt) {
     updateMap(dt);
@@ -861,7 +892,8 @@ async function boot() {
       updateReflection(dt);
     }
     const ps0 = playerV ? playerV.body.state : null;
-    safe(() => world.update(dt, camera), 'world.update');
+    actorPos.length = 0; for (const v of game.vehicles) actorPos.push(v.body.state.position);
+    safe(() => world.update(dt, camera, actorPos), 'world.update');
     if (lighting && lighting.update) safe(() => lighting.update(dt, camera, ps0 ? ps0.speed : 0), 'lighting.update');
     const ps = playerV ? playerV.body.state : null;
     const sp = ps ? ps.speed : 0;

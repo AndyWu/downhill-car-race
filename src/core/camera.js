@@ -4,7 +4,7 @@ import * as THREE from 'three';
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const _eye = new THREE.Vector3(), _gq = new THREE.Quaternion(), _off = new THREE.Vector3(), _e = new THREE.Euler(), _lq = new THREE.Quaternion();
 
-export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit', heightAt = null } = {}) {
+export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit', heightAt = null, clampLat = null } = {}) {
   const base = {};
   for (const k of ['steeringWheel', 'paddleL', 'paddleR', 'handbrakeLever', 'gearLever']) {
     if (parts && parts[k]) base[k] = parts[k].rotation.clone();
@@ -75,6 +75,7 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
   const _cf = new THREE.Vector3(), _cr = new THREE.Vector3(), _cw = new THREE.Vector3(), _lookP = new THREE.Vector3();
   const _o = new THREE.Vector3(), _alt = new THREE.Vector3(), _lookS = new THREE.Vector3(), lookInit = { v: false };
   function outside(dt, state) {
+    const hint = state.s;
     const V = VIEWS[camMode] || VIEWS.chase;
     const tg = chaseTarget || group;
     tg.updateMatrixWorld(true);
@@ -85,6 +86,8 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
     _lookP.copy(tg.position).addScaledVector(_cf, V.aheadLook); _lookP.y += V.lookUp;
     // occlusion: walls / houses are heightfield bumps. March from the cart to the wanted camera spot; if terrain rises above the
     // line, pull the camera in to the last clear point, then keep it above the ground (smoothed by the follow below)
+    // corridor clamp: corn walls / circuit barriers are meshes the heightfield march cannot see, so keep the camera inside the road corridor
+    if (clampLat && camMode !== 'hood') clampLat(_cw, hint);
     const hf = typeof heightAt === 'function' ? heightAt() : heightAt;
     if (hf && camMode !== 'hood') {
       _o.copy(tg.position); _o.y += 0.9;
@@ -106,6 +109,7 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
         _cw.copy(tg.position).addScaledVector(_cf, -5.2); _cw.y += 2.3; tClear = clearT(_cw);
       }
       if (tClear < 1) { const t = Math.max(0.05, tClear); _cw.set(_o.x + (_cw.x - _o.x) * t, _o.y + (_cw.y - _o.y) * t, _o.z + (_cw.z - _o.z) * t); }
+      if (clampLat) clampLat(_cw, hint);
       const hc = hf(_cw.x, _cw.z); if (Number.isFinite(hc) && _cw.y < hc + 0.6) _cw.y = hc + 0.6;
     }
     if (!chaseInit.v) { chasePos.copy(_cw); _lookS.copy(_lookP); chaseInit.v = true; }

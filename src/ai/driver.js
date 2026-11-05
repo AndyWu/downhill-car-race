@@ -21,13 +21,13 @@ export function forwardXZ(q) {
  */
 export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, human, headlight } = {}) {
   // On the slower tracks the terrain, not the driver, sets the speed unless the driver holds back: tier the target speed by skill.
-  const TRACK_CAP = { village: (k) => 7.4 + 4.1 * k, corn: (k) => 7.0 + 3.9 * k };
+  const TRACK_CAP = { village: (k) => 8.2 + 6.6 * k, corn: (k) => 9.0 + 5.6 * k };
   const capFn = TRACK_CAP[world.trackId];
   const flat = !!(world.flags && world.flags.flat);
   // flat circuit: nothing but paddling moves a cart, so the speed ladder is compressed (the back of the field must not get lapped)
-  const FC = Number(process.env.FC_BASE || 9.8), FK = Number(process.env.FC_K || 0.7);
+  const FC = 9.8, FK = 0.7;
   const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
-  const P = capFn ? { ...profile, speed: { ...profile.speed, cap: Math.min(profile.speed.cap, capFn(profile.skill ?? 0.5)) } }
+  const P = capFn ? { ...profile, speed: { ...profile.speed, cap: capFn(profile.skill ?? 0.5) } }
     : flat ? { ...profile, speed: { ...profile.speed, cap: capOf(profile.speed.cap) } } : profile;
   rng = rng || createRng(1);
   // ---- village: pick a street through every split according to personality (progress-s plan, sampleAt(s, choice)) ----
@@ -38,7 +38,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const R = P.route || { time: 1 };
     for (const sp of splits) {
       if (R.random) { // random, but not into an alley too narrow for a pack of ten
-        const ok = sp.paths.filter((pa) => pa.width >= (R.minWidth ?? 4));
+        const ok = sp.paths.filter((pa) => pa.width >= (R.minWidth ?? 5.8));
         const pool = ok.length ? ok : sp.paths;
         choice[sp.id] = pool[Math.floor(rng() * pool.length) % pool.length].index; continue;
       }
@@ -55,7 +55,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   const WB = spec?.wheelBase ?? 1.7, LOCK = spec?.steerLock ?? 0.5;
   const L = plan.length;
 
-  const FLOOR = Number(process.env.FLOOR || 8.5);
+  const FLOOR = 8.5;
+  const CU = 0.4;
   let t = 0, noise = 0, steerOut = 0, hbOut = 0, extra = 0;
   const queue = []; // delayed commands {t, steer, hb}
   // paddling state
@@ -83,6 +84,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       if (dsO > 0.5 && dsO < aheadDs && Math.abs(dl) < 3) { ahead = o; aheadDs = dsO; }
       if (Math.abs(dsO) < 5 && Math.abs(dl) > 0.2 && Math.abs(dl) < 2.6 && (!alongside || Math.abs(dl) < Math.abs(alongside.lateral - self.lateral))) alongside = o;
     }
+    // corn passing bays: the lane opens to ~7 m for ~60 m, so patient drivers lift the 'stay behind' cap there and go round
+    const bay = plan.narrow && (plan.widthAt(s) > 5 || plan.widthAt(clamp(s + 14, 0, L)) > 5);
     const outBy = Math.max(0, Math.abs(self.lateral) - plan.widthAt(s) / 2); // metres beyond the verge
     const Ld = Math.max(P.look.min, P.look.time * speed) + 2.5 * outBy; // look further to rejoin the road at a shallow angle
     const sT = clamp(s + Ld, 0, L);
@@ -100,7 +103,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
         if (Math.abs(latPass) > hw - 1.2 || t - passStart > 6) { passSide = 0; passCool = t + 4; } // no room / not working: stay put
         else { passUntil = t + 1.5; goal = clamp(latPass - eT, -3.5, 3.5); }
       } else if (P.draft.range > 0 && aheadDs <= P.draft.range) {
-        if (P.draft.overtake && !plan.narrow && aheadDs < 3.5 && speed > (ahead.speed || 0) + 0.2) {
+        if (P.draft.overtake && (!plan.narrow || bay) && aheadDs < 3.5 && speed > (ahead.speed || 0) + 0.2) {
           goal = (ahead.lateral > eT ? -1 : 1) * 1.8; // slingshot past
         } else {
           goal = plan.narrow ? 0 : clamp(ahead.lateral - eT, -2.5, 2.5) * P.draft.strength; // sit in the slipstream (no room to weave in a lane)
@@ -165,7 +168,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       if (gapB < Infinity) easeK = clamp((gapB - 20) / 40, 0, 1) * P.leaderEase * rubberBand;
     }
     let vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (outBy > 0 ? 0.65 : 1);
-    if (plan.narrow && ahead && aheadDs < 7 && Math.abs(ahead.lateral - self.lateral) < 1.4 && P.aggression < 0.5) {
+    if (plan.narrow && !bay && ahead && aheadDs < 7 && Math.abs(ahead.lateral - self.lateral) < 1.4 && P.aggression < 0.5) {
       vt = Math.min(vt, (ahead.speed || 0) + 0.4 + (1 - (P.patience ?? 0.5)) * 1.6); // patient on a lane too narrow to pass
     }
     vt *= 1 - 0.04 * easeK; // lift off a touch (and paddle less, below) when clear of the AI behind
@@ -211,8 +214,10 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const burst = PD.mode === 'rhythm' ? 1 + 0.6 * (1 - clamp(speed / 10, 0, 1)) : PD.mode === 'optimal' ? Math.min(4.6 / PD.cadence, 1 + 0.6 * (1 - clamp(speed / 10, 0, 1))) : 1;
     const warm = PD.warmup && t < PD.warmup.t ? PD.warmup.f : 1; // e.g. Buster's cold start
     // flat tracks (speedway): paddling is the only engine, so everybody digs in, the less skilled a bit harder to stay on the pace
-    const flatCad = Math.min(4.6, (Number(process.env.CAD0 || 3.7) + 0.5 * (P.skill ?? 0.5)) * (1 + 0.8 * (1 - clamp(speed / 6, 0, 1))));
-    const cadence = (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
+    const flatCad = Math.min(4.6, (3.7 + 0.5 * (P.skill ?? 0.5)) * (1 + 0.8 * (1 - clamp(speed / 6, 0, 1))));
+    let catchUp = 1; // flat: backmarkers dig in when the field is pulling away, so nobody gets lapped
+    if (flat && others.length) { let lead = s; for (const o of others) if (o.s > lead) lead = o.s; catchUp = 1 + CU * clamp((lead - s - 100) / 250, 0, 1); }
+    const cadence = (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;

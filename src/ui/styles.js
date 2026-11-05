@@ -115,7 +115,7 @@ export const CSS = `
   .sbd-menu .sbd-btn.primary { font-size: calc(3.4*var(--u)); }
   .sbd-gyro { bottom: calc(var(--sab) + 1*var(--u)); min-height:36px; }
 }
-.sbd-lap { position:absolute; pointer-events:none; opacity:0; transition: opacity .3s; top: calc(var(--sat) + 11.2*var(--u)); left: calc(var(--sal) + 2.4*var(--u)); padding: calc(.3*var(--u)) calc(1.4*var(--u)) calc(.5*var(--u)); border-radius: calc(1*var(--u)); background: rgba(40,20,8,.4); border: .25vmin dashed rgba(246,242,228,.4); color: var(--chalk); font-family: var(--hand); font-size: calc(2.6*var(--u)); text-shadow: 0 0 .5vmin rgba(255,255,255,.3), .15vmin .15vmin 0 rgba(0,0,0,.5); transform: rotate(-1.5deg); }
+.sbd-lap { position:absolute; pointer-events:none; opacity:0; transition: opacity .3s; top: calc(var(--sat) + 2.4*var(--u)); left: calc(var(--sal) + 17.5*var(--u)); padding: calc(.3*var(--u)) calc(1.4*var(--u)) calc(.5*var(--u)); border-radius: calc(1*var(--u)); background: rgba(40,20,8,.4); border: .25vmin dashed rgba(246,242,228,.4); color: var(--chalk); font-family: var(--hand); font-size: calc(2.6*var(--u)); text-shadow: 0 0 .5vmin rgba(255,255,255,.3), .15vmin .15vmin 0 rgba(0,0,0,.5); transform: rotate(-1.5deg); }
 .sbd-lap.on { opacity:1; }
 /* rank (race, top-left) */
 .sbd-rank { position:absolute; pointer-events:none; opacity:0; transition: opacity .3s; top: calc(var(--sat) + 1.6*var(--u)); left: calc(var(--sal) + 2*var(--u)); padding: calc(.6*var(--u)) calc(1.8*var(--u)) calc(.8*var(--u)); border-radius: calc(1.2*var(--u));

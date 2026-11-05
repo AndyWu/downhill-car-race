@@ -7,8 +7,8 @@ const RHO = 1.2;
 const PADDLE_DV = 0.22; // m/s per full stroke at standstill
 const PADDLE_V0 = 9;   // speed at which a stroke is worth half
 // Flat closed circuits (flags.flat): no hill to coast on, so asphalt rolls freely and strokes keep their bite at speed.
-const FLAT_ROLL = Number((typeof process !== 'undefined' && process.env && process.env.FLAT_ROLL) || 0.55);
-const FLAT_V0 = Number((typeof process !== 'undefined' && process.env && process.env.FLAT_V0) || 11);
+const FLAT_ROLL = 0.45;
+const FLAT_V0 = 12;
 const MUD_ROLL = 0.045;   // extra rolling-resistance coefficient at drag = 1 (mud)
 const MUD_VISC = 0.12;    // speed-proportional deceleration (1/s) per unit drag
 export const STATE_FLOATS = 20;
@@ -90,7 +90,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
   let paddleCooldownL = 0, paddleCooldownR = 0;
   const hasWorld = !!world;
   const flatTrack = !!(world && world.flags && world.flags.flat);
-  const wallStop = !!(world && world.flags && world.flags.closed);   // circuit: 'wall' surfaces are barriers, not ramps
+  const wallStop = !!(world && world.flags && world.flags.wallSurface);   // circuit: 'wall' surfaces are barriers, not ramps
   const crrEff = flatTrack ? crr * FLAT_ROLL : crr;
   const padV0 = flatTrack ? FLAT_V0 : PADDLE_V0;
 
@@ -118,7 +118,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
     const speed = v.length();
     const hb = state.handbrake;
     let contacts = 0; _nSum.set(0, 0, 0);
-    let slipMax = 0, bumpMax = 0;
+    let slipMax = 0, bumpMax = 0, wallN = 0;
 
     for (let i = 0; i < 4; i++) {
       const wc = state.wheelContacts[i];
@@ -144,7 +144,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       N = clamp(N, 0, 8 * m * G);
       if (N <= 0) { wc.compression = clamp(comp / travel, 0, 1.5); continue; }
       wc.contact = true; wc.compression = clamp(comp / travel, 0, 1.5); wc.load = N; wc.surface = g.surf.type || 'dirt';
-      contacts++; _nSum.add(_ws);
+      contacts++; _nSum.add(_ws); if (wallStop && wc.surface === 'wall') wallN++;
       bumpMax = Math.max(bumpMax, Math.abs(rate) * (0.3 + g.bump));
       // contact point & velocity
       _cp.copy(_anchor).addScaledVector(_up, -t);
@@ -193,6 +193,15 @@ export function createVehicleBody(specIn, world, opts = {}) {
       applyForce(_tmp, _cp);
     }
 
+    // barrier / tyre wall: a sideways stop, never a ramp (kill the outward velocity with a little bounce, no upward launch)
+    if (wallN > 0 && world.track && world.track.sampleAt) {
+      const rt = world.track.sampleAt(Math.max(0, state.s)).right;
+      if (rt) {
+        const sg = state.lateral >= 0 ? 1 : -1, vo = (v.x * rt.x + v.z * rt.z) * sg;
+        if (vo > 0) { v.x -= rt.x * sg * vo * 1.2; v.z -= rt.z * sg * vo * 1.2; }
+        if (v.y > 0) v.y = 0;
+      }
+    }
     // aero drag
     if (speed > 1e-3) _F.addScaledVector(v, -cdA * speed * (1 - 0.3 * state.draft));
 
@@ -309,7 +318,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       state.velocity.copy(velocity || _tmp.set(0, 0, 0));
       state.angularVelocity.set(0, 0, 0);
       state.steerAngle = 0; state.paddleL = state.paddleR = 0;
-      state.stuck = state.wrongWay = state._wc = state.upsideDown = 0; state.maxS = 0; state.wetHit = state.mudHit = 0; state.wetSteps = state.wetPeak = 0;
+      state.stuck = state.pin = state.wrongWay = state._wc = state.upsideDown = 0; state.maxS = 0; state.wetHit = state.mudHit = 0; state.wetSteps = state.wetPeak = 0;
       lastHad.fill(false);
       good.p.copy(state.position); good.q.copy(state.quaternion);
       this.updateTrack();
@@ -364,7 +373,13 @@ export function createVehicleBody(specIn, world, opts = {}) {
           if (state.wrongWay > 4) { state.wrongWay = 0; this.recover(2); }
         }
       }
-      if (state.stuck > 5 && !this.noRecover && !(world && world.flags && world.flags.noStuckRescue)) { state.stuck = 0; this.recover(3); }
+      if (!this.noRecover && world && world.flags && world.flags.noStuckRescue) {
+        // speedway: a cart that is simply not paddling on the asphalt is left alone; one parked on the run-off / against the wall is lifted back after ~4 s (never backwards)
+        // hysteresis: a cart pinned nose-in bounces between 0.1 and 1.2 m/s, so the timer drains slowly instead of resetting
+        const offAsph = state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall'));
+        state.pin = offAsph && state.speed < 1.5 && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.4);
+        if (state.pin > 4) { state.pin = 0; state.stuck = 0; this.recover(3); }
+      } else if (state.stuck > (state.surface === 'wall' || state.surface === 'corn' ? 3.5 : 5) && !this.noRecover) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);
       if (wc0) state.surface = wc0.surface;
