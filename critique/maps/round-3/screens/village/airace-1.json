@@ -1,0 +1,133 @@
+{
+ "log": [
+  {
+   "who": "Barnaby",
+   "s": 65,
+   "t": 17.2,
+   "lat": 0.8,
+   "surf": "cobble"
+  },
+  {
+   "who": "Vance",
+   "s": 130,
+   "t": 25.2,
+   "lat": -0.6,
+   "surf": "cobble"
+  },
+  {
+   "who": "Vance",
+   "s": 132,
+   "t": 27.2,
+   "lat": 0,
+   "surf": "cobble"
+  },
+  {
+   "who": "Vance",
+   "s": 904,
+   "t": 100.7,
+   "lat": 3.1,
+   "surf": "wall"
+  },
+  {
+   "who": "Vance",
+   "s": 943,
+   "t": 114.7,
+   "lat": -2.9,
+   "surf": "cobble"
+  },
+  {
+   "who": "Vance",
+   "s": 945,
+   "t": 115.2,
+   "lat": 0,
+   "surf": "cobble"
+  },
+  {
+   "who": "Vance",
+   "s": 1210,
+   "t": 144.6,
+   "lat": 2.2,
+   "surf": "cobble"
+  },
+  {
+   "who": "Dot",
+   "s": 1888,
+   "t": 220.4,
+   "lat": 2.9,
+   "surf": "cobble"
+  },
+  {
+   "who": "Clementine",
+   "s": 1889,
+   "t": 220.5,
+   "lat": 1.8,
+   "surf": "cobble"
+  },
+  {
+   "who": "Vance",
+   "s": 2784,
+   "t": 301.6,
+   "lat": 0.9,
+   "surf": "cobble"
+  },
+  {
+   "who": "Barnaby",
+   "s": 2796,
+   "t": 331.8,
+   "lat": -0.4,
+   "surf": "rock"
+  },
+  {
+   "who": "Clementine",
+   "s": 2794,
+   "t": 332.3,
+   "lat": -2.8,
+   "surf": "cobble"
+  },
+  {
+   "who": "Clementine",
+   "s": 3061,
+   "t": 365.6,
+   "lat": -2.4,
+   "surf": "cobble"
+  }
+ ],
+ "fin": [
+  {
+   "who": "Ace",
+   "t": 284
+  },
+  {
+   "who": "Maeve",
+   "t": 309.8
+  },
+  {
+   "who": "Vance",
+   "t": 340.8
+  },
+  {
+   "who": "Buster",
+   "t": 346
+  },
+  {
+   "who": "Rosco",
+   "t": 346
+  },
+  {
+   "who": "Tilly",
+   "t": 351.3
+  },
+  {
+   "who": "Dot",
+   "t": 372
+  },
+  {
+   "who": "Barnaby",
+   "t": 392.8
+  },
+  {
+   "who": "Clementine",
+   "t": 392.8
+  }
+ ]
+}
