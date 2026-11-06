@@ -101,8 +101,8 @@ const TEX = {
     const leaf = fb(u * 2, v, 10, 3, 371), streak = tn(u * 4, v * 3, 16, 373);
     const c = mix([42, 76, 26], [124, 152, 52], clamp(0.25 + 0.6 * leaf + 0.2 * streak, 0, 1));
     const cell = 20, cx = Math.floor(u * cell), cy = Math.floor(v * cell), hh = ihash(cx, cy, 379);
-    let tas = 0; if (hh > 0.8) { const px = (hh * 977 % 1) * 0.6 + 0.2, py = (hh * 613 % 1) * 0.6 + 0.2, dx = u * cell - cx - px, dy = v * cell - cy - py; tas = Math.exp(-(dx * dx + dy * dy) / 0.05) * sh; }
-    const k = sh * (0.8 + 0.3 * streak); return [c[0] * k + 150 * tas, c[1] * k + 135 * tas, c[2] * k + 60 * tas];
+    let tas = 0; if (hh > 0.9) { const px = (hh * 977 % 1) * 0.6 + 0.2, py = (hh * 613 % 1) * 0.6 + 0.2, dx = u * cell - cx - px, dy = v * cell - cy - py; tas = Math.exp(-(dx * dx + dy * dy) / 0.05) * sh; }
+    const k = sh * (0.8 + 0.3 * streak); return [c[0] * k + 70 * tas, c[1] * k + 66 * tas, c[2] * k + 28 * tas];
   }),
   cornCard: () => {
     const S = 128, data = new Uint8Array(S * S * 4);

@@ -90,7 +90,7 @@ void main() {
 			#ifdef REFRACT
 			duv -= duvRaw * 0.15 * m * ( 1.0 - thick );
 			#endif
-			vec3 col = mix( vec3( 0.28, 0.2, 0.12 ), vec3( 0.07, 0.048, 0.03 ), thick );
+			vec3 col = mix( vec3( 0.2, 0.14, 0.08 ), vec3( 0.045, 0.03, 0.018 ), thick );
 			col += vec3( 1.0, 0.95, 0.85 ) * smoothstep( 0.3, 0.0, length( dq / r - vec2( -0.3, 0.35 ) ) ) * 0.3 * thick;
 			float ma = max( m * mix( 0.5, 0.98, thick ), trailM * 0.85 );
 			mudRGB = mix( mudRGB, col, ma ); mudA = mudA + ma * ( 1.0 - mudA );
@@ -109,7 +109,7 @@ void main() {
 	c += ( texture2D( tB1, suv ).rgb * 0.5 + texture2D( tB2, suv ).rgb * 0.75 ) * uBloom;
 	// ---- splatter composite (scene-lit) ----
 	float L = dot( c, vec3( 0.3, 0.59, 0.11 ) );
-	c = mix( c, mudRGB * ( 0.45 + 0.9 * clamp( L, 0.0, 1.5 ) ), mudA );
+	c = mix( c, mudRGB * ( 0.16 + 0.9 * clamp( L, 0.0, 1.5 ) ), mudA );
 	c *= 1.0 - clamp( rim, 0.0, 1.0 ) * 0.15;
 	c += vec3( 1.0, 0.98, 0.94 ) * spec * ( 0.15 + 0.6 * L );
 	// ---- tone map + grade (display space) ----

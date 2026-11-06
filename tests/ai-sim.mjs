@@ -60,7 +60,7 @@ async function race(seed, { profiles = AI_ROSTER, maxT = 1100, truck = null, rub
         const others = bodies.filter((b) => b !== c.body).map((b) => b.state);
         inp = c.driver.think(dt, c.body.state, others);
         if (inp.honk) c.honks++;
-        if (c.driver.needsRescue) { c.body.recover(c.driver.rescueAhead ? c.driver.rescueAhead() : 12, 3); c.driver.clearStuck(); c.resets++; }
+        if (c.driver.needsRescue) { c.body.recover(c.driver.rescueAhead ? c.driver.rescueAhead() : 12, 3, c.driver.choice || null); c.driver.clearStuck(); c.resets++; }
       }
       if (inp.paddleL + inp.paddleR > 0) c.strokes = (c.strokes || 0) + 1;
       if (process.env.TR && racing && c.name === process.env.TR && Math.round((t - CD) / dt) % 60 === 0 && t - CD < Number(process.env.TT || 40)) console.log('TR', (t - CD).toFixed(0), 's', c.body.state.s.toFixed(0), 'lat', c.body.state.lateral.toFixed(1), 'v', c.body.state.speed.toFixed(1), 'strokes', c.strokes || 0);

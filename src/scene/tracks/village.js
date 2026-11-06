@@ -104,6 +104,15 @@ export function planVillage(seed) {
   // used only for tangent shaping; trim them so the branch begins exactly at the split point
   const net = buildNetwork({ main, branches, length: LEN, lapLength: LEN });
   const registry = createRegistry(net);
+  // river water runs only where the whole ribbon (water + far-bank wall) keeps >= 1.5 m from every OTHER road's corridor: longest such run
+  const RIV_WA = 0.8, RIV_WB = 7.2;
+  for (const b of branches) if (b.road.kind === 'river') {
+    const road = b.road, rs = road.riverSide, o = {};
+    const okRow = (sx) => { road.atS(sx, o); for (let dd = RIV_WA; dd <= RIV_WB + 1.2; dd += 0.8) { const d = rs * (o.hw + dd); if (registry.clear(o.px + o.rhx * d, o.pz + o.rhz * d, road.id) < 1.5) return false; } return true; };
+    let best = null, cur = null;
+    for (let sx = 14; sx <= road.length - 14 + 1e-6; sx += 2) { if (okRow(sx)) { if (!cur) cur = [sx, sx]; cur[1] = sx; if (!best || cur[1] - cur[0] > best[1] - best[0]) best = cur; } else cur = null; }
+    road.waterRun = best && best[1] - best[0] >= 24 ? [best[0] + 2, best[1] - 2] : null;
+  }
 
   // ---- hazards per road ----
   const hz = [];
@@ -135,7 +144,7 @@ export function planVillage(seed) {
   const WALL = 2.1, OUT = 9, LOW = 0.9, LOWR = 0.5;   // LOWR: river-side parapet (low enough to see the water from the cockpit)
   const lowEdge = (road, s, sg) => {   // 0..1: how far the street edge is a low parapet instead of a full wall (market square middle third, river side)
     if (road.kind === 'market') { const u = s / road.length; return smoothstep(0.2, 0.3, u) * (1 - smoothstep(0.7, 0.8, u)); }
-    if (road.kind === 'river' && sg === road.riverSide) return smoothstep(20, 44, s) * smoothstep(20, 44, road.length - s);
+    if (road.kind === 'river' && sg === road.riverSide) { const wr = road.waterRun; return wr ? smoothstep(wr[0] + 4, wr[0] + 28, s) * (1 - smoothstep(wr[1] - 28, wr[1] - 4, s)) : 0; }
     return 0;
   };
   const wallTop = (road, s, sg) => lerp(WALL, road.kind === 'river' ? LOWR : LOW, lowEdge(road, s, sg));
@@ -641,7 +650,10 @@ export function planVillage(seed) {
     for (const bd of branches) {
       const road = bd.road, k = road.kind;
       if (k === 'river') {
-        const rs = road.riverSide, sA = 16, sB = road.length - 16, WA = 0.8, WB = 7.2;   // water from 0.8 m beyond the street edge to the far-bank wall at 7.2 m
+        const rs = road.riverSide, WA = RIV_WA, WB = RIV_WB;   // water from 0.8 m beyond the street edge to the far-bank wall at 7.2 m
+        if (!road.waterRun) continue;
+        const [sA, sB] = road.waterRun;
+        if (sB - sA < 12) continue;
         // water: flat ribbon just below the street level (the parapet is only 0.5 m high, so it shows from the cockpit)
         const P = [], I = [], U = []; let rows = 0;
         for (let sx = sA; sx <= sB + 1e-6; sx += 3) { road.atS(sx, pp); for (const dd of [WA, WB]) { const d = rs * (pp.hw + dd); P.push(pp.px + pp.rhx * d, pp.py + 0.02, pp.pz + pp.rhz * d); U.push(dd > 3 ? 1.6 : 0, sx / 3); } rows++; }

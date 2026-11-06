@@ -48,6 +48,7 @@ const _q = new THREE.Quaternion(), _dq = new THREE.Quaternion(), _wl = new THREE
 const _qi = new THREE.Quaternion(), _ws = new THREE.Vector3();
 const _gn = new THREE.Vector3(), _ax = new THREE.Vector3(), _qr = new THREE.Quaternion();
 
+const _yAxis = new THREE.Vector3(0, 1, 0);
 export function createVehicleBody(specIn, world, opts = {}) {
   const spec = { ...DEFAULT_SPEC, ...(specIn || {}) };
   spec.suspension = { ...DEFAULT_SPEC.suspension, ...((specIn && specIn.suspension) || {}) };
@@ -199,7 +200,19 @@ export function createVehicleBody(specIn, world, opts = {}) {
       if (rt) {
         const sg = state.lateral >= 0 ? 1 : -1, vo = (v.x * rt.x + v.z * rt.z) * sg;
         if (vo > 0) { v.x -= rt.x * sg * vo * 1.2; v.z -= rt.z * sg * vo * 1.2; }
+        if (vo > -0.5) { v.x -= rt.x * sg * 0.6 * h * 6; v.z -= rt.z * sg * 0.6 * h * 6; }   // gentle push back toward the lane
         if (v.y > 0) v.y = 0;
+        // swing the nose along the wall (a wall hit must not spin the cart round or bleed its speed)
+        const tg = world.track.sampleAt(Math.max(0, state.s)).tangent;
+        _fwd.set(0, 0, -1).applyQuaternion(q);
+        const tl = Math.hypot(tg.x, tg.z), fl = Math.hypot(_fwd.x, _fwd.z);
+        if (tl > 0.01 && fl > 0.01) {
+          let da = Math.atan2(-tg.z, tg.x) - Math.atan2(-_fwd.z, _fwd.x);
+          da = Math.atan2(Math.sin(da), Math.cos(da));
+          _dq.setFromAxisAngle(_yAxis, da * Math.min(1, h * 5));
+          q.premultiply(_dq).normalize();
+          w.y *= 0.9;
+        }
       }
     }
     // aero drag
@@ -376,7 +389,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       if (!this.noRecover && world && world.flags && world.flags.noStuckRescue) {
         // speedway: a cart that is simply not paddling on the asphalt is left alone; one parked on the run-off / against the wall is lifted back after ~4 s (never backwards)
         // hysteresis: a cart pinned nose-in bounces between 0.1 and 1.2 m/s, so the timer drains slowly instead of resetting
-        const offAsph = state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall'));
+        const offAsph = state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall' || c.surface === 'gravel'));
         state.pin = offAsph && state.speed < 1.5 && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.4);
         if (state.pin > 4) { state.pin = 0; state.stuck = 0; this.recover(9); }
       } else if (wallStop && !this.noRecover) {
@@ -384,7 +397,8 @@ export function createVehicleBody(specIn, world, opts = {}) {
         if ((state._pc = (state._pc || 0) + 1) % 8 === 1) { const sm = world.track && world.track.sampleAt ? world.track.sampleAt(Math.max(0, state.s)) : null; state._edge = sm ? Math.abs(state.lateral) > (sm.width || 6) / 2 - 0.6 : false; }
         const offRd = state._edge || state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall' || c.surface === 'corn'));
         state.pin = offRd && state.speed < 1.5 && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.4);
-        if (state.pin > 3.5 || state.stuck > 4) { state.pin = 0; state.stuck = 0; this.recover(8); }
+        state.sinceRec = (state.sinceRec == null ? 99 : state.sinceRec) + dt;
+        if ((state.pin > 3.5 || state.stuck > 4) && state.sinceRec > 3 && state.speed < 1.0) { state.pin = 0; state.stuck = 0; this.recover(8); }
       } else if (state.stuck > (state.surface === 'wall' || state.surface === 'corn' ? 3.5 : 5) && !this.noRecover) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);
@@ -400,16 +414,26 @@ export function createVehicleBody(specIn, world, opts = {}) {
       } else state.wetSteps = 0;
       state.mudCoat = Math.max(0, state.mudCoat - dt * 0.02);
     },
-    recover(ahead = 0, speed = 0) {
+    recover(ahead = 0, speed = 0, planChoice = null) {
       const tr = world && world.track;
-      state.upsideDown = 0; state.respawns = (state.respawns || 0) + 1;
+      state.upsideDown = 0; state.respawns = (state.respawns || 0) + 1; state.sinceRec = 0;
       if (!tr) { state.quaternion.identity(); state.position.y += 1; return; }
       // remember the street (village branches) before the position is moved
       let choice;
       if (tr.project) { const pr = tr.project(state.position, state.s); if (pr && pr.splitId != null) choice = { [pr.splitId]: pr.pathIndex }; }
+      if (planChoice) choice = planChoice;   // AI carts: stay on the street they planned, not the one they stalled on
       this.updateTrack();
       // never move backwards along the track: resets go to the furthest point reached (or the current s if that is further) + ahead
-      const smp = tr.sampleAt(Math.min(tr.length - 2, Math.max(0, Math.max(state.s, state.maxS) + ahead)), choice);
+      let tS = Math.max(state.s, state.maxS) + ahead;
+      if (world.flags && world.flags.noStuckRescue) {
+        // speedway: do not drop a cart mid-corner (the hairpin); advance until the road heading has settled
+        for (let i = 0; i < 12; i++) {
+          const a = tr.sampleAt(Math.min(tr.length - 2, Math.max(0, tS)), choice).tangent, b = tr.sampleAt(Math.min(tr.length - 2, Math.max(0, tS + 14)), choice).tangent;
+          if (a.x * b.x + a.z * b.z > 0.985) break;
+          tS += 6;
+        }
+      }
+      const smp = tr.sampleAt(Math.min(tr.length - 2, Math.max(0, tS)), choice);
       const x = smp.position.x, z = smp.position.z;
       placeOnGround(this, world, x, z, smp.tangent, speed > 0 ? smp.tangent.clone().multiplyScalar(speed) : new THREE.Vector3(0, 0, 0));
     },

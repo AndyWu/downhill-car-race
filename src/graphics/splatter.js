@@ -13,7 +13,7 @@ export function createSplatterSim({ rng = Math.random, maxVisible = 10 } = {}) {
     const R = rng, mud = type === 'mud';
     const sp = Math.min(1, speed / 14);
     const big = R() < 0.18 + amount * 0.2;
-    const r = mud ? (big ? 0.06 + R() * 0.04 : 0.026 + R() * 0.03) : (big ? 0.022 + R() * 0.018 : 0.007 + R() * 0.013);
+    const r = mud ? (big ? 0.036 + R() * 0.026 : 0.016 + R() * 0.02) : (big ? 0.022 + R() * 0.018 : 0.007 + R() * 0.013);
     drops.push({
       x: 0.06 + R() * 0.88, y: 0.02 + 0.53 * Math.pow(R(), 1.6), // lower ~55% of the frame, weighted to the bottom
       r, age: 0, life: mud ? 9 + R() * 7 : 6 + R() * 5, kind: mud ? 1 : 0, seed: R(), trail: 0,

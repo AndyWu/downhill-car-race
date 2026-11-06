@@ -101,7 +101,7 @@ export function planCircuit(seed) {
       if (ad > p.hw - 0.1) { o[0] = 0.92; o[1] = 0.92; o[2] = 0.9; return; }   // shoulder: plain asphalt (kerbs are separate strips)
       o[0] = n; o[1] = n; o[2] = n;
     },
-    terrMat: 'grass', terrColor: (x, z, off, s, d, cnz, rnz, o) => {
+    terrUV: 2.6, terrMat: 'grass', terrColor: (x, z, off, s, d, cnz, rnz, o) => {
       const k = 0.9 + 0.12 * cnz.n2(x / 17 + 7, z / 17), t = cnz.n2(x / 80 + 3, z / 80) * 0.5 + 0.5;
       o[0] = lerp(0.8, 1.0, t) * k; o[1] = 1.0 * k; o[2] = lerp(0.7, 0.6, t) * k;
     },
@@ -122,7 +122,7 @@ export function planCircuit(seed) {
     if (ad <= hw + 0.05) return { type: 'asphalt', friction: hpF, drag: 0, bump: 0.02 };
     if (ad <= hw + 1.5) return { type: 'asphalt', friction: 0.85 * hpF, drag: 0.02, bump: 0.1 };      // kerbs
     if (ad < hw + offAt(info.s, info.d < 0 ? -1 : 1) - 0.05) {
-      if (gravelAt(info.s, info.d)) return { type: 'gravel', friction: 0.45, drag: 1.0, bump: 0.25 };
+      if (gravelAt(info.s, info.d)) return { type: 'gravel', friction: 0.5, drag: 0.6, bump: 0.25 };
       return { type: 'grass', friction: 0.55, drag: 0.3, bump: 0.2 };   // run-off
     }
     return { type: 'wall', friction: 0.3, drag: 1.4, bump: 0.5 };
@@ -147,7 +147,7 @@ export function planCircuit(seed) {
     const warmMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 0.55, 0.42) });
     const lampMat = new THREE.MeshBasicMaterial({ vertexColors: true });
     let lampAttr = null, lampVerts = 0;   // one merged mesh, one colour per lamp (vertex colours) = a single draw call
-    const poolMat = new THREE.MeshBasicMaterial({ map: poolTexture(), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(1.0, 0.86, 0.6), polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+    const poolMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
     const merged = (list) => { const gs = list.map(([g, m]) => { const c = g.clone(); c.applyMatrix4(m); return c; }); const g = mergeGeometries(gs, false); g.computeBoundingSphere(); return g; };
 
     // ---- draped strip along the road: rows every `step` metres, d from dA to dB, uv = (u across 0..1, v = s / vLen) ----
@@ -257,7 +257,7 @@ export function planCircuit(seed) {
         }
         for (let r = 0; r < rows - 1; r++) for (let k = 0; k < cols - 1; k++) { const i0 = r * cols + k; if (sg > 0) idx.push(i0, i0 + cols, i0 + 1, i0 + 1, i0 + cols, i0 + cols + 1); else idx.push(i0, i0 + 1, i0 + cols, i0 + 1, i0 + cols + 1, i0 + cols); }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(Pa, 3)); g.setAttribute('normal', new THREE.BufferAttribute(Na, 3)); g.setAttribute('uv', new THREE.BufferAttribute(Ua, 2)); g.setIndex(idx); g.computeBoundingSphere();
-        const m = new THREE.Mesh(g, decal(textureOf('gravel'), { side: THREE.DoubleSide, polygonOffsetFactor: -3, polygonOffsetUnits: -3, color: new THREE.Color(1.5, 1.38, 1.15) })); m.name = 'gravel_trap'; m.receiveShadow = true;
+        const m = new THREE.Mesh(g, decal(textureOf('gravel'), { side: THREE.DoubleSide, polygonOffsetFactor: -3, polygonOffsetUnits: -3, color: new THREE.Color(2.4, 2.1, 1.5) })); m.name = 'gravel_trap'; m.receiveShadow = true;
         const grp = new THREE.Group(); grp.add(m); addItem(grp, cOf((a + b) / 2), (b - a) / 2 + 40, 240); a = null;
       };
       for (let s = 400; s <= 500; s += 1) { const g = gravelAt(s, sg); if (g && a == null) a = s; else if (!g && a != null) flush(s - 1); }
@@ -301,7 +301,7 @@ export function planCircuit(seed) {
     };
 
     // ---- start / finish area: gantry, grandstands, pit lane + garages, paddock, control tower, flags, billboards, grid ----
-    const glowGeos = [], redGeos = [], poolGeos = [], towers = [];
+    const glowGeos = [], redGeos = [], towers = [], towerS = [];
     {
       const b = new Batch(), grp = new THREE.Group(); grp.name = 'start_area';
       // Box axes: local x = ACROSS the road (right vector), local z = BACKWARDS along the road (toward the cars on the grid).
@@ -351,7 +351,7 @@ export function planCircuit(seed) {
         b.add('metalRusted', boxG(tiers * 1.5 + 2.6, 0.25, len + 1, 2), xf(top.x, roofY, top.z, 0, top.ry, 0), [0.95, 0.55, 0.45]);
         // lit strip under the front edge of the roof + lamp bar
         const fe = P(sCenter, side * (d0 - 1.6));
-        glowGeos.push([new THREE.BoxGeometry(0.3, 0.14, len - 1), xf(fe.x, roofY - 0.22, fe.z, 0, fe.ry, 0)]);
+        for (let li = 0; li < len - 2; li += 7) { const lq = P(sCenter - len / 2 + 1 + li, side * (d0 - 1.6)); glowGeos.push([new THREE.BoxGeometry(0.3, 0.14, 0.9), xf(lq.x, roofY - 0.22, lq.z, 0, lq.ry, 0)]); }
         for (const e of [-1, 1]) for (const dd of [d0 - 0.4, d0 + tiers * 1.5 + 0.4]) { const pq = P(sCenter + e * (len / 2 - 0.3), side * dd); put('metalRusted', 0.25, tiers * 0.9 + 3.4, 0.25, pq, 0, pq.y, [0.8, 0.8, 0.85], 'standPost', 0.5); }
         for (let t = 0; t < tiers; t++) for (let i = 0; i < len / 1.4; i++) {
           if (rnd() < 0.42) continue;
@@ -472,9 +472,7 @@ export function planCircuit(seed) {
           // lamp panel faces the track: shift the panel towards the road
           const lx = q.x - q.rhx * sg * 0.55, lz = q.z - q.rhz * sg * 0.55;
           glowGeos.push([new THREE.BoxGeometry(3.4, 0.38, 0.1), xf(lx, q.y + H + 0.1, lz, 0, q.ry, 0)]);
-          // pool of light on the ground between tower and road
-          const gx = q.x - q.rhx * sg * 12, gz = q.z - q.rhz * sg * 12, gy = terrain.heightAt(gx, gz);
-          const pg = new THREE.PlaneGeometry(30, 30); pg.rotateX(-Math.PI / 2); pg.applyMatrix4(xf(gx, gy + 0.08, gz, 0, 0, 0)); poolGeos.push(pg);
+          towerS.push([s, sg]);
           towers.push(new THREE.Vector3(lx, q.y + H - 0.5, lz));
         }
       }
@@ -512,6 +510,7 @@ export function planCircuit(seed) {
         for (const sg of [-1, 1]) {
           if (Math.abs(kapAt(s)) > 0.006 || rnd() < 0.3) continue;
           if (sg < 0 && s < 240) continue;
+          if (s > 436 && s < 520) continue;   // keep the hairpin exit view clear
           const dd = wallD(s, sg) + 2.4, q = P(s, sg * dd), pts = [[-0.15, -4], [0.15, -4], [0.15, 4], [-0.15, 4]].map(([u, v]) => { const c = Math.cos(q.ry), sn = Math.sin(q.ry); return [q.x + c * u + sn * v, q.z - sn * u + c * v]; });
           if (!reg.fits(pts, 3.2, 1.0)) continue;
           const idx = n++ % SIGNS.length, y0 = q.y + 0.9;
@@ -531,6 +530,31 @@ export function planCircuit(seed) {
       var signMat = grp.userData.signMat;
     }
 
+    // ---- night light on the road: ONE vertex-coloured additive ribbon clipped to the asphalt (faint cool fill everywhere + soft warm pools under each tower, fading to nothing along and across) ----
+    const poolGeo = () => {
+      const Pa = [], Ca = [], idx = [], COLS = 5;
+      const strip = (s0, s1, step, colorFn) => {
+        const rows = Math.max(2, Math.round((s1 - s0) / step) + 1), base = Pa.length / 3;
+        for (let r = 0; r < rows; r++) {
+          const s = s0 + ((s1 - s0) * r) / (rows - 1), um = ((s % LAP) + LAP) % LAP;
+          for (let k = 0; k < COLS; k++) {
+            const u = (k / (COLS - 1)) * 2 - 1, q = P(um, u * (HW - 0.2)); Pa.push(q.x, q.y + 0.06, q.z);
+            const c = colorFn(s, u, um); Ca.push(c[0], c[1], c[2]);
+          }
+        }
+        for (let r = 0; r < rows - 1; r++) for (let k = 0; k < COLS - 1; k++) { const i0 = base + r * COLS + k; idx.push(i0, i0 + COLS, i0 + 1, i0 + 1, i0 + COLS, i0 + COLS + 1); }
+      };
+      strip(0, LAP, 4, () => [0.06, 0.08, 0.13]);   // cool fill so carts never read as black cut-outs
+      for (const [ts] of towerS) {
+        const R = 26;
+        strip(ts - R, ts + R, 2, (s, u, um) => {
+          const a = Math.abs(s - ts) / R, f = a >= 1 ? 0 : (1 + Math.cos(Math.PI * a)) * 0.5, lat = 1 - 0.45 * u * u, hp = 1 - 0.55 * smoothstep(0.02, 0.04, Math.abs(kapAt(um)));
+          const v = 0.42 * f * f * lat * hp; return [v, v * 0.84, v * 0.6];
+        });
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(Pa, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Ca, 3)); g.setIndex(idx); g.computeBoundingSphere(); return g;
+    };
+
     // ---- glowing parts (floodlight heads, roof strips, start lamps) + ground light pools ----
     {
       const gl = new THREE.Group(); gl.name = 'glow';
@@ -541,13 +565,13 @@ export function planCircuit(seed) {
         const lg = mergeGeometries(gs, false); lg.computeBoundingSphere(); lampAttr = lg.attributes.color;
         const m = new THREE.Mesh(lg, lampMat); m.name = 'glow_start'; gl.add(m);
       }
-      if (poolGeos.length) { const m = new THREE.Mesh(mergeGeometries(poolGeos, false), poolMat); m.name = 'light_pools'; m.renderOrder = 3; gl.add(m); }
+      if (towerS.length) { const m = new THREE.Mesh(poolGeo(), poolMat); m.name = 'light_pools'; m.renderOrder = 3; gl.add(m); }
       addItem(gl, cOf(LAP / 2), 700, 420);
     }
     // real light from the 3 nearest towers at night
     const lights = [];
     for (let i = 0; i < 3 && towers.length; i++) { const L = new THREE.PointLight(0xffe2b0, 0, 45, 2); L.visible = false; L.name = 'flood' + i; parent.add(L); lights.push(L); }
-    let lightT = 0, lightsOn = false;
+    let lightT = 0, lightsOn = false, order0 = [];
     // start lights: 'off' | 'green' | 1..5 red lamps. setRaceState({countdown}) maps the 3 s countdown onto 1..5 red lamps, then green for 2.5 s after GO, then off.
     const LAMP_RED = [1.5, 0, 0], LAMP_GREEN = [0.1, 1.5, 0.25], LAMP_OFF = [0.1, 0.02, 0.02];
     let lampState = 'off', greenT = 0, lastCd = 0;
@@ -570,7 +594,7 @@ export function planCircuit(seed) {
       if (greenT > 0) { greenT -= dt; if (greenT <= 0) startLights.set('off'); }
       const n = night();
       warmMat.color.setRGB(0.55 + n * 3.0, 0.5 + n * 2.7, 0.38 + n * 2.0);
-      poolMat.opacity = n * 0.18;
+      poolMat.opacity = n; poolMat.visible = n > 0.01;
       if (signMat) signMat.emissiveIntensity = n * 0.75;
       const want = n > 0.05 && lights.length > 0;
       if (want !== lightsOn) { lightsOn = want; for (const L of lights) L.visible = want; }
@@ -578,10 +602,10 @@ export function planCircuit(seed) {
         lightT -= dt;
         if (lightT <= 0 && camPos) {
           lightT = 0.4;
-          const order = towers.map((t, i) => [t.distanceToSquared(camPos), i]).sort((a, b2) => a[0] - b2[0]);
+          const order = order0 = towers.map((t, i) => [t.distanceToSquared(camPos), i]).filter((o) => o[0] > 26 * 26).sort((a, b2) => a[0] - b2[0]);   // never a lamp right beside the camera (cockpit glow)
           lights.forEach((L, i) => { if (order[i]) L.position.copy(towers[order[i][1]]); });
         }
-        for (const L of lights) L.intensity = n * 90;
+        lights.forEach((L, i) => { L.intensity = order0[i] ? n * 80 : 0; });
       }
     }
 
@@ -602,12 +626,4 @@ export function planCircuit(seed) {
     // exported for the gameplay side: lateral distance (from the centre line) of the first 'wall' surface at lap position s on each side
     wallStart: (s, sg) => HW + offAt(s, sg) - 0.05,
   };
-}
-
-function poolTexture() {
-  if (typeof document === 'undefined') return null;
-  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
-  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
 }

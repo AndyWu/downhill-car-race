@@ -16,6 +16,7 @@ import { createRegistry } from './registry.js';
 
 const PRE = 40, POST = 70, LEN = 3218;
 const CORN_H = 2.7;
+const DISH_IN = 0.9, DISH_K = 0.13;   // lane edge dish: starts hw - DISH_IN, slope up to ~tan(7.4 deg)
 const WALL_R = 1.6;   // lateral distance from the lane edge where the invisible barrier ('wall' surface) starts
 // passing bays: lane widened to BAY_W for 2*BAY_HALF metres (plus BAY_RAMP metre ramps each end)
 const BAY_C = [560, 1040, 1850, 2650], BAY_HALF = 18, BAY_RAMP = 22, BAY_W = 6.9;
@@ -46,7 +47,8 @@ export function planCorn(seed) {
   const ytab = [];
   { let y = 0; for (let s = -PRE; s <= LEN + POST + 2; s++) { ytab.push(y); y -= Math.max(0.03, 0.046 + 0.012 * Math.sin((s / 600) * 6.283 + 2) + 0.006 * Math.sin((s / 190) * 6.283)); } }
   const yAt = (s) => { const f = clamp(s + PRE, 0, ytab.length - 1.001), i = Math.floor(f); return ytab[i] + (ytab[i + 1] - ytab[i]) * (f - i); };
-  const bayW = (s) => { let w = 0; for (const c of BAY_C) w = Math.max(w, smoothstep(c - BAY_HALF - BAY_RAMP, c - BAY_HALF, s) * (1 - smoothstep(c + BAY_HALF, c + BAY_HALF + BAY_RAMP, s))); return w; };
+  const sm5 = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * t * (t * (6 * t - 15) + 10); };   // smootherstep: rounded ramp ends, no diagonal slab
+  const bayW = (s) => { let w = 0; for (const c of BAY_C) w = Math.max(w, sm5(c - BAY_HALF - BAY_RAMP, c - BAY_HALF, s) * (1 - sm5(c + BAY_HALF, c + BAY_HALF + BAY_RAMP, s))); return w; };
   const main = makeRoad({
     pts: lanePoints(), closed: false, lengthTarget: LEN, pre: PRE, post: POST, id: 0, name: 'Lane',
     yFn: (s) => yAt(s),
@@ -109,7 +111,9 @@ export function planCorn(seed) {
   // In clearings / view gaps / the start and finish plazas the bank is only ~0.4 m so the fields are visible from the lane.
   const verge = (road, s, d, hw) => {
     const ad = Math.abs(d), r = ad - (hw + 0.1);
-    if (r <= -0.1) return 0;
+    if (r <= -0.1) {   // lane dish: the surface rises ~7 deg from hw - DISH_IN so an unsteered cart drifts back to the middle (not in the passing bays' flat middle)
+      const q = ad - (hw - DISH_IN); return q > 0 ? DISH_K * q * q / (q + 0.5) : 0;
+    }
     const ki = clamp(Math.round(s + PRE), 0, road.TN - 1), op = openAt(s, d > 0 ? 1 : -1), ow = op.w;   // barn yards are open too: the 'wall' surface from hw + WALL_R keeps carts in
     const lip = lerp(1.35 + 0.7 * Math.min(1, Math.abs(road.tables.kap[ki]) / 0.02), 0.4, ow);
     // gentle foot (~16 deg) so a cart riding the verge tilts little; the real barrier is the 'wall' surface from hw + WALL_R (flags.wallSurface:
@@ -127,9 +131,10 @@ export function planCorn(seed) {
     roadColor: (road, s, d, p, rnz, o) => {
       const ad = Math.abs(d), edge = smoothstep(p.hw - 0.4, p.hw + 1.4, ad), rut = Math.exp(-(((ad - 0.95) / 0.32) ** 2)) * 0.16;
       const nzv = 0.92 + 0.14 * (rnz.n2(s * 0.8, d * 1.1) * 0.5 + 0.5), wet = road.field ? road.field.wet(s, d) : 0;
-      const base = nzv * (1 - rut) * (1 - 0.62 * wet);
+      const base = nzv * (1 - rut) * (1 - 0.3 * wet);
       o[0] = lerp(base, 0.8 * base, edge * 0.7); o[1] = lerp(base, 0.9 * base, edge * 0.7); o[2] = lerp(base, 0.55 * base, edge * 0.7);
       o[0] *= 1.1; o[1] *= 1.1; o[2] *= 1.1;   // a touch lighter overall (dusk readability)
+      if (wet > 0.02) { const k = Math.min(1, wet * 1.15), m = nzv * (1 - rut); o[0] = lerp(o[0], 0.72 * m, k); o[1] = lerp(o[1], 0.44 * m, k); o[2] = lerp(o[2], 0.24 * m, k); }   // puddles / mud: wet brown, not black
     },
     terrMat: 'grass', terrColor: (x, z, off, s, d, cnz, rnz, o) => {
       const k = 0.9 + 0.12 * cnz.n2(x / 17 + 7, z / 17), t = smoothstep(-0.2, 0.6, cnz.n2(x / 80 + 3, z / 80));
@@ -191,6 +196,18 @@ export function planCorn(seed) {
       g.setIndex(idx); g.computeBoundingSphere(); return g;
     })();
     const cardMat = lib.get('cornCard', { sway: { amp: 0.16, freq: 1.7, hpow: 1.4, hscale: 0.37 } });
+    if (!cardMat.userData.camFade) {   // dithered fade of leaf cards within ~1.7 m of the camera (wall contact no longer fills the cockpit with giant leaves)
+      cardMat.userData.camFade = true;
+      const prevC = cardMat.onBeforeCompile, prevKey = cardMat.customProgramCacheKey ? cardMat.customProgramCacheKey.bind(cardMat) : () => '';
+      cardMat.onBeforeCompile = (shader, r) => {
+        if (prevC) prevC.call(cardMat, shader, r);
+        shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying float vCamD;').replace('#include <project_vertex>', '#include <project_vertex>\nvCamD = length(mvPosition.xyz);');
+        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vCamD;')
+          .replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\nif (vCamD < 1.7) { float fk = smoothstep(0.45, 1.7, vCamD); if (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) > fk) discard; }');
+      };
+      cardMat.customProgramCacheKey = () => prevKey() + '|camfade';
+      cardMat.needsUpdate = true;
+    }
     const faceMat = lib.get('cornwall', { vertexColors: true, side: THREE.DoubleSide });
     const topMat = lib.get('cornTop', { vertexColors: true, side: THREE.DoubleSide });
     const q4 = new THREE.Quaternion(), e4 = new THREE.Euler();
@@ -218,6 +235,25 @@ export function planCorn(seed) {
           const sc = 0.5 + rnd() * 0.22, tn = tint(s), hh = CORN_H * zh(s) * (0.62 + rnd() * 0.34);
           ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, hh, sc)));
           const tt = rnd(); cols.push(new THREE.Color((0.7 + tt * 0.3) * tn[0], (0.8 + tt * 0.2) * tn[1], (0.5 + rnd() * 0.25) * tn[2]));
+        }
+        // ragged top: tall tassel / leaf cards poking well above the canopy edge in the first 6 m, irregular spacing
+        for (let s = s0 + rnd() * 1.5; s < s1; s += 0.9 + rnd() * 1.6) {
+          const w = openAt(s, side); if (w.w > 0.2) continue;
+          const hw = hwOf(s), lat = w.fl + 2.4 * sunW(s, side) + 0.1 + rnd() * 5.5, o = hw + lat, x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o;
+          const y = terrain.heightAt(x, z) + canopyH(s, lat, side) - 0.35 + rnd() * 0.45;
+          e4.set((rnd() - 0.5) * 0.7, rnd() * 6.28, (rnd() - 0.5) * 0.7, 'YXZ'); q4.setFromEuler(e4);
+          const sc = 0.45 + rnd() * 0.4, tn = tint(s);
+          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, 0.6 + rnd() * 1.3, sc)));
+          const tt = rnd(); cols.push(new THREE.Color((0.62 + tt * 0.28) * tn[0], (0.78 + tt * 0.2) * tn[1], (0.42 + rnd() * 0.2) * tn[2]));
+        }
+        // second row of darker, taller stalks just behind the face, so the wall is not a single plane
+        for (let s = s0 + rnd() * 1.4; s < s1; s += 1.6 + rnd() * 0.9) {
+          if (openAt(s, side).w > 0.2) continue;
+          const hw = hwOf(s), o = hw + 1.55 + rnd() * 0.5 + 2.4 * sunW(s, side), x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o, y = terrain.heightAt(x, z) - 0.1;
+          e4.set((rnd() - 0.5) * 0.12, rnd() * 6.28, (rnd() - 0.5) * 0.12, 'YXZ'); q4.setFromEuler(e4);
+          const sc = 0.7 + rnd() * 0.25, tn = tint(s), hh = CORN_H * zh(s) * (0.78 + rnd() * 0.3);
+          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, hh, sc)));
+          const tt = rnd(); cols.push(new THREE.Color((0.5 + tt * 0.2) * tn[0], (0.62 + tt * 0.2) * tn[1], (0.36 + rnd() * 0.15) * tn[2]));
         }
         for (let s = s0 + rnd() * 1.5; s < s1; s += 1.1 + rnd() * 0.7) {
           const w = openAt(s, side); if (w.w > 0.2) continue;
@@ -259,7 +295,7 @@ export function planCorn(seed) {
           const s = s0 + ((s1 - s0) * r) / (rows - 1), w = openAt(s, side);
           rowOK.push(!(w.kind === 'farm' && w.w > 0.97));
           main.atS(s, P); const hw = P.hw, px = P.px, pz = P.pz, rx = P.rhx, rz = P.rhz;
-          const wob = 0.3 * nz.n2(s / 2.1 + 11, side * 5.3) + 0.2 * nz.n2(s * 0.93 + 3.7, side * 7.1), fl = w.fl + 2.4 * sunW(s, side) + wob, tn = tint(s), sh0 = 0.78 + 0.34 * nz.n2(s / 3.1, side * 3);
+          const wob = 0.15 + 0.42 * nz.n2(s / 2.1 + 11, side * 5.3) + 0.3 * nz.n2(s * 0.93 + 3.7, side * 7.1) + 0.22 * Math.max(0, Math.sin(s / 2.7 + side * 1.9)), fl = w.fl + 2.4 * sunW(s, side) + wob, tn = tint(s), sh0 = 0.78 + 0.34 * nz.n2(s / 3.1, side * 3);
           // face: bottom sunk into the bank, top leaning ~0.35 m over the lane
           const ht = canopyH(s, fl, side) * 0.97, nxl = -side * rx, nzl = -side * rz;
           for (const [lat, hh, kk] of [[fl + 0.2, -0.5, 0.6], [fl - 0.35, ht, 1]]) {
@@ -327,8 +363,8 @@ export function planCorn(seed) {
     };
     // Signs hang on the corn face (centre hw + lat from the lane edge), tilted ~35 deg towards the driver, with the posts hidden behind the
     // face: nothing stands in the driving line (the 'wall' surface starts at hw + 1.6). Free-standing signs in the clearings use lat >= 2.6.
-    const sign = (grp, b, text, s, side, bg = '#e9c46a', fg = '#3a210a', w = 1.5, h = 0.55, yb = 1.35, lat = 1.2) => {
-      const f = F(s, side * (hwOf(s) + lat)), ph0 = 0.38;
+    const sign = (grp, b, text, s, side, bg = '#e9c46a', fg = '#3a210a', w = 1.5, h = 0.55, yb = 1.35, lat = 1.2, ph0 = 0.38) => {
+      const f = F(s, side * (hwOf(s) + lat));
       const nx = Math.cos(ph0) * -f.tx + Math.sin(ph0) * -side * f.rx, nz = Math.cos(ph0) * -f.tz + Math.sin(ph0) * -side * f.rz, ang = Math.atan2(nx, nz);
       const ux = Math.cos(ang), uz = -Math.sin(ang);   // board direction (perpendicular to its normal, horizontal)
       for (const dx of [-w * 0.4, w * 0.4]) {
@@ -339,10 +375,12 @@ export function planCorn(seed) {
       const m = new THREE.Mesh(signGeo, signMat(text, bg, fg)); m.scale.set(w, h, 1); m.position.set(f.x, f.y + yb + h / 2, f.z); m.rotation.y = ang; grp.add(m);
       perch.push([f.x + ux * w * 0.4, f.y + yb + h + 0.05, f.z + uz * w * 0.4]);
     };
+    // round bale lying on its side (axis along the lane), r ~0.4: sits at y .. y + 2r
     const straw = (b, x, y, z, ry, sx = 1.25, sy = 0.5, sz = 0.8) => {
-      const t = 0.82 + rnd() * 0.3, k = 0.94 + rnd() * 0.12;
-      b.add('straw', boxG(sx * k, sy, sz, 0.55), xf(x, y + sy / 2, z, 0, ry, 0), [t, 0.88 * t, 0.62 * t]);
-      for (const o of [-0.3, 0.3]) b.add('dark', boxG(0.07, sy + 0.03, sz + 0.03, 1), xf(x + Math.cos(ry) * o * sx, y + sy / 2, z - Math.sin(ry) * o * sx, 0, ry, 0), [0.42, 0.3, 0.13]);   // twine bands
+      const t = 0.82 + rnd() * 0.3, r = 0.36 + rnd() * 0.1, len = Math.min(sz, 1.0) + rnd() * 0.15;
+      b.add('straw', cylG(r, r, len, 10, 1), xf(x, y + r, z, Math.PI / 2, ry, 0), [t, 0.88 * t, 0.62 * t]);
+      b.add('dark', cylG(r + 0.012, r + 0.012, 0.07, 10, 1), xf(x, y + r, z, Math.PI / 2, ry, 0), [0.42, 0.3, 0.13]);   // twine band
+      return r * 2;
     };
 
     // ---------------------------------------------------------------- start: gate arch, hay bale rows, flags, chequered line, lanterns
@@ -353,7 +391,7 @@ export function planCorn(seed) {
         const x = f0.x + f0.rx * sg * dd, z = f0.z + f0.rz * sg * dd, y = terrain.heightAt(x, z);
         b.add('woodWeathered', cylG(0.15, 0.17, 4.8, 8, 2), xf(x, y + 2.3, z), [0.62, 0.5, 0.38]); reg.circle('post', x, z, 0.2, y - 0.1, {}, 6);
         b.add('woodWeathered', boxG(0.12, 0.12, 0.9, 1), xf(x, y + 3.6, z, 0, f0.ry, 0), [0.55, 0.45, 0.35]);   // brace along the lane
-        for (let k = 0; k < 4; k++) straw(b, x + f0.rx * sg * 0.55, y + k * 0.5, z + f0.rz * sg * 0.55, f0.ry, 0.9, 0.5, 1.1);   // bale stack at the foot
+        for (let k = 0; k < 4; k++) straw(b, x + f0.rx * sg * 0.55 + (k % 2 ? 0.12 : -0.08), y + k * 0.76, z + f0.rz * sg * 0.55, f0.ry, 0.9, 0.5, 1.1);   // bale stack at the foot
         glows.push(lampPost(b, grp, x + f0.rx * sg * 0.9 + f0.tx * 1.4, z + f0.rz * sg * 0.9 + f0.tz * 1.4, 2.5));
       }
       const yB = f0.y + 4.75, cb = new THREE.Vector3(f0.x, yB, f0.z);
@@ -368,7 +406,7 @@ export function planCorn(seed) {
         if (Math.abs(s - S0) < 1.6) continue;
         const f = F(s, sg * (hwOf(s) + 2.05)), tall = rnd() < 0.3;
         straw(b2, f.x, f.y - 0.05, f.z, f.ry + (rnd() - 0.5) * 0.1); reg.circle('hay', f.x, f.z, 0.7, f.y - 0.05, {}, 6);
-        if (tall) straw(b2, f.x, f.y + 0.45, f.z, f.ry);
+        if (tall) straw(b2, f.x, f.y + 0.7, f.z, f.ry);
         if (rnd() < 0.2) figure(b2, rnd, f.x + f.rx * sg * 1.0, f.y - 0.05, f.z + f.rz * sg * 1.0, f.ry + Math.PI / 2 * -sg, 0.95, true);
       }
       // flag poles with pennant strings
@@ -404,9 +442,9 @@ export function planCorn(seed) {
         if (Math.abs(s - LEN) < 1.8) continue;
         for (let j = 0; j < 3; j++) {
           const f = F(s, sg * (hwOf(s) + 2.5 + 0.95 * j));
-          for (let k = 0; k <= j; k++) straw(b2, f.x, f.y + k * 0.5 - 0.05, f.z, f.ry);
+          for (let k = 0; k <= j; k++) straw(b2, f.x, f.y + k * 0.72 - 0.05, f.z, f.ry);
           if (j === 0) reg.circle('hay', f.x, f.z, 0.7, f.y - 0.05, {}, 6);
-          if (rnd() < 0.62) figure(b2, rnd, f.x + f.rx * sg * 0.12, f.y + (j + 1) * 0.5 - 0.05, f.z + f.rz * sg * 0.12, f.ry - sg * Math.PI / 2, 0.92 + rnd() * 0.12, true);
+          if (rnd() < 0.62) figure(b2, rnd, f.x + f.rx * sg * 0.12, f.y + (j + 1) * 0.72 - 0.05, f.z + f.rz * sg * 0.12, f.ry - sg * Math.PI / 2, 0.92 + rnd() * 0.12, true);
         }
       }
       const lines = [];
@@ -434,15 +472,15 @@ export function planCorn(seed) {
           }
         }
         for (let r = 0; r < rows - 1; r++) for (let k = 0; k < NC - 1; k++) { const a = b0 + r * NC + k, bb = a + 1, d = a + NC, e = d + 1; Ii.push(a, d, bb, bb, d, e); }
-        for (let s = sA + 10; s < sB - 10; s += 5) {   // centre dashes
-          const a = F(s, 0), bq = F(s + 2.5, 0), w = 0.1, i0 = Pd.length / 3;
+        for (let s = sA + 2; s < sB - 6; s += 5) {   // bold centre dashes, from the entry ramp
+          const a = F(s, 0), bq = F(s + 3.6, 0), w = 0.19, i0 = Pd.length / 3;
           Pd.push(a.x - a.rx * w, a.y + 0.045, a.z - a.rz * w, a.x + a.rx * w, a.y + 0.045, a.z + a.rz * w, bq.x + bq.rx * w, bq.y + 0.045, bq.z + bq.rz * w, bq.x - bq.rx * w, bq.y + 0.045, bq.z - bq.rz * w);
           Id.push(i0, i0 + 2, i0 + 1, i0, i0 + 3, i0 + 2);
         }
       const grp = new THREE.Group();
       const mk = (P_, I_, col, mat, name) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P_, 3)); if (col) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4)); g.setIndex(I_); g.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(P_.length).map((_, i) => (i % 3 === 1 ? 1 : 0)), 3)); g.computeBoundingSphere(); const m = new THREE.Mesh(g, mat); m.name = name; m.receiveShadow = true; grp.add(m); };
       mk(Pp, Ii, Cc, new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, roughness: 1, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 'bay_gravel');
-      mk(Pd, Id, null, new THREE.MeshStandardMaterial({ color: 0xe6d8a0, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), 'bay_line');
+      mk(Pd, Id, null, new THREE.MeshStandardMaterial({ color: 0xf4e8b0, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), 'bay_line');
       parent.add(grp); grp.updateMatrixWorld(true);
       items.push({ center: new THREE.Vector3(F(c).x, F(c).y, F(c).z), radius: 60, groups: [{ obj: grp, max: 260 }] });
       }
@@ -453,8 +491,10 @@ export function planCorn(seed) {
       const grp = new THREE.Group(), b = new Batch();
       for (const c of BAY_C) for (const sg of [-1, 1]) {
         const s = c - BAY_HALF - BAY_RAMP - 3, s2 = c - BAY_HALF - BAY_RAMP - 42;
-        if (!(inClearing(s, sg) || sunW(s, sg) > 0.1)) sign(grp, b, 'PASSING BAY', s, sg, '#2f6fb0', '#fff7e0', 1.7, 0.6, 1.25, 1.2);
-        if (!(inClearing(s2, sg) || sunW(s2, sg) > 0.1 || openAt(s2, sg).w > 0.2)) sign(grp, b, 'PASSING BAY 40m >>', s2, sg, '#2f6fb0', '#fff7e0', 2.6, 0.95, 1.45, 1.2);
+        const s3 = c - BAY_HALF - BAY_RAMP + 1;   // entry of the ramp: big board standing above the bank
+        if (!(inClearing(s, sg) || sunW(s, sg) > 0.1)) sign(grp, b, 'PASSING BAY', s, sg, '#2f6fb0', '#fff7e0', 1.9, 0.62, 1.3, 1.45, 0.2);
+        if (!(inClearing(s2, sg) || sunW(s2, sg) > 0.1 || openAt(s2, sg).w > 0.2)) sign(grp, b, 'PASSING BAY 40m >>', s2, sg, '#2f6fb0', '#fff7e0', 3.0, 0.95, 1.5, 1.45, 0.2);
+        if (!(inClearing(s3, sg) || sunW(s3, sg) > 0.1 || openAt(s3, sg).w > 0.2)) sign(grp, b, 'PASSING BAY >>', s3, sg, '#f2c230', '#1d2d6b', 3.4, 1.15, 1.85, 1.05, 0.14);
       }
       grp.add(b.build(lib, { shadow: false })); addItem(grp, 1500, 2000, 2000);
     }
@@ -465,8 +505,11 @@ export function planCorn(seed) {
       for (let s = sf.s0 + 2; s < sf.s1 - 2; s += 1.25 + rnd() * 0.3) {
         for (let k = 0; k < 2; k++) {
           const f = F(s, sf.side * (hwOf(s) + 1.45 + k * 1.15 + rnd() * 0.5)), hh = 1.9 + rnd() * 0.9, lean = (rnd() - 0.5) * 0.12;
-          b.add('dark', boxG(0.07, hh, 0.07, 1), xf(f.x, f.y + hh / 2 - 0.05, f.z, 0, 0, lean), [0.18, 0.4, 0.1]);
-          b.add('dark', boxG(0.5, 0.03, 0.22, 1), xf(f.x, f.y + hh * 0.5, f.z, 0.2, rnd() * 6.28, 0), [0.2, 0.45, 0.1]);
+          b.add('dark', cylG(0.032, 0.05, hh, 5, 1), xf(f.x, f.y + hh / 2 - 0.05, f.z, 0, 0, lean), [0.2, 0.42, 0.1]);
+          for (const [fh, sgn] of [[0.3, 1], [0.5, -1], [0.7, 1]]) {   // alternating leaves up the stem
+            const la = rnd() * 6.28, lx = Math.cos(la) * 0.2 * sgn, lz = Math.sin(la) * 0.2 * sgn;
+            b.add('dark', boxG(0.34, 0.02, 0.17, 1), xf(f.x + lx, f.y + hh * fh, f.z + lz, 0, -la, 0.45 * sgn), [0.18, 0.44, 0.09]);
+          }
           const fx = -sf.side * f.rx, fz = -sf.side * f.rz, ry = Math.atan2(fx, fz) + (rnd() - 0.5) * 0.7, tilt = 1.05 + rnd() * 0.3;
           const hx = f.x + fx * 0.07, hz = f.z + fz * 0.07;
           b.add('dark', cylG(0.5, 0.5, 0.04, 12, 1), xf(hx, f.y + hh + 0.05, hz, tilt, ry, 0), [1.0, 0.62 + rnd() * 0.15, 0.02]);
@@ -561,7 +604,7 @@ export function planCorn(seed) {
       if (cl.kind === 'pumpkin') {
         const ms = [], cs = [], n = 210;
         for (let i = 0; i < n; i++) {
-          const s = cl.s0 + 4 + rnd() * (len - 8), d = hwOf(s) + 2.6 + rnd() * 20, p = cx(s, d), r = 0.38 + Math.pow(rnd(), 2) * 0.45;
+          const s = cl.s0 + 4 + rnd() * (len - 8), d = hwOf(s) + 3.5 + rnd() * 19, p = cx(s, d), r = 0.38 + Math.pow(rnd(), 2) * 0.45;
           e4.set(0, rnd() * 6.28, 0); q4.setFromEuler(e4);
           ms.push(new THREE.Matrix4().compose(new THREE.Vector3(p.x, p.y + r * 0.62, p.z), q4.clone(), new THREE.Vector3(r, r * 0.78, r)));
           reg.circle('pumpkin', p.x, p.z, r, p.y + r * 0.62 - r * 0.78, {}, 4);
@@ -570,15 +613,15 @@ export function planCorn(seed) {
         const im = new THREE.InstancedMesh(pumpGeo, lib.get('dark', { vertexColors: true }), ms.length);
         ms.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, cs[i]); }); im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.castShadow = false; grp.add(im);
         for (let i = 0; i < 90; i++) {   // vine leaves lying between the pumpkins
-          const s = cl.s0 + 4 + rnd() * (len - 8), p = cx(s, hwOf(s) + 2.6 + rnd() * 20), w = 0.5 + rnd() * 0.5;
+          const s = cl.s0 + 4 + rnd() * (len - 8), p = cx(s, hwOf(s) + 3.5 + rnd() * 19), w = 0.5 + rnd() * 0.5;
           b.add('dark', boxG(w, 0.04, w * 0.8, 1), xf(p.x, p.y + 0.05, p.z, (rnd() - 0.5) * 0.25, rnd() * 6, 0), [0.14 + rnd() * 0.08, 0.4 + rnd() * 0.15, 0.08]);
           if (rnd() < 0.5) b.add('dark', boxG(0.04, 0.03, 1.4 + rnd(), 1), xf(p.x, p.y + 0.04, p.z, 0, rnd() * 6, 0), [0.2, 0.34, 0.1]);
         }
         const q = cx(cl.s0 + 3, hwOf(cl.s0) + 1.9);
-        sign(grp, b, 'PUMPKINS', cl.s0 + 3, side, '#e8872a', '#2f1604', 1.7, 0.6, 1.25, 3.2);
+        sign(grp, b, 'PUMPKINS', cl.s0 + 3, side, '#e8872a', '#2f1604', 1.7, 0.6, 1.25, 3.9);
         // low split-rail fence along the lane edge of the patch, rails follow the lane
         const post = [];
-        for (let s = cl.s0; s <= cl.s1 + 0.1; s += 4) { const q2 = cx(s, hwOf(s) + 2.5); post.push(q2); b.add('woodWeathered', boxG(0.12, 1.2, 0.12, 1), xf(q2.x, q2.y + 0.5, q2.z), [0.6, 0.5, 0.4]); reg.circle('post', q2.x, q2.z, 0.1, q2.y - 0.1, {}, 4); if (post.length % 2) perch.push([q2.x, q2.y + 1.1, q2.z]); }
+        for (let s = cl.s0; s <= cl.s1 + 0.1; s += 4) { const q2 = cx(s, hwOf(s) + 3.3); post.push(q2); b.add('woodWeathered', boxG(0.12, 1.2, 0.12, 1), xf(q2.x, q2.y + 0.5, q2.z), [0.6, 0.5, 0.4]); reg.circle('post', q2.x, q2.z, 0.1, q2.y - 0.1, {}, 4); if (post.length % 2) perch.push([q2.x, q2.y + 1.1, q2.z]); }
         for (let i = 0; i < post.length - 1; i++) {
           const a = post[i], c = post[i + 1], len2 = Math.hypot(c.x - a.x, c.z - a.z), ry = Math.atan2(c.x - a.x, c.z - a.z);
           for (const hy of [0.62, 0.98]) b.add('woodWeathered', boxG(0.08, 0.09, len2, 1), xf((a.x + c.x) / 2, (a.y + c.y) / 2 + hy, (a.z + c.z) / 2, 0, ry, 0), [0.62, 0.52, 0.42]);
@@ -586,7 +629,7 @@ export function planCorn(seed) {
       }
       if (cl.kind === 'pumpkin' || cl.kind === 'hay') {
         for (let i = 0; i < (cl.kind === 'hay' ? 18 : 6); i++) {
-          const s = cl.s0 + 3 + rnd() * (len - 6), p = cx(s, hwOf(s) + 3.5 + rnd() * (cl.kind === 'hay' ? 22 : 12)), up = rnd() < 0.3;
+          const s = cl.s0 + 3 + rnd() * (len - 6), p = cx(s, hwOf(s) + 4.3 + rnd() * (cl.kind === 'hay' ? 21 : 11)), up = rnd() < 0.3;
           b.add('straw', cylG(0.72, 0.72, 1.3, 10, 2), xf(p.x, p.y + (up ? 0.65 : 0.72), p.z, up ? 0 : Math.PI / 2, rnd() * 6, 0), [0.95 + rnd() * 0.1, 0.9, 0.7]); reg.circle('hay', p.x, p.z, 0.95, p.y, {}, 6);
           if (cl.kind === 'hay' && rnd() < 0.45) b.add('straw', cylG(0.72, 0.72, 1.3, 10, 2), xf(p.x + 0.4, p.y + 1.9, p.z + 0.2, Math.PI / 2, rnd() * 6, 0), [1, 0.92, 0.72]);
           if (cl.kind === 'hay' && rnd() < 0.3) perch.push([p.x, p.y + 1.5, p.z]);
@@ -605,7 +648,7 @@ export function planCorn(seed) {
       }
       if (cl.kind === 'pumpkin' || cl.kind === 'hay') {   // two lanterns per patch (lit at dusk / night)
         const gl = [];
-        for (const s of [cl.s0 + 10, cl.s1 - 10]) { const q = cx(s, hwOf(s) + 3.2); gl.push(lampPost(b, grp, q.x, q.z, 2.5)); }
+        for (const s of [cl.s0 + 10, cl.s1 - 10]) { const q = cx(s, hwOf(s) + 3.9); gl.push(lampPost(b, grp, q.x, q.z, 2.5)); }
         glowPoints(grp, gl);
       }
       if (b.parts.size) grp.add(b.build(lib, { shadow: false }));
