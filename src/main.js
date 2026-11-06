@@ -251,7 +251,7 @@ async function boot() {
 
   const actorPos = [];
   // outside cameras stay inside the road corridor on maps whose walls are meshes (heightfield marching cannot see them)
-  const CAM_MARGIN = { corn: 0.9, circuit: 3.0, village: 0.3 };
+  const CAM_MARGIN = { corn: 1.35, circuit: 3.0, village: 0.3 };   // corn: wall face is at hw + 1.6, minus the camera radius
   // measured in the cart's own street: the camera's along-road position is cart.s + (cam - cart).tangent, its lateral comes from that street's frame
   // (so a camera beside a junction or inside a house is judged against the right road). Allowed lateral: max(hw + margin, |cartLat| + 1.5).
   function camClamp(v, hint) {
@@ -266,8 +266,23 @@ async function boot() {
     const sm = world.track.sampleAt(sCam, ch);
     const L2 = (v.x - sm.position.x) * sm.right.x + (v.z - sm.position.z) * sm.right.z;
     const hwC = builtFor === 'circuit' ? (sm.width || 6) / 2 : Math.min(sm.width || 6, c0.width || 6) / 2;   // lanes: the narrower of camera / cart half-width (bay corners)
-    const lim = Math.max(hwC + m, Math.abs(pr.lateral) + 1.5);
+    // narrowest half-width between camera and cart (bay ramps / junction mouths), sampled every 6 m
+    let hwN = hwC;
+    if (builtFor !== 'circuit') { const n = Math.min(6, Math.ceil(Math.abs(sCam - pr.s) / 6)); for (let i = 1; i < n; i++) hwN = Math.min(hwN, (world.track.sampleAt(pr.s + (sCam - pr.s) * i / n, ch).width || 6) / 2); }
+    const cartOut = builtFor === 'corn' && Math.abs(pr.lateral) > hwN + 0.8;
+    const lim = cartOut ? Math.abs(pr.lateral) + 0.5 : Math.max(hwN + m, Math.abs(pr.lateral) + (builtFor === 'corn' ? 0.8 : 1.5));
     if (Math.abs(L2) > lim) { const dd = (L2 > 0 ? lim : -lim) - L2; v.x += sm.right.x * dd; v.z += sm.right.z * dd; }
+    // corn: when the cart is wedged in the field, rise above the corn instead of sitting inside it
+    if (cartOut || (builtFor === 'corn' && Math.abs(L2) > hwN + 0.9)) v.y = Math.max(v.y, cp.y + 3.4);
+    // village: a camera that ended up inside a house (outside its own street's walls) is pulled back toward the cart
+    if (builtFor === 'village') {
+      for (let i = 0; i < 5; i++) {
+        const pc = world.track.project(v, sCam); if (!pc) break;
+        const sc = world.track.sampleAt(Math.max(0, Math.min(L, pc.s)), pc.splitId != null ? { [pc.splitId]: pc.pathIndex } : undefined);
+        if (Math.abs(pc.lateral) <= (sc.width || 6) / 2 + 0.3) break;
+        v.x += (cp.x - v.x) * 0.45; v.z += (cp.z - v.z) * 0.45; v.y = Math.max(v.y, cp.y + 1.8);
+      }
+    }
   }
   let mapMain = null;
   const MAP_K = 6, MAP_MAX = 70;

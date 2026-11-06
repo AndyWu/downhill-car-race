@@ -544,12 +544,12 @@ export function planCircuit(seed) {
         }
         for (let r = 0; r < rows - 1; r++) for (let k = 0; k < COLS - 1; k++) { const i0 = base + r * COLS + k; idx.push(i0, i0 + COLS, i0 + 1, i0 + 1, i0 + COLS, i0 + COLS + 1); }
       };
-      strip(0, LAP, 4, () => [0.06, 0.08, 0.13]);   // cool fill so carts never read as black cut-outs
+      strip(0, LAP, 4, () => [0.11, 0.14, 0.22]);   // cool fill so carts never read as black cut-outs
       for (const [ts] of towerS) {
         const R = 26;
         strip(ts - R, ts + R, 2, (s, u, um) => {
           const a = Math.abs(s - ts) / R, f = a >= 1 ? 0 : (1 + Math.cos(Math.PI * a)) * 0.5, lat = 1 - 0.45 * u * u, hp = 1 - 0.55 * smoothstep(0.02, 0.04, Math.abs(kapAt(um)));
-          const v = 0.42 * f * f * lat * hp; return [v, v * 0.84, v * 0.6];
+          const v = 0.8 * f * f * lat * hp; return [v, v * 0.84, v * 0.6];
         });
       }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(Pa, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Ca, 3)); g.setIndex(idx); g.computeBoundingSphere(); return g;

@@ -492,7 +492,6 @@ export function planCorn(seed) {
       for (const c of BAY_C) for (const sg of [-1, 1]) {
         const s = c - BAY_HALF - BAY_RAMP - 3, s2 = c - BAY_HALF - BAY_RAMP - 42;
         const s3 = c - BAY_HALF - BAY_RAMP + 1;   // entry of the ramp: big board standing above the bank
-        if (!(inClearing(s, sg) || sunW(s, sg) > 0.1)) sign(grp, b, 'PASSING BAY', s, sg, '#2f6fb0', '#fff7e0', 1.9, 0.62, 1.3, 1.45, 0.2);
         if (!(inClearing(s2, sg) || sunW(s2, sg) > 0.1 || openAt(s2, sg).w > 0.2)) sign(grp, b, 'PASSING BAY 40m >>', s2, sg, '#2f6fb0', '#fff7e0', 3.0, 0.95, 1.5, 1.45, 0.2);
         if (!(inClearing(s3, sg) || sunW(s3, sg) > 0.1 || openAt(s3, sg).w > 0.2)) sign(grp, b, 'PASSING BAY >>', s3, sg, '#f2c230', '#1d2d6b', 3.4, 1.15, 1.85, 1.05, 0.14);
       }

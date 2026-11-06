@@ -240,6 +240,14 @@ export const CSS = `
 .sbd-standings li.rolling span { font-style: italic; opacity:.7; }
 .sbd-standings li.me { color: var(--paint-red); font-weight:bold; }
 .sbd-row { display:flex; gap: calc(1.4*var(--u)); justify-content:center; flex-wrap:wrap; }
+/* short landscape (phones): place on the left, two-column standings on the right, buttons underneath; never taller than the screen */
+@media (max-height: 480px) and (orientation: landscape) {
+  .sbd-placard { display:grid; grid-template-columns: auto 1fr; grid-template-areas: "p s" "o s" "t s" "b b"; column-gap: calc(3*var(--u)); row-gap: calc(.4*var(--u)); align-items:center; padding: calc(2.4*var(--u)) calc(4*var(--u)) calc(1.6*var(--u)); max-height: calc(100% - 2*var(--sat) - 4vmin); max-width: 96%; overflow:auto; min-width: 0; }
+  .sbd-placard .sbd-place { grid-area:p; font-size: calc(12*var(--u)); } .sbd-placard .of { grid-area:o; font-size: calc(2.4*var(--u)); } .sbd-placard .time { grid-area:t; font-size: calc(2.8*var(--u)); }
+  .sbd-placard .sbd-standings { grid-area:s; grid-auto-flow: column; grid-template-rows: repeat(5, auto); grid-template-columns: none; gap: .2vmin 2.4vmin; font-size: calc(1.9*var(--u)); } .sbd-placard .sbd-standings:empty { display:none; }
+  .sbd-placard .sbd-row { grid-area:b; gap: calc(1*var(--u)); }
+  .sbd-placard .sbd-ribbon { display:none !important; }
+}
 
 .sbd-bunting { position:fixed; left:0; right:0; top:calc(var(--sat) - 1vmin); height: calc(11*var(--u)); pointer-events:none; transform-origin: top; animation: sbd-swing .9s cubic-bezier(.3,1.4,.5,1) both; z-index:3; }
 .sbd-bunting svg { width:100%; height:100%; filter: drop-shadow(0 .5vmin .5vmin rgba(0,0,0,.4)); }

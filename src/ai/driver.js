@@ -22,8 +22,11 @@ export function forwardXZ(q) {
 export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, human, headlight } = {}) {
   // On the slower tracks the terrain, not the driver, sets the speed unless the driver holds back: tier the target speed by skill.
   const TRACK_CAP = { village: (k) => 8.2 + 7.6 * k, corn: (k) => 9.0 + 8.0 * k };
+  const PACE_K = { village: 0.45, corn: 0.45 };
   const capFn = TRACK_CAP[world.trackId];
   const flat = !!(world.flags && world.flags.flat);
+  // corn / village: the good drivers dig in harder (a solid human paddler out-paces them otherwise); the back of the field is untouched
+  const paceK = capFn ? 1 + (PACE_K[world.trackId] ?? 0.45) * Math.max(0, (profile.skill ?? 0.5) - 0.3) : 1;
   // flat circuit: nothing but paddling moves a cart, so the speed ladder is compressed (the back of the field must not get lapped)
   const FC = 9.8, FK = 0.8;
   const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
@@ -223,7 +226,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     let catchUp = 1; // flat: backmarkers dig in when the field is pulling away, so nobody gets lapped
     if (flat && others.length) { let lead = s; for (const o of others) if (o.s > lead) lead = o.s; catchUp = 1 + CU * clamp((lead - s - 100) / 250, 0, 1); }
     const standing = flat && t < 7 ? 1 + 0.3 * (1 - t / 7) : 1; // flat start: everybody is off the line promptly (the player starts mid-grid)
-    const cadence = standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
+    const cadence = paceK * standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;

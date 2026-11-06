@@ -124,7 +124,7 @@ export function createHazardField(track, seed = 1, opts = {}) {
           o.cut += w * z.dip;
           if (z.stones) for (const st of z.stones) { const dd = Math.hypot(s - st.s, d - st.d); if (dd < st.r) o.lift += st.h * (1 - smoothstep(0.35, 1, dd / st.r)); }
         }
-      } else if (z.stairs) { o.lift += w * 0.1 * (Math.sin(s * 3.4) > 0.2 ? 1 : 0); }
+      } else if (z.stairs) { o.lift += w * (z.stairH ?? 0.1) * (Math.sin(s * 3.4) > 0.2 ? 1 : 0); }
       else o.lift += w * (-z.dip + z.bumpAmp * (0.6 * nz.n2(s * 1.7 + z.seed, d * 2.1) + 0.4 * nz.n2(s * 4.3, d * 5.1)));
     }
     return o;

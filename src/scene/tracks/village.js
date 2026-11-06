@@ -69,7 +69,7 @@ export function planVillage(seed) {
         const pts = [[A0.px, A0.pz], [A.px, A.pz]];
         const nseg = 6;
         for (let k = 1; k < nseg; k++) {
-          const u = k / nseg, wig = pd.kind === 'alley' ? (k % 2 ? 3.5 : -3.5) * Math.sin(Math.PI * u) : 0;
+          const u = k / nseg, wig = pd.kind === 'alley' ? (k % 2 ? 2.2 : -2.2) * Math.sin(Math.PI * u) : 0;
           const bulge = amp * Math.sin(Math.PI * u) ** 1.3;
           pts.push([A.px + chord[0] * u + nx * (bulge + wig), A.pz + chord[1] * u + nz * (bulge + wig)]);
         }
@@ -86,7 +86,7 @@ export function planVillage(seed) {
         yFn: (s, x, z, total) => yMain(fromS + (clamp(s, 0, total) / total) * (toS - fromS)),
         widthFn: (s, kap, total) => lerp(MAIN_W, w0, smoothstep(0, 28, s) * smoothstep(0, 28, total - s)), camberFn: () => 0,
       });
-      road.surf = pd.kind === 'alley' ? { type: 'cobble', friction: 0.8, drag: 0.02, bump: 0.3 } : pd.kind === 'river' ? { type: 'cobble', friction: 0.86, drag: 0.0, bump: 0.1 } : { type: 'cobble', friction: 0.8, drag: 0.02, bump: 0.22 };
+      road.surf = pd.kind === 'alley' ? { type: 'cobble', friction: 0.95, drag: 0.0, bump: 0.08 } : pd.kind === 'river' ? { type: 'cobble', friction: 0.86, drag: 0.0, bump: 0.1 } : { type: 'cobble', friction: 0.8, drag: 0.02, bump: 0.22 };
       road.kind = pd.kind;
       branches.push({ road, splitId: sp.id, pathIndex, fromS, toS, name: pd.name, note: pd.note });
       for (let k = 0.3; k <= 0.7; k += 0.2) { road.atS(road.length * k, mq); builtMid.push([mq.px, mq.pz]); }
@@ -127,6 +127,13 @@ export function planVillage(seed) {
     }
   };
   main.field = createHazardField(main, seed + 11, { order: ['puddle', 'rock', 'puddle', 'stall', 'rock', 'puddle'], start: 190, startJit: 25, gap1: 55, gap2: 60, endGap: 110, stallEdge: true, noStall: SPLITS.flatMap((sp) => [[sp.fromS - 30, sp.fromS + 115], [sp.toS - 115, sp.toS + 30]]) });
+  main.field.zones.forEach((z, zi) => {   // main-street stalls: all props on ONE kerb side (a clear 4 m lane on the other) instead of a zig-zag chicane that trapped the AI
+    if (z.kind !== 'stall') return;
+    const side = zi % 2 ? 1 : -1;
+    for (const ob of z.obstacles) { ob.d = side * Math.abs(ob.d); ob.r *= 0.9; }
+    z.lateral = side * (z.hw - 1.0); z.b = 1.1;
+    const hh = main.field.hazards[zi]; hh.lateral = z.lateral; hh.halfWidth = z.b;
+  });
   addHaz(main, main.field);
   const softRocks = (f) => { for (const z of f.zones) if (z.kind === 'rock') { z.bump = 0.5; z.friction = 0.84; } };   // visible rubble, but not a speed trap
   softRocks(main.field);
@@ -137,12 +144,17 @@ export function planVillage(seed) {
         : { order: ['puddle', 'puddle', 'rock'], start: 45, startJit: 15, gap1: 60, gap2: 30, endGap: 40 };
     b.road.field = createHazardField(b.road, seed + 31 + b.road.id, opts);
     softRocks(b.road.field);
+    if (kind === 'alley') for (const z of b.road.field.zones) {   // gentle steps / rubble: a sloppy line must not stop the cart; the alley is the fast, direct route
+      if (z.kind === 'steps') { z.a = 3.2; z.stairH = 0.045; z.bump = 0.3; z.drag = 0.0; z.friction = 0.84; }
+      if (z.kind === 'rock') { z.bump = 0.35; z.friction = 0.86; z.drag = 0.02; }
+    }
     addHaz(b.road, b.road.field);
   }
 
   // ---- terrain verge: vertical kerb (0.13 m) + a short pavement, then a steep wall (house plinths / garden walls / parapets) ----
   const WALL = 2.1, OUT = 9, LOW = 0.9, LOWR = 0.5;   // LOWR: river-side parapet (low enough to see the water from the cockpit)
   const lowEdge = (road, s, sg) => {   // 0..1: how far the street edge is a low parapet instead of a full wall (market square middle third, river side)
+    if (!road.kind) return Math.max(1 - smoothstep(60, 80, s), smoothstep(LEN - 55, LEN - 35, s));   // start / finish straights: low wall, the crowd stands behind it
     if (road.kind === 'market') { const u = s / road.length; return smoothstep(0.2, 0.3, u) * (1 - smoothstep(0.7, 0.8, u)); }
     if (road.kind === 'river' && sg === road.riverSide) { const wr = road.waterRun; return wr ? smoothstep(wr[0] + 4, wr[0] + 28, s) * (1 - smoothstep(wr[1] - 28, wr[1] - 4, s)) : 0; }
     return 0;
@@ -477,12 +489,12 @@ export function planVillage(seed) {
       // loose cobbles / rubble scattered over bumpy "rock" and step zones
       for (const z of road.field.zones) {
         if (z.kind !== 'rock' && z.kind !== 'steps') continue;
-        const n = z.kind === 'rock' ? 22 : 5;
+        const n = z.kind === 'rock' ? 9 : 5;
         for (let i = 0; i < n; i++) {
           const ds = (rnd() - 0.5) * z.a * 1.4, dd = z.lateral + (rnd() - 0.5) * 2 * Math.min(z.b, road.atS(z.s, pp).hw) * 0.85;
           road.atS(z.s + ds, pp); const x = pp.px + pp.rhx * dd, zz = pp.pz + pp.rhz * dd, y = terrain.heightAt(x, zz);
-          const prog = road.map ? road.map.fromS + ((z.s + ds) / road.map.len) * (road.map.toS - road.map.fromS) : z.s + ds, sc = (z.kind === 'rock' ? 0.2 + rnd() * rnd() * 0.5 : 0.16 + rnd() * 0.2), g = 0.5 + rnd() * 0.32;
-          batchOf(prog).add('concrete', boxG(sc, sc * (z.kind === 'rock' ? 0.7 : 0.45), sc * 0.8, 1), xf(x, y + sc * (z.kind === 'rock' ? 0.18 : 0.1), zz, rnd() * 0.5, rnd() * 3, rnd() * 0.5), [g, g * 0.97, g * 0.92]);
+          const prog = road.map ? road.map.fromS + ((z.s + ds) / road.map.len) * (road.map.toS - road.map.fromS) : z.s + ds, sc = (z.kind === 'rock' ? 0.3 + rnd() * 0.32 : 0.16 + rnd() * 0.2), g = 0.42 + rnd() * 0.3;
+          batchOf(prog).add('concrete', z.kind === 'rock' ? sphG(sc * 0.62, 6, 4, 1) : boxG(sc, sc * 0.45, sc * 0.8, 1), z.kind === 'rock' ? xf(x, y + sc * 0.2, zz, rnd() * 0.6, rnd() * 3, rnd() * 0.6, 1, 0.75, 0.9) : xf(x, y + sc * 0.1, zz, rnd() * 0.5, rnd() * 3, rnd() * 0.5), [g, g * 0.97, g * 0.92]);
         }
       }
     }
@@ -516,8 +528,9 @@ export function planVillage(seed) {
     const bunt = (i) => ({ col: [[0.9, 0.2, 0.2], [0.95, 0.95, 0.9], [0.2, 0.4, 0.8], [0.95, 0.75, 0.2]][i % 4], wdt: 0.3, hgt: 0.45 });
     const upv = new THREE.Vector3(0, 1, 0), tmpV = new THREE.Vector3();
     const SPECT = [[0.85, 0.25, 0.2], [0.2, 0.4, 0.75], [0.9, 0.75, 0.2], [0.3, 0.6, 0.35], [0.85, 0.5, 0.7], [0.95, 0.95, 0.9], [0.45, 0.3, 0.2]];
+    let crowdSc = 0;
     function person(b, x, y, z, yaw, wave) {   // small static villager: legs/body, head, arms (one raised when waving)
-      const c = SPECT[Math.floor(rnd() * SPECT.length)], sc = 0.9 + rnd() * 0.2, M = xf(x, y, z, 0, yaw, 0, sc), L = (m) => M.clone().multiply(m);
+      const c = SPECT[Math.floor(rnd() * SPECT.length)], sc = (crowdSc || 0.9) + rnd() * 0.2 * (crowdSc ? 0.5 : 1), M = xf(x, y, z, 0, yaw, 0, sc), L = (m) => M.clone().multiply(m);
       b.add('dark', cylG(0.2, 0.26, 0.85, 6, 1), L(xf(0, 0.42, 0)), [0.2, 0.2, 0.28]);
       b.add('dark', cylG(0.24, 0.2, 0.6, 6, 1), L(xf(0, 1.15, 0)), c);
       b.add('dark', sphG(0.16, 6, 5, 1), L(xf(0, 1.6, 0)), [0.95, 0.76, 0.6]);
@@ -525,12 +538,14 @@ export function planVillage(seed) {
       if (wave) b.add('dark', boxG(0.09, 0.5, 0.09, 1), L(xf(0.33, 1.65, 0, 0, 0, -0.35)), c); else b.add('dark', boxG(0.09, 0.5, 0.09, 1), L(xf(0.3, 1.1, 0)), c);
     }
     const frameAt = (road, s) => { road.atS(s, pp); return { px: pp.px, py: pp.py, pz: pp.pz, hw: pp.hw, rx: pp.rhx, rz: pp.rhz, tx: pp.rhz, tz: -pp.rhx }; };
-    function crowd(sA, sB, step) {   // spectators on the wall tops behind the kerb, waving at the carts
+    function crowd(sA, sB, step) {
+      crowdSc = 0.82;   // spectators on the wall tops behind the kerb, waving at the carts
       for (const sg of [-1, 1]) for (let s = sA + rnd(); s < sB; s += step * (0.7 + rnd() * 0.6)) {
         const f = frameAt(main, s), d = sg * (f.hw + 1.45 + rnd() * 0.5), x = f.px + f.rx * d, z = f.pz + f.rz * d;
-        person(batchOf(s), x, f.py + WALL, z, Math.atan2(-sg * f.rx, -sg * f.rz) + (rnd() - 0.5) * 0.7, rnd() < 0.45);
+        person(batchOf(s), x, f.py + wallTop(main, s, sg), z, Math.atan2(-sg * f.rx, -sg * f.rz) + (rnd() - 0.5) * 0.7, rnd() < 0.45);
       }
     }
+    const crowdEnd = () => { crowdSc = 0; };
     function archAt(s, text, bg, fg) {
       const f = frameAt(main, s), b = batchOf(s), R = new THREE.Vector3(f.rx, 0, f.rz), T = new THREE.Vector3(f.tx, 0, f.tz);
       const M = new THREE.Matrix4().makeBasis(R, upv, T.clone().negate()).setPosition(f.px, f.py, f.pz), L = (m) => M.clone().multiply(m), half = f.hw + 0.75;
@@ -554,10 +569,10 @@ export function planVillage(seed) {
     }
     // start: gate beyond the front row, crowd on both walls, a house closing the view behind the grid
     archAt(32, 'START', '#f4f1e6', '#b3261e');
-    crowd(-30, 70, 1.6);
+    crowd(-30, 70, 1.6); crowdEnd();
     // finish: arch + banner + bigger crowd, town hall closing the view past the end of the street
     archAt(LEN, 'FINISH', '#f4f1e6', '#111111');
-    crowd(LEN - 45, LEN + 35, 1.3);
+    crowd(LEN - 45, LEN + 35, 1.3); crowdEnd();
     {
       const clo = (sEnd, dir, w, floors) => {   // building straddling the street axis just beyond the last road sample, front facing the street
         const f = frameAt(main, sEnd), T = new THREE.Vector3(f.tx, 0, f.tz).multiplyScalar(dir), R = new THREE.Vector3(f.rx, 0, f.rz).multiplyScalar(-dir);
@@ -682,8 +697,8 @@ export function planVillage(seed) {
           road.atS(sx, pp); const d = rs * (pp.hw + WB + 2.2), x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, y = pp.py - 0.5, b = batchOf(progOf(road, sx)), cl = reg.clear(x, z);
           if (cl < 2.5) continue;
           b.add('woodWeathered', cylG(0.22, 0.42, 3.4, 6, 1), xf(x, y + 1.7, z, 0, 0, 0.08), [0.36, 0.3, 0.24]);
-          b.add('dark', sphG(1.9, 7, 5, 1), xf(x, y + 4.2, z, 0, 0, 0, 1, 0.62, 1), [0.1, 0.17, 0.07]);
-          for (let i = 0; i < 9; i++) { const a = i * 0.698 + sx, rr = 1.6 + 0.3 * ((i * 7) % 3); b.add('dark', sphG(1, 5, 4, 1), xf(x + Math.cos(a) * rr, y + 2.6, z + Math.sin(a) * rr, 0, 0, 0, 0.5, 1.75, 0.5), i % 2 ? [0.1, 0.16, 0.07] : [0.14, 0.21, 0.09]); }
+          b.add('dark', sphG(1.9, 7, 5, 1), xf(x, y + 4.3, z, 0, 0, 0, 1, 0.55, 1), [0.04, 0.08, 0.03]);
+          for (let i = 0; i < 16; i++) { const a = i * 0.39 + sx, rr = 1.5 + 0.35 * ((i * 7) % 3); b.add('dark', sphG(1, 4, 4, 1), xf(x + Math.cos(a) * rr, y + 2.9, z + Math.sin(a) * rr, 0, 0, 0, 0.2, 1.9, 0.2), i % 2 ? [0.04, 0.08, 0.03] : [0.06, 0.11, 0.04]); }
         }
       } else if (k === 'market') {
         const apron = [], aI = []; let rows = 0;
@@ -732,14 +747,16 @@ export function planVillage(seed) {
           road.atS(sx, pp); const d = sg * (pp.hw + ROW + 0.4);
           batchOf(progOf(road, sx)).add('woodWeathered', boxG(0.22, h + 2.2, 0.22, 1), xf(pp.px + pp.rhx * d, pp.py + (h - 2.2) / 2, pp.pz + pp.rhz * d), [0.42, 0.3, 0.2]);
         };
+        const beamFree = (sx) => { road.atS(sx, pp); for (const e of [-1, 1]) for (const dd of [pp.hw + 0.5, pp.hw + 1.6]) if (reg.clear(pp.px + pp.rhx * e * dd, pp.pz + pp.rhz * e * dd, road.id) < 2.5) return false; return true; };   // no beams / washing lines where Main Street or another lane runs close
         for (let sx = 13 + rnd() * 4, n = 0; sx < road.length - 13; sx += 12 + rnd() * 5, n++) {
           road.atS(sx, pp); const yaw = Math.atan2(-pp.rhz, pp.rhx), M = xf(pp.px, pp.py, pp.pz, 0, yaw, 0), L = (m) => M.clone().multiply(m), hw2 = pp.hw + ROW + 0.35, b = batchOf(progOf(road, sx));
           if (reg.clear(pp.px, pp.pz, road.id) < 1) continue;   // not in a junction mouth
+          if (!beamFree(sx)) continue;
           const bh = 4.3 + 0.15 * (n % 2);
           b.add('woodWeathered', boxG(2 * hw2 + 0.9, 0.2, 0.24, 1), L(xf(0, bh, 0)), [0.4, 0.28, 0.18]);
           for (const e of [-1, 1]) { b.add('woodWeathered', boxG(1.3, 0.13, 0.16, 1), L(xf(e * (hw2 - 0.55), bh - 0.45, 0, 0, 0, -e * 0.7)), [0.38, 0.27, 0.18]); if (!inSpan(road, e, sx)) post(sx, e, bh + 0.1); }
           const sl = sx + 6;   // washing line between beams
-          if (sl < road.length - 10) {
+          if (sl < road.length - 10 && beamFree(sl)) {
             for (const e of [-1, 1]) if (!inSpan(road, e, sl)) post(sl, e, 5.0);
             crossStreet(road, sl, 4.9, 0.55, () => ({ col: [[0.95, 0.95, 0.9], [0.9, 0.5, 0.5], [0.5, 0.65, 0.9], [0.95, 0.85, 0.5], [0.4, 0.7, 0.45]][Math.floor(rnd() * 5)], wdt: 0.42, hgt: 0.85 }), 0.4);
           }
