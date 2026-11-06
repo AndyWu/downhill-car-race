@@ -1,0 +1,4 @@
+=== village
+player truck 0: rho(skill,s@90) 0.88  Ace 1053 > Rosco 803 > Maeve 802 > Buster 801 > Vance 801 > Tilly 799 > Dot 751 > Clementine 710 > Barnaby 676
+player truck 4: rho(skill,s@90) 0.90  Ace 1053 > Vance 955 > Maeve 772 > Rosco 744 > Tilly 738 > Buster 733 > Dot 713 > Clementine 700 > Barnaby 675
+=== corn
