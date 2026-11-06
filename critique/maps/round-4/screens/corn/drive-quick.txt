@@ -1,0 +1,16 @@
+{"tag":"lock_600_14_R","s0":600,"v0":14,"side":1,"excBeyondEdge":1.27,"minUpY":0.948,"rollDeg":18.6,"recoverAfterRelease":1.5,"vAtRelease":5.35,"vMin":5.35,"surfs":"dirt/corn/gravel","resp":0}
+{"tag":"lock_600_14_L","s0":600,"v0":14,"side":-1,"excBeyondEdge":1.12,"minUpY":0.946,"rollDeg":18.9,"recoverAfterRelease":null,"vAtRelease":6.5,"vMin":6.47,"surfs":"dirt/corn","resp":0}
+{"tag":"lock_2100_14_R","s0":2100,"v0":14,"side":1,"excBeyondEdge":1.22,"minUpY":0.927,"rollDeg":22,"recoverAfterRelease":null,"vAtRelease":6.56,"vMin":6.56,"surfs":"gravel/corn/dirt","resp":0}
+{"tag":"pump_340_14_R","s0":328,"v0":14,"side":1,"excBeyondEdge":1.58,"minUpY":0.94,"rollDeg":19.9,"recoverAfterRelease":null,"vAtRelease":5.32,"vMin":5.28,"surfs":"dirt/wall/corn/sand","resp":0}
+{"tag":"gap_1780_14_R","s0":1770,"v0":14,"side":1,"excBeyondEdge":0.95,"minUpY":0.935,"rollDeg":20.8,"recoverAfterRelease":2,"vAtRelease":6.32,"vMin":5.9,"surfs":"dirt/corn","resp":0}
+{"tag":"pump_1215_14_R","s0":1195,"v0":14,"side":1,"excBeyondEdge":0.95,"minUpY":0.944,"rollDeg":19.3,"recoverAfterRelease":null,"vAtRelease":7.11,"vMin":6.96,"surfs":"dirt/corn/mud","resp":0}
+{"tag":"farm_2020_14_R","s0":1990,"v0":14,"side":1,"excBeyondEdge":1.06,"minUpY":0.93,"rollDeg":21.6,"recoverAfterRelease":null,"vAtRelease":5.46,"vMin":5.46,"surfs":"dirt/corn","resp":0}
+SUMMARY
+{"tag":"lock_600_14_R","s0":600,"v0":14,"side":1,"excBeyondEdge":1.27,"minUpY":0.948,"rollDeg":18.6,"recoverAfterRelease":1.5,"vAtRelease":5.35,"vMin":5.35,"surfs":"dirt/corn/gravel","resp":0}
+{"tag":"lock_600_14_L","s0":600,"v0":14,"side":-1,"excBeyondEdge":1.12,"minUpY":0.946,"rollDeg":18.9,"recoverAfterRelease":null,"vAtRelease":6.5,"vMin":6.47,"surfs":"dirt/corn","resp":0}
+{"tag":"lock_2100_14_R","s0":2100,"v0":14,"side":1,"excBeyondEdge":1.22,"minUpY":0.927,"rollDeg":22,"recoverAfterRelease":null,"vAtRelease":6.56,"vMin":6.56,"surfs":"gravel/corn/dirt","resp":0}
+{"tag":"pump_340_14_R","s0":328,"v0":14,"side":1,"excBeyondEdge":1.58,"minUpY":0.94,"rollDeg":19.9,"recoverAfterRelease":null,"vAtRelease":5.32,"vMin":5.28,"surfs":"dirt/wall/corn/sand","resp":0}
+{"tag":"gap_1780_14_R","s0":1770,"v0":14,"side":1,"excBeyondEdge":0.95,"minUpY":0.935,"rollDeg":20.8,"recoverAfterRelease":2,"vAtRelease":6.32,"vMin":5.9,"surfs":"dirt/corn","resp":0}
+{"tag":"pump_1215_14_R","s0":1195,"v0":14,"side":1,"excBeyondEdge":0.95,"minUpY":0.944,"rollDeg":19.3,"recoverAfterRelease":null,"vAtRelease":7.11,"vMin":6.96,"surfs":"dirt/corn/mud","resp":0}
+{"tag":"farm_2020_14_R","s0":1990,"v0":14,"side":1,"excBeyondEdge":1.06,"minUpY":0.93,"rollDeg":21.6,"recoverAfterRelease":null,"vAtRelease":5.46,"vMin":5.46,"surfs":"dirt/corn","resp":0}
+[]
