@@ -202,6 +202,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
         if (vo > 0) { v.x -= rt.x * sg * vo * 1.2; v.z -= rt.z * sg * vo * 1.2; }
         if (vo > -0.5) { v.x -= rt.x * sg * 0.6 * h * 6; v.z -= rt.z * sg * 0.6 * h * 6; }   // gentle push back toward the lane
         if (v.y > 0) v.y = 0;
+        if (world.flags.noStuckRescue) { const sc = 1 - 1.1 * h; v.x *= sc; v.z *= sc; }   // speedway only: scraping a barrier scrubs speed (about 60 %/s) so a flat-out hairpin costs time; corn/village keep theirs
         // swing the nose along the wall (a wall hit must not spin the cart round or bleed its speed)
         const tg = world.track.sampleAt(Math.max(0, state.s)).tangent;
         _fwd.set(0, 0, -1).applyQuaternion(q);
