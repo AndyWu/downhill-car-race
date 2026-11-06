@@ -22,7 +22,7 @@ export function forwardXZ(q) {
 export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, human, headlight } = {}) {
   // On the slower tracks the terrain, not the driver, sets the speed unless the driver holds back: tier the target speed by skill.
   const TRACK_CAP = { village: (k) => 8.2 + 7.6 * k, corn: (k) => 9.0 + 8.0 * k };
-  const PACE_K = { village: 0.45, corn: 0.45 };
+  const PACE_K = { village: 0.8, corn: 0.8 };
   const capFn = TRACK_CAP[world.trackId];
   const flat = !!(world.flags && world.flags.flat);
   // corn / village: the good drivers dig in harder (a solid human paddler out-paces them otherwise); the back of the field is untouched

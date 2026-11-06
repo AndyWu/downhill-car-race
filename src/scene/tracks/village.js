@@ -69,7 +69,7 @@ export function planVillage(seed) {
         const pts = [[A0.px, A0.pz], [A.px, A.pz]];
         const nseg = 6;
         for (let k = 1; k < nseg; k++) {
-          const u = k / nseg, wig = pd.kind === 'alley' ? (k % 2 ? 2.2 : -2.2) * Math.sin(Math.PI * u) : 0;
+          const u = k / nseg, wig = pd.kind === 'alley' ? (k % 2 ? 3.5 : -3.5) * Math.sin(Math.PI * u) : 0;
           const bulge = amp * Math.sin(Math.PI * u) ** 1.3;
           pts.push([A.px + chord[0] * u + nx * (bulge + wig), A.pz + chord[1] * u + nz * (bulge + wig)]);
         }
@@ -430,10 +430,10 @@ export function planVillage(seed) {
             }
             for (const [ri, nb] of [[i0, i0 - 1], [i1, i1 + 1]]) {   // end-posts where the wall stops at a junction
               if (nb < 0 || nb >= n || rowR[nb] !== 2) continue;
-              const s = (road.length * ri) / (n - 1); road.atS(s, pp); const tp = wallTop(road, s, sg), yaw = Math.atan2(-pp.rhz, pp.rhx), d = sg * (pp.hw + ROW + 0.95);
+              const s = (road.length * ri) / (n - 1); road.atS(s, pp); const tp = Math.min(wallTop(road, s, sg), 1.1), yaw = Math.atan2(-pp.rhz, pp.rhx), d = sg * (pp.hw + ROW + 0.95);   // gore-tip posts stay low (a bollard, not a slab standing in the street)
               const prog = road.map ? road.map.fromS + (s / road.map.len) * (road.map.toS - road.map.fromS) : s, bb = batchOf(prog), top = tp + 0.12;
-              bb.add('concrete', boxG(2.5, top + 0.9, 0.85, 1.5), xf(pp.px + pp.rhx * d, pp.py + (top - 0.9) / 2, pp.pz + pp.rhz * d, 0, yaw, 0), [0.88, 0.84, 0.76]);
-              bb.add('concrete', boxG(2.7, 0.14, 1.05, 1), xf(pp.px + pp.rhx * d, pp.py + top + 0.07, pp.pz + pp.rhz * d, 0, yaw, 0), [0.78, 0.75, 0.7]);
+              bb.add('concrete', boxG(1.7, top + 0.9, 0.85, 1.5), xf(pp.px + pp.rhx * d, pp.py + (top - 0.9) / 2, pp.pz + pp.rhz * d, 0, yaw, 0), [0.88, 0.84, 0.76]);
+              bb.add('concrete', boxG(1.9, 0.14, 1.05, 1), xf(pp.px + pp.rhx * d, pp.py + top + 0.07, pp.pz + pp.rhz * d, 0, yaw, 0), [0.78, 0.75, 0.7]);
             }
           }
           i0 = i1 + 1;
@@ -591,11 +591,11 @@ export function planVillage(seed) {
       for (const bd of branches) if (bd.splitId === sp.id) {
         bd.road.atS(30, qq); const lat = (qq.px - f.px) * f.rx + (qq.pz - f.pz) * f.rz;   // true side of the branch ~30 m into it
         let tip = null;   // first point along the branch where the gap to Main Street exceeds 5 m: the gore pocket opens here
-        for (let sx = 6; sx < 90; sx += 1) { bd.road.atS(sx, pp); const c = reg.clear(pp.px, pp.pz, bd.road.id) - pp.hw; if (c > 5) { tip = { sx, hw: pp.hw, px: pp.px, pz: pp.pz, rx: pp.rhx, rz: pp.rhz, py: pp.py }; break; } }
+        for (let sx = 6; sx < 90; sx += 1) { bd.road.atS(sx, pp); const c = reg.clear(pp.px, pp.pz, bd.road.id) - pp.hw; if (c > 3.9) { tip = { sx, hw: pp.hw, px: pp.px, pz: pp.pz, rx: pp.rhx, rz: pp.rhz, py: pp.py }; break; } }
         rows.push({ name: bd.name, lat: Math.abs(lat) < 5 ? (lat >= 0 ? 6 : -6) : lat, tip, bd });
       }
       rows.sort((p1, p2) => p1.lat - p2.lat);
-      const fp = rows.filter((r) => r.tip)[0];
+      const fp = rows.filter((r) => r.tip).sort((p1, p2) => p1.tip.sx - p2.tip.sx)[0];
       if (fp) {   // fingerpost between the two diverging roads at the tip of the gore, facing the approaching carts
         const mdir = frameAt(main, sp.fromS + 22), t = fp.tip, sgM = Math.sign((mdir.px - t.px) * t.rx + (mdir.pz - t.pz) * t.rz) || 1;
         fork.set(sp.id, { rows, tip: fp.tip, bd: fp.bd, sgM });

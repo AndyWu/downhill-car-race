@@ -147,7 +147,7 @@ export function planCircuit(seed) {
     const warmMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 0.55, 0.42) });
     const lampMat = new THREE.MeshBasicMaterial({ vertexColors: true });
     let lampAttr = null, lampVerts = 0;   // one merged mesh, one colour per lamp (vertex colours) = a single draw call
-    const poolMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+    const poolMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
     const merged = (list) => { const gs = list.map(([g, m]) => { const c = g.clone(); c.applyMatrix4(m); return c; }); const g = mergeGeometries(gs, false); g.computeBoundingSphere(); return g; };
 
     // ---- draped strip along the road: rows every `step` metres, d from dA to dB, uv = (u across 0..1, v = s / vLen) ----
@@ -544,12 +544,12 @@ export function planCircuit(seed) {
         }
         for (let r = 0; r < rows - 1; r++) for (let k = 0; k < COLS - 1; k++) { const i0 = base + r * COLS + k; idx.push(i0, i0 + COLS, i0 + 1, i0 + 1, i0 + COLS, i0 + COLS + 1); }
       };
-      strip(0, LAP, 4, () => [0.11, 0.14, 0.22]);   // cool fill so carts never read as black cut-outs
+      strip(0, LAP, 4, () => [0.004, 0.0055, 0.01]);   // cool fill so carts never read as black cut-outs
       for (const [ts] of towerS) {
         const R = 26;
         strip(ts - R, ts + R, 2, (s, u, um) => {
           const a = Math.abs(s - ts) / R, f = a >= 1 ? 0 : (1 + Math.cos(Math.PI * a)) * 0.5, lat = 1 - 0.45 * u * u, hp = 1 - 0.55 * smoothstep(0.02, 0.04, Math.abs(kapAt(um)));
-          const v = 0.8 * f * f * lat * hp; return [v, v * 0.84, v * 0.6];
+          const v = 0.02 * f * f * lat * hp; return [v, v * 0.84, v * 0.6];
         });
       }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(Pa, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(Ca, 3)); g.setIndex(idx); g.computeBoundingSphere(); return g;
