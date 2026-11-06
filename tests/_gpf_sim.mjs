@@ -63,7 +63,8 @@ async function race(seed, { profiles = AI_ROSTER, maxT = 1100, truck = null, rub
         if (c.driver.needsRescue) { if (process.env.RESLOG) console.log('RESC', c.name, 't', (t - CD).toFixed(0), 's', c.body.state.s.toFixed(0), 'lat', c.body.state.lateral.toFixed(1)); let ex = 0; for (const o of cars) if (o !== c && o._rt != null && t - o._rt < 0.6 && Math.abs(o.body.state.s - c.body.state.s) < 8) ex += 9; c._rt = t; c.body.recover((c.driver.rescueAhead ? c.driver.rescueAhead() : 12) + ex, 3, c.driver.choice || null); c.driver.clearStuck(); c.resets++; }
       }
       if (inp.paddleL + inp.paddleR > 0) c.strokes = (c.strokes || 0) + 1;
-      if (process.env.TR && racing && process.env.TR.split(",").includes(c.name) && Math.round((t - CD) / dt) % 30 === 0 && t - CD > Number(process.env.T0||0) && t - CD < Number(process.env.TT || 40)) console.log("TR", (t - CD).toFixed(0), c.name, "s", c.body.state.s.toFixed(0), 'lat', c.body.state.lateral.toFixed(1), 'v', c.body.state.speed.toFixed(1), 'strokes', c.strokes || 0);
+      if (process.env.TR && racing && process.env.TR.split(",").includes(c.name) && Math.round((t - CD) / dt) % 10 === 0 && t - CD > Number(process.env.T0||0) && t - CD < Number(process.env.TT || 40)) console.log("TR", (t - CD).toFixed(0), c.name, "s", c.body.state.s.toFixed(0), 'lat', c.body.state.lateral.toFixed(1), 'v', c.body.state.speed.toFixed(1), 'strokes', c.strokes || 0);
+      if (process.env.DB && c.name==='Vance' && racing && Math.round((t-CD)/dt)%20===0 && t-CD>130 && t-CD<135) console.log('DB',(t-CD).toFixed(1),JSON.stringify(c.driver.dbg,(k,v)=>typeof v==='number'?+v.toFixed(2):v));
       inp.draft = draftFactor(c.body, bodies);
       c.body.step(dt, inp);
       if (racing && c.finished == null) {
@@ -81,6 +82,7 @@ async function race(seed, { profiles = AI_ROSTER, maxT = 1100, truck = null, rub
         if (st.s >= world.track.length - 3) c.finished = t - CD;
       }
     }
+    if (pBody && process.env.PL && Math.round((t - CD) / dt) % 120 === 0 && t-CD>100 && t-CD<140) console.log('PL', (t-CD).toFixed(0), pBody.state.s.toFixed(0), pBody.state.lateral.toFixed(1), pBody.state.speed.toFixed(1));
     if (pBody) pBody.step(dt, racing ? { ...idle } : { ...idle, handbrake: 1 });
     // finished cars park on the line (circuit: that is every lap's start); the game should make them ghosts -> no collisions
     const fin = new Set(cars.filter((c) => c.finished != null).map((c) => c.body));

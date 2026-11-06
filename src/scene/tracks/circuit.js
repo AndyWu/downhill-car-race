@@ -257,7 +257,7 @@ export function planCircuit(seed) {
         }
         for (let r = 0; r < rows - 1; r++) for (let k = 0; k < cols - 1; k++) { const i0 = r * cols + k; if (sg > 0) idx.push(i0, i0 + cols, i0 + 1, i0 + 1, i0 + cols, i0 + cols + 1); else idx.push(i0, i0 + 1, i0 + cols, i0 + 1, i0 + cols + 1, i0 + cols); }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(Pa, 3)); g.setAttribute('normal', new THREE.BufferAttribute(Na, 3)); g.setAttribute('uv', new THREE.BufferAttribute(Ua, 2)); g.setIndex(idx); g.computeBoundingSphere();
-        const m = new THREE.Mesh(g, decal(textureOf('gravel'), { side: THREE.DoubleSide, polygonOffsetFactor: -3, polygonOffsetUnits: -3, color: new THREE.Color(1.75, 1.72, 1.62) })); m.name = 'gravel_trap'; m.receiveShadow = true;
+        const m = new THREE.Mesh(g, decal(textureOf('gravel'), { side: THREE.DoubleSide, polygonOffsetFactor: -3, polygonOffsetUnits: -3, color: new THREE.Color(1.8, 1.82, 1.8) })); m.name = 'gravel_trap'; m.receiveShadow = true;
         const grp = new THREE.Group(); grp.add(m); addItem(grp, cOf((a + b) / 2), (b - a) / 2 + 40, 240); a = null;
       };
       for (let s = 385; s <= 510; s += 1) { const g = gravelAt(s, sg); if (g && a == null) a = s; else if (!g && a != null) flush(s - 1); }

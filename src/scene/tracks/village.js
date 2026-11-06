@@ -135,15 +135,16 @@ export function planVillage(seed) {
     const hh = main.field.hazards[zi]; hh.lateral = z.lateral; hh.halfWidth = z.b;
   });
   addHaz(main, main.field);
+  const softPuddles = (f) => { for (const z of f.zones) if (z.kind === 'puddle') { z.friction = 0.7; z.drag = 0.1; } };   // wet cobbles, not an ice patch: slow AI pairs slid into the wall here and had to be rescued together
   const softRocks = (f) => { for (const z of f.zones) if (z.kind === 'rock') { z.bump = 0.5; z.friction = 0.84; } };   // visible rubble, but not a speed trap
-  softRocks(main.field); for (const z of main.field.zones) if (z.kind === 'rock') { z.bump = 0.3; z.friction = 0.88; z.drag = 0.02; }
+  softPuddles(main.field); softRocks(main.field); for (const z of main.field.zones) if (z.kind === 'rock') { z.bump = 0.3; z.friction = 0.88; z.drag = 0.02; }
   for (const b of branches) {
     const kind = b.road.kind;
     const opts = kind === 'market' ? { order: ['stall', 'puddle', 'stall', 'stall'], start: 92, startJit: 8, gap1: 14, gap2: 8, endGap: 24 }
       : kind === 'alley' ? { order: ['steps', 'puddle', 'rock'], start: 34, startJit: 8, gap1: 30, gap2: 22, endGap: 30 }
         : { order: ['puddle', 'puddle', 'rock'], start: 45, startJit: 15, gap1: 60, gap2: 30, endGap: 40 };
     b.road.field = createHazardField(b.road, seed + 31 + b.road.id, opts);
-    softRocks(b.road.field);
+    softPuddles(b.road.field); softRocks(b.road.field);
     if (kind === 'alley') for (const z of b.road.field.zones) {   // gentle steps / rubble: a sloppy line must not stop the cart; the alley is the fast, direct route
       if (z.kind === 'steps') { z.a = 3.2; z.stairH = 0.045; z.bump = 0.3; z.drag = 0.0; z.friction = 0.84; }
       if (z.kind === 'rock') { z.bump = 0.35; z.friction = 0.86; z.drag = 0.02; }
@@ -160,20 +161,22 @@ export function planVillage(seed) {
     return 0;
   };
   const wallTop = (road, s, sg) => lerp(WALL, road.kind === 'river' ? LOWR : LOW, lowEdge(road, s, sg));
+  const PHYS_RIVER = 1.25;   // the river-side parapet is DRAWN 0.5 m high (wallTop) but contains like a 1.25 m wall: a cart steering into the water is turned back, not launched over it
+  const physTop = (road, s, sg) => (road.kind === 'river' && sg === road.riverSide ? lerp(WALL, PHYS_RIVER, lowEdge(road, s, sg)) : wallTop(road, s, sg));
   const verge = (road, s, d, hw, c2 = 99) => {   // c2: clearance to the nearest OTHER road's edge (junction gores)
     const r = Math.abs(d) - (hw + 0.1);
     if (r < 0) return 0;
     const kerb = 0.13 * smoothstep(0, 0.06, r);
     // a wall only stands where a full wall + cap fits between this road and the next one (gap >= 3.5 m); the tip of a gore stays a flat paved pocket
     const amp = c2 > 40 ? 1 : smoothstep(3.5, 3.9, r + 0.1 + c2);
-    const wall = wallTop(road, s, d < 0 ? -1 : 1) * smoothstep(0.55, 0.66, r) * (1 - smoothstep(2.5, 3.3, r)) * amp;
+    const wall = physTop(road, s, d < 0 ? -1 : 1) * smoothstep(0.55, 0.66, r) * (1 - smoothstep(2.5, 3.3, r)) * amp;
     return Math.max(kerb, wall);
   };
   const wallPart = (road, s, d, hw, c2) => {   // the wall component of verge(): subtracted from the drawn road strip (the visible walls are the brick strips / house fronts; the physics wall stays)
     const r = Math.abs(d) - (hw + 0.1);
     if (r < 0.5) return 0;
     const amp = c2 > 40 ? 1 : smoothstep(3.5, 3.9, r + 0.1 + c2);
-    return wallTop(road, s, d < 0 ? -1 : 1) * smoothstep(0.55, 0.66, r) * (1 - smoothstep(2.5, 3.3, r)) * amp;
+    return physTop(road, s, d < 0 ? -1 : 1) * smoothstep(0.55, 0.66, r) * (1 - smoothstep(2.5, 3.3, r)) * amp;
   };
   const roadColsFn = (hw) => {   // road-strip columns: uniform inside, then dense at the kerb / wall so the profile stays crisp
     const P = []; for (let i = 1; i <= 6; i++) P.push((hw * i) / 7);
@@ -357,13 +360,11 @@ export function planVillage(seed) {
           if (wb && rr() < 0.4) wb.add('dark', boxG(0.7, 0.8, 0.05, 1), L(xf(x, y, -0.13)), [1.0, 0.8, 0.42]);
           for (const sx of [-1, 1]) b.add('woodWeathered', boxG(0.42, 1.1, 0.06, 1), L(xf(x + sx * 0.74, y, -0.07)), [sc[0] * 1.2, sc[1] * 1.2, sc[2] * 1.2]);
           if (rr() < 0.55) { const fc = FLOW[Math.floor(rr() * 4)]; b.add('woodWeathered', boxG(1.05, 0.2, 0.26, 1), L(xf(x, y - 0.68, -0.14)), [0.55, 0.4, 0.3]); b.add('dark', boxG(0.95, 0.2, 0.22, 1), L(xf(x, y - 0.55, -0.14)), [fc[0] * 0.8, fc[1] * 0.8, fc[2] * 0.8]); }
-        } else if (t < 0.84) {   // ivy patch
-          const n = 6 + Math.floor(rr() * 4), top = hgt * (0.7 + rr() * 0.35);
-          for (let i = 0; i < n; i++) { const g = rr(), yy = 0.3 + (top - 0.3) * (i + rr() * 0.6) / n, xx = x + (rr() - 0.5) * 1.5; b.add('dark', sphG(0.5, 5, 4, 1), L(xf(xx, yy, -0.12 - rr() * 0.08, 0, 0, 0, 1.0 + g * 0.5, 1.0, 0.3)), [0.05 + g * 0.06, 0.2 + g * 0.14, 0.05 + g * 0.04]); }
-          x += 0.8;
-        } else {   // a lamp bracket / crate of flowers
-          const fc = FLOW[Math.floor(rr() * 4)]; b.add('woodWeathered', boxG(0.9, 0.5, 0.45, 1), L(xf(x, 0.25, -0.25)), [0.55, 0.4, 0.28]); b.add('dark', boxG(0.8, 0.22, 0.38, 1), L(xf(x, 0.58, -0.25)), [fc[0] * 0.8, fc[1] * 0.8, fc[2] * 0.8]);
-        }
+        } else if (t < 0.86) {   // ivy patch: many small dull-green leaf clumps
+          const n = 12 + Math.floor(rr() * 6), top = hgt * (0.75 + rr() * 0.3), wd = 0.5 + rr() * 0.5;
+          for (let i = 0; i < n; i++) { const g = rr(), yy = 0.25 + (top - 0.25) * Math.pow(rr(), 0.8), xx = x + (rr() - 0.5) * wd * 2 * (1 - 0.4 * yy / top); b.add('dark', sphG(0.2, 4, 3, 1), L(xf(xx, yy, -0.06 - rr() * 0.07, 0, 0, 0, 1.0 + g * 0.5, 0.9 + g * 0.5, 0.4)), [0.04 + g * 0.05, 0.14 + g * 0.1, 0.04 + g * 0.03]); }
+          x += 0.6;
+        } else x += 0.6;
       }
     };
     // frontage along one road. setback(s, sg) -> extra metres between street edge and the house fronts (market square, far river bank)
@@ -461,6 +462,19 @@ export function planVillage(seed) {
 
     frontage(main, [-1, 1], -34, -4, false);
     frontage(main, [-1, 1], 75, LEN - 45, false);
+    // start / finish straights: houses stand 3.4 m back behind the low wall + crowd, with a hedge between, so the corridor ends in village instead of open field
+    frontage(main, [-1, 1], -4, 78, false, () => 3.4);
+    frontage(main, [-1, 1], LEN - 50, LEN + 34, false, () => 3.4);
+    {
+      const rh = mulberry32(sd * 29 + 3);
+      for (const [a0, a1] of [[-32, 80], [LEN - 52, LEN + 40]]) for (const sg of [-1, 1]) for (let s0 = a0; s0 < a1; s0 += 3.2) {
+        const bs = mkBasis(main, s0, sg, 2.6);
+        if (reg.clear(bs.base.x, bs.base.z) < 0.9) continue;
+        const M = bs.M.clone(); M.elements[13] = terrain.heightAt(bs.base.x, bs.base.z) - 0.1; const g = rh();
+        batchOf(s0).add('dark', boxG(3.3, 1.2 + g * 0.4, 0.9, 1), M.clone().multiply(xf(0, 0.6, 0)), [0.06 + g * 0.05, 0.2 + g * 0.1, 0.05 + g * 0.03]);
+        if (rh() < 0.4) batchOf(s0).add('dark', sphG(0.7, 5, 4, 1), M.clone().multiply(xf((rh() - 0.5) * 2, 1.4, 0, 0, 0, 0, 1, 0.8, 1)), [0.08, 0.26, 0.07]);
+      }
+    }
     frontage(main, [-1, 1], LEN + 38, LEN + 66, false);
 
     // ---- street walls (visible face of the contain-walls) along every road, merged into the chunk batches ----

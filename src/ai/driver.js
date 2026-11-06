@@ -26,13 +26,15 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   const capFn = TRACK_CAP[world.trackId];
   const flat = !!(world.flags && world.flags.flat);
   // corn / village: the good drivers dig in harder (a solid human paddler out-paces them otherwise); the back of the field is untouched
-  const paceK = capFn ? 1 + (world.trackId === 'corn' ? 0.3 * clamp((0.62 - (profile.skill ?? 0.5)) / 0.45, 0, 1) : 0) + (PACE_K[world.trackId] ?? 0.45) * Math.max(0, (profile.skill ?? 0.5) - 0.3) : 1;
+  const paceK = capFn ? 1 + (world.trackId === 'corn' ? 0.3 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1) : 0) + (PACE_K[world.trackId] ?? 0.45) * Math.max(0, (profile.skill ?? 0.5) - 0.3) : 1;
   // flat circuit: nothing but paddling moves a cart, so the speed ladder is compressed (the back of the field must not get lapped)
   const FC = 9.8, FK = 0.8;
   const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
   // corn: the weak end of the field is lifted (fewer wall rubs and rescues, tighter spread); the corner/speed scale rises as skill falls
-  const cornLift = world.trackId === 'corn' ? 1 + 0.5 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1) : 1;
-  const P = capFn ? { ...profile, speed: { ...profile.speed, cap: capFn(profile.skill ?? 0.5), scale: (profile.speed.scale ?? 1) * cornLift, cornerFactor: profile.speed.cornerFactor * (1 + 0.25 * (cornLift - 1) / 0.5) } }
+  const villTop = world.trackId === 'village' ? 1 + 0.2 * clamp((profile.skill ?? 0.5) - 0.5, 0, 0.34) : 1; // village: the good mid-field cars pull apart instead of travelling as one pack
+  const cornTop = world.trackId === 'corn' ? ((profile.skill ?? 0.5) > 0.9 ? 1.045 : (profile.skill ?? 0.5) > 0.8 ? 1.02 : (profile.skill ?? 0.5) > 0.7 ? 0.93 : 1) : 1; // spreads the top three so they stop convoying
+  const cornLift = (world.trackId === 'corn' ? 1 + 0.55 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1) : 1) * cornTop * villTop;
+  const P = capFn ? { ...profile, speed: { ...profile.speed, cap: capFn(profile.skill ?? 0.5), scale: (profile.speed.scale ?? 1) * cornLift, cornerFactor: profile.speed.cornerFactor * (1 + 0.25 * (cornLift - 1) / 0.55) } }
     : flat ? { ...profile, speed: { ...profile.speed, cap: capOf(profile.speed.cap) } } : profile;
   rng = rng || createRng(1);
   // ---- village: pick a street through every split according to personality (progress-s plan, sampleAt(s, choice)) ----
@@ -59,6 +61,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   const plan = buildPlan(world, P, rng, spec, choice);
   const WB = spec?.wheelBase ?? 1.7, LOCK = spec?.steerLock ?? 0.5;
   const L = plan.length;
+  const lapL = world.flags && world.flags.closed && world.track.lapLength ? world.track.lapLength : 0;
 
   const FLOOR = 8.5;
   const CU = 0.4;
@@ -68,6 +71,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   // paddling state
   let side = rng() < 0.5, nextStroke = 0.2, stamina = 1;
   let attentive = false, nextToggle = 0;
+  const wave = flat ? { per: 30 + 35 * rng(), ph: rng() * 6.283 } : null; // circuit: slow pace swells so the AI order changes now and then (drafting / form)
   // stuck recovery
   let launch = null, blockedT = 0, honkReady = 2, honkRoll = 0, trigPrev = false;
   let passSide = 0, passUntil = 0, passStart = 0, passCool = 0;
@@ -86,7 +90,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     for (const o of others) {
       if (!o || o === self) continue;
       if (o.splitId != null && o.splitId === self.splitId && o.pathIndex != null && self.pathIndex != null && o.pathIndex !== self.pathIndex) continue; // other street
-      const dsO = o.s - s, dl = o.lateral - self.lateral;
+      let dsO = o.s - s; const dl = o.lateral - self.lateral;
+      if (lapL) dsO = ((dsO + lapL / 2) % lapL + lapL) % lapL - lapL / 2; // closed circuit: a car a lap down is still in front of (or behind) you on the road
       if (dsO === 0 && dl === 0) continue;
       if (dsO > 0.5 && dsO < aheadDs && Math.abs(dl) < 3) { ahead = o; aheadDs = dsO; }
       if (Math.abs(dsO) < 5 && Math.abs(dl) > 0.2 && Math.abs(dl) < 2.6 && (!alongside || Math.abs(dl) < Math.abs(alongside.lateral - self.lateral))) alongside = o;
@@ -227,8 +232,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const flatCad = Math.min(4.6, (3.7 + 0.5 * (P.skill ?? 0.5)) * (1 + 0.8 * (1 - clamp(speed / 6, 0, 1))));
     let catchUp = 1; // flat: backmarkers dig in when the field is pulling away, so nobody gets lapped
     if (flat && others.length) { let lead = s; for (const o of others) if (o.s > lead) lead = o.s; catchUp = 1 + CU * clamp((lead - s - 100) / 250, 0, 1); }
-    const standing = flat && t < 7 ? 1 + (0.3 + 1.2 * Math.max(0, (P.skill ?? 0.5) - 0.65)) * (1 - t / 7) : 1; // stronger launch for the better drivers so a human in mid-grid does not lead at once // flat start: everybody is off the line promptly (the player starts mid-grid)
-    const cadence = paceK * standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
+    const standing = flat && t < 9 ? 1 + (0.45 + 1.6 * Math.max(0, (P.skill ?? 0.5) - 0.5)) * (1 - t / 9) : 1; // stronger launch for the better drivers so a human in mid-grid does not lead at once // flat start: everybody is off the line promptly (the player starts mid-grid)
+    const cadence = paceK * standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (wave ? 1 + 0.085 * Math.sin(t * 6.283 / wave.per + wave.ph) : 1) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;
