@@ -213,3 +213,7 @@ Append requests as `- [from Agent N → Agent M] ...`
 ### Map loop round 3 — village fixer
 - Shared edit (tiny): `src/scene/hazards.js` step zones honour optional `z.stairH` (default 0.1, country/corn/circuit unchanged); village alley steps use 0.045.
 - Village: river water/parapet only where the ribbon keeps >= 1.5 m from every other road (`road.waterRun`); main-street stalls removed (all converted to puddles, they trapped AI: 3-seed ai-sim village rescues 44 -> 15, ~5/race); alley surface smoother/faster and steps softened; start/finish straights have a low (0.9 m) wall with 0.82-scale crowd; gore-tip posts lowered; chunky rubble, darker willows, alley beams skip Main Street proximity, fingerpost placed at earliest gore opening.
+
+## Map loop round 4
+### Map loop round 4 — village fixer
+- `src/scene/tracks/ground2.js` (1 line): the road-strip skirt row now also calls `T.meshLift` when the theme sets `meshLiftSkirt: true` (village only; default behaviour unchanged). The skirt used to ride up the terrain wall ramp at wall ends / gores and drew the hatched plank wedges.

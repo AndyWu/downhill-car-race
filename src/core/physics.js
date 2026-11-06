@@ -389,8 +389,12 @@ export function createVehicleBody(specIn, world, opts = {}) {
       if (!this.noRecover && world && world.flags && world.flags.noStuckRescue) {
         // speedway: a cart that is simply not paddling on the asphalt is left alone; one parked on the run-off / against the wall is lifted back after ~4 s (never backwards)
         // hysteresis: a cart pinned nose-in bounces between 0.1 and 1.2 m/s, so the timer drains slowly instead of resetting
-        const offAsph = state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall' || c.surface === 'gravel'));
-        state.pin = offAsph && state.speed < 1.5 && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.4);
+        if ((state._pc = (state._pc || 0) + 1) % 8 === 1) { const sm = world.track && world.track.sampleAt ? world.track.sampleAt(Math.max(0, state.s)) : null; state._edge = sm ? Math.abs(state.lateral) > (sm.width || 6) / 2 - 0.6 : false; }
+        const offAsph = state._edge || state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall' || c.surface === 'gravel'));
+        // slow crawl on grass/gravel (not just dead stop) also counts: speed < 1.5 anywhere, < 4 when truly off the asphalt
+        const offSoft = state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'gravel'));
+        const slow = state.speed < 1.5 || (offSoft && state.speed < 4 && state.forwardSpeed < 4);
+        state.pin = offAsph && slow && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.4);
         if (state.pin > 4) { state.pin = 0; state.stuck = 0; this.recover(9); }
       } else if (wallStop && !this.noRecover) {
         // village / corn: same slow-draining pinned-cart timer as the speedway, but also for a cart nose-in at the lane edge (any surface)

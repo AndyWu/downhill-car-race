@@ -49,7 +49,7 @@ export function planCircuit(seed) {
   const main = makeRoad({
     pts: loopPoints(), closed: true, lengthTarget: LAP, id: 0, name: 'Speedway',
     yFn, widthFn: () => WIDTH,
-    camberFn: (s, kap) => clamp(kap * 11, -0.13, 0.13),
+    camberFn: (s, kap) => clamp(kap * 9, -0.10, 0.10),
   });
   main.surf = { type: 'asphalt', friction: 1.0, drag: 0.0, bump: 0.02 };
   const net = buildNetwork({ main, length: 3218, lapLength: LAP });
@@ -107,14 +107,14 @@ export function planCircuit(seed) {
     },
   };
 
-  // hairpin gravel trap: the run-off on the OUTSIDE of the hairpin (not the other bends) is draggy gravel, so taking it flat out costs ~2 s
+  // hairpin gravel trap: the run-off on the OUTSIDE of the hairpin (not the other bends) is draggy gravel, so taking it flat out costs ~1.5-2 s over a braked line (measured s 370-520 at 16 m/s entry; see docs/requests.md round 4)
   const gravelAt = (s, d) => {
     const u = ((s % LAP) + LAP) % LAP;
-    if (u < 410 || u > 494) return false;
+    if (u < 392 || u > 502) return false;
     const k = tab(kapT, u);
-    return Math.abs(k) > 0.03 && (d < 0 ? k > 0 : k < 0);
+    return Math.abs(k) > 0.02 && (d < 0 ? k > 0 : k < 0);
   };
-  const HPF = 0.25;
+  const HPF = 0.3, GRAVEL_DRAG = 1.5;
   const hairpinW = (s) => { const u = ((s % LAP) + LAP) % LAP; return u < 405 || u > 500 ? 0 : smoothstep(0.028, 0.05, Math.abs(tab(kapT, u))); };
   const surface = (info) => {
     const ad = Math.abs(info.d), hw = info.hw;
@@ -122,7 +122,7 @@ export function planCircuit(seed) {
     if (ad <= hw + 0.05) return { type: 'asphalt', friction: hpF, drag: 0, bump: 0.02 };
     if (ad <= hw + 1.5) return { type: 'asphalt', friction: 0.85 * hpF, drag: 0.02, bump: 0.1 };      // kerbs
     if (ad < hw + offAt(info.s, info.d < 0 ? -1 : 1) - 0.05) {
-      if (gravelAt(info.s, info.d)) return { type: 'gravel', friction: 0.5, drag: 0.6, bump: 0.25 };
+      if (gravelAt(info.s, info.d)) return { type: 'gravel', friction: 0.5, drag: GRAVEL_DRAG, bump: 0.25 };
       return { type: 'grass', friction: 0.55, drag: 0.3, bump: 0.2 };   // run-off
     }
     return { type: 'wall', friction: 0.3, drag: 1.4, bump: 0.5 };
@@ -253,15 +253,15 @@ export function planCircuit(seed) {
         const rows = Math.round(b - a) + 1, cols = 3, Pa = new Float32Array(rows * cols * 3), Na = new Float32Array(rows * cols * 3), Ua = new Float32Array(rows * cols * 2), idx = [];
         for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++) {
           const s = a + ((b - a) * r) / (rows - 1), t = k / (cols - 1), q = P(s, sg * lerp(HW + 1.45, HW + offAt(s, sg) - 0.05, t)), i = r * cols + k;
-          Pa[i * 3] = q.x; Pa[i * 3 + 1] = q.y + 0.03; Pa[i * 3 + 2] = q.z; Na[i * 3 + 1] = 1; Ua[i * 2] = t * 0.9; Ua[i * 2 + 1] = s / 6;
+          Pa[i * 3] = q.x; Pa[i * 3 + 1] = q.y + 0.03; Pa[i * 3 + 2] = q.z; Na[i * 3 + 1] = 1; Ua[i * 2] = t * 1.8; Ua[i * 2 + 1] = s / 3;
         }
         for (let r = 0; r < rows - 1; r++) for (let k = 0; k < cols - 1; k++) { const i0 = r * cols + k; if (sg > 0) idx.push(i0, i0 + cols, i0 + 1, i0 + 1, i0 + cols, i0 + cols + 1); else idx.push(i0, i0 + 1, i0 + cols, i0 + 1, i0 + cols + 1, i0 + cols); }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(Pa, 3)); g.setAttribute('normal', new THREE.BufferAttribute(Na, 3)); g.setAttribute('uv', new THREE.BufferAttribute(Ua, 2)); g.setIndex(idx); g.computeBoundingSphere();
-        const m = new THREE.Mesh(g, decal(textureOf('gravel'), { side: THREE.DoubleSide, polygonOffsetFactor: -3, polygonOffsetUnits: -3, color: new THREE.Color(2.4, 2.1, 1.5) })); m.name = 'gravel_trap'; m.receiveShadow = true;
+        const m = new THREE.Mesh(g, decal(textureOf('gravel'), { side: THREE.DoubleSide, polygonOffsetFactor: -3, polygonOffsetUnits: -3, color: new THREE.Color(1.75, 1.72, 1.62) })); m.name = 'gravel_trap'; m.receiveShadow = true;
         const grp = new THREE.Group(); grp.add(m); addItem(grp, cOf((a + b) / 2), (b - a) / 2 + 40, 240); a = null;
       };
-      for (let s = 400; s <= 500; s += 1) { const g = gravelAt(s, sg); if (g && a == null) a = s; else if (!g && a != null) flush(s - 1); }
-      flush(500);
+      for (let s = 385; s <= 510; s += 1) { const g = gravelAt(s, sg); if (g && a == null) a = s; else if (!g && a != null) flush(s - 1); }
+      flush(510);
     }
 
     // ---- sign textures ----
@@ -548,7 +548,7 @@ export function planCircuit(seed) {
       for (const [ts] of towerS) {
         const R = 26;
         strip(ts - R, ts + R, 2, (s, u, um) => {
-          const a = Math.abs(s - ts) / R, f = a >= 1 ? 0 : (1 + Math.cos(Math.PI * a)) * 0.5, lat = 1 - 0.45 * u * u, hp = 1 - 0.55 * smoothstep(0.02, 0.04, Math.abs(kapAt(um)));
+          const a = Math.abs(s - ts) / R, f = a >= 1 ? 0 : (1 + Math.cos(Math.PI * a)) * 0.5, lat = 1 - 0.45 * u * u, hp = 1 - 0.55 * smoothstep(0.0, 0.05, Math.abs(kapAt(um)));
           const v = 0.02 * f * f * lat * hp; return [v, v * 0.84, v * 0.6];
         });
       }
@@ -568,6 +568,8 @@ export function planCircuit(seed) {
       if (towerS.length) { const m = new THREE.Mesh(poolGeo(), poolMat); m.name = 'light_pools'; m.renderOrder = 3; gl.add(m); }
       addItem(gl, cOf(LAP / 2), 700, 420);
     }
+    // night-only cool moon fill so carts and kerbs never read as black cut-outs (circuit only; fades in with night)
+    const moonFill = new THREE.HemisphereLight(0xa4b8e6, 0x59627a, 0); moonFill.name = 'circuit_moon_fill'; moonFill.visible = false; parent.add(moonFill);
     // real light from the 3 nearest towers at night
     const lights = [];
     for (let i = 0; i < 3 && towers.length; i++) { const L = new THREE.PointLight(0xffe2b0, 0, 45, 2); L.visible = false; L.name = 'flood' + i; parent.add(L); lights.push(L); }
@@ -596,6 +598,7 @@ export function planCircuit(seed) {
       warmMat.color.setRGB(0.55 + n * 3.0, 0.5 + n * 2.7, 0.38 + n * 2.0);
       poolMat.opacity = n; poolMat.visible = n > 0.01;
       if (signMat) signMat.emissiveIntensity = n * 0.75;
+      moonFill.intensity = 1.0 * smoothstep(0.3, 0.9, n); moonFill.visible = moonFill.intensity > 0.01;
       const want = n > 0.05 && lights.length > 0;
       if (want !== lightsOn) { lightsOn = want; for (const L of lights) L.visible = want; }
       if (want) {

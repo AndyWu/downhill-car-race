@@ -21,16 +21,18 @@ export function forwardXZ(q) {
  */
 export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, human, headlight } = {}) {
   // On the slower tracks the terrain, not the driver, sets the speed unless the driver holds back: tier the target speed by skill.
-  const TRACK_CAP = { village: (k) => 8.2 + 7.6 * k, corn: (k) => 9.0 + 8.0 * k };
+  const TRACK_CAP = { village: (k) => 8.2 + 7.6 * k, corn: (k) => 10.4 + 6.2 * k };
   const PACE_K = { village: 0.8, corn: 0.8 };
   const capFn = TRACK_CAP[world.trackId];
   const flat = !!(world.flags && world.flags.flat);
   // corn / village: the good drivers dig in harder (a solid human paddler out-paces them otherwise); the back of the field is untouched
-  const paceK = capFn ? 1 + (PACE_K[world.trackId] ?? 0.45) * Math.max(0, (profile.skill ?? 0.5) - 0.3) : 1;
+  const paceK = capFn ? 1 + (world.trackId === 'corn' ? 0.3 * clamp((0.62 - (profile.skill ?? 0.5)) / 0.45, 0, 1) : 0) + (PACE_K[world.trackId] ?? 0.45) * Math.max(0, (profile.skill ?? 0.5) - 0.3) : 1;
   // flat circuit: nothing but paddling moves a cart, so the speed ladder is compressed (the back of the field must not get lapped)
   const FC = 9.8, FK = 0.8;
   const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
-  const P = capFn ? { ...profile, speed: { ...profile.speed, cap: capFn(profile.skill ?? 0.5) } }
+  // corn: the weak end of the field is lifted (fewer wall rubs and rescues, tighter spread); the corner/speed scale rises as skill falls
+  const cornLift = world.trackId === 'corn' ? 1 + 0.5 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1) : 1;
+  const P = capFn ? { ...profile, speed: { ...profile.speed, cap: capFn(profile.skill ?? 0.5), scale: (profile.speed.scale ?? 1) * cornLift, cornerFactor: profile.speed.cornerFactor * (1 + 0.25 * (cornLift - 1) / 0.5) } }
     : flat ? { ...profile, speed: { ...profile.speed, cap: capOf(profile.speed.cap) } } : profile;
   rng = rng || createRng(1);
   // ---- village: pick a street through every split according to personality (progress-s plan, sampleAt(s, choice)) ----
@@ -198,7 +200,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     switch (PD.mode) {
       case 'forgetful':
         if (t >= nextToggle) { attentive = rng() < PD.attentive; nextToggle = t + 2 + rng() * 4; }
-        want = s < PD.startDist || speed < (flat ? FLOOR : 2.5) || attentive || (flat && rng() < 0.5) ? 1 : 0;
+        want = s < PD.startDist || speed < (flat ? FLOOR : world.trackId === 'corn' ? 6 : 2.5) || attentive || (flat && rng() < 0.5) ? 1 : 0;
         break;
       case 'slow': want = slow ? 1 : 0; break;
       case 'furious': want = 1; break;

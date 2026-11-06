@@ -134,7 +134,7 @@ export function planCorn(seed) {
       const base = nzv * (1 - rut) * (1 - 0.3 * wet);
       o[0] = lerp(base, 0.8 * base, edge * 0.7); o[1] = lerp(base, 0.9 * base, edge * 0.7); o[2] = lerp(base, 0.55 * base, edge * 0.7);
       o[0] *= 1.1; o[1] *= 1.1; o[2] *= 1.1;   // a touch lighter overall (dusk readability)
-      if (wet > 0.02) { const k = Math.min(1, wet * 1.15), m = nzv * (1 - rut); o[0] = lerp(o[0], 0.72 * m, k); o[1] = lerp(o[1], 0.44 * m, k); o[2] = lerp(o[2], 0.24 * m, k); }   // puddles / mud: wet brown, not black
+      if (wet > 0.02) { const k = Math.min(1, wet * 1.15), m = nzv * (1 - rut); o[0] = lerp(o[0], 0.72 * m, k); o[1] = lerp(o[1], 0.44 * m, k); o[2] = lerp(o[2], 0.24 * m, k); const sh = smoothstep(0.55, 1, wet) * 0.5; o[0] += sh * 0.16; o[1] += sh * 0.13; o[2] += sh * 0.11; }   // sheen: lighter, slightly cool core so the pool reads as wet   // puddles / mud: wet brown, not black
     },
     terrMat: 'grass', terrColor: (x, z, off, s, d, cnz, rnz, o) => {
       const k = 0.9 + 0.12 * cnz.n2(x / 17 + 7, z / 17), t = smoothstep(-0.2, 0.6, cnz.n2(x / 80 + 3, z / 80));
@@ -264,6 +264,16 @@ export function planCorn(seed) {
           ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, 0.9 + rnd() * 0.9, sc)));
           const tt = rnd(); cols.push(new THREE.Color((0.78 + tt * 0.3) * tn[0], (0.88 + tt * 0.2) * tn[1], (0.5 + rnd() * 0.25) * tn[2]));
         }
+        // tall pale tassel spikes every 1-1.5 m along the first ~7 m of canopy: per-plant silhouette from the far camera (breaks the soft rolls)
+        for (let s = s0 + rnd() * 1.5; s < s1; s += 1.0 + rnd() * 0.5) {
+          const w = openAt(s, side); if (w.w > 0.2) continue;
+          const hw = hwOf(s), lat = w.fl + 2.4 * sunW(s, side) + 0.3 + rnd() * 6.8, o = hw + lat, x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o;
+          const y = terrain.heightAt(x, z) + canopyH(s, lat, side) - 0.7;
+          e4.set((rnd() - 0.5) * 0.3, rnd() * 6.28, (rnd() - 0.5) * 0.3, 'YXZ'); q4.setFromEuler(e4);
+          const sc = 0.4 + rnd() * 0.25, tn = tint(s);
+          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, 1.9 + rnd() * 1.2, sc)));
+          const tt = rnd(); cols.push(new THREE.Color((0.95 + tt * 0.25) * tn[0], (0.98 + tt * 0.15) * tn[1], (0.6 + rnd() * 0.2) * tn[2]));
+        }
         // sparse tassel / leaf cards standing out of the canopy: the field reads as corn from above and from the chase camera
         for (let s = s0 + rnd() * 1.5; s < s1; s += 2.5 + rnd() * 0.8) {
           for (let lat0 = 0.5 + rnd() * 1.5; lat0 < 19; lat0 += 3.0 + rnd() * 1.2) {
@@ -342,7 +352,7 @@ export function planCorn(seed) {
       for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const dx = (x + 0.5) / S * 2 - 1, dy = (y + 0.5) / S * 2 - 1, d = Math.hypot(dx, dy), a = Math.pow(Math.max(0, 1 - d), 2.2); const i = (y * S + x) * 4; data[i] = 255; data[i + 1] = 190; data[i + 2] = 110; data[i + 3] = a * 255; }
       const t = new THREE.DataTexture(data, S, S, THREE.RGBAFormat); t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.needsUpdate = true; return t;
     })();
-    const glowMat = new THREE.PointsMaterial({ size: 3.4, map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, sizeAttenuation: true });
+    const glowMat = new THREE.PointsMaterial({ size: 1.7, map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, sizeAttenuation: true });
     const bulbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.2, 0.55), toneMapped: false });
     const bulbGeo = new THREE.SphereGeometry(0.11, 8, 6);
     /** a lamp post: post + lantern box (merged into b) and a glowing bulb + halo (added to grp) */
@@ -472,8 +482,8 @@ export function planCorn(seed) {
           }
         }
         for (let r = 0; r < rows - 1; r++) for (let k = 0; k < NC - 1; k++) { const a = b0 + r * NC + k, bb = a + 1, d = a + NC, e = d + 1; Ii.push(a, d, bb, bb, d, e); }
-        for (let s = sA + 2; s < sB - 6; s += 5) {   // bold centre dashes, from the entry ramp
-          const a = F(s, 0), bq = F(s + 3.6, 0), w = 0.19, i0 = Pd.length / 3;
+        for (let s = sA - 30; s < sB - 6; s += 5) {   // bold centre dashes, starting 30 m before the entry ramp
+          const a = F(s, 0), bq = F(s + 3.6, 0), w = 0.22, i0 = Pd.length / 3;
           Pd.push(a.x - a.rx * w, a.y + 0.045, a.z - a.rz * w, a.x + a.rx * w, a.y + 0.045, a.z + a.rz * w, bq.x + bq.rx * w, bq.y + 0.045, bq.z + bq.rz * w, bq.x - bq.rx * w, bq.y + 0.045, bq.z - bq.rz * w);
           Id.push(i0, i0 + 2, i0 + 1, i0, i0 + 3, i0 + 2);
         }
@@ -482,7 +492,7 @@ export function planCorn(seed) {
       mk(Pp, Ii, Cc, new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, roughness: 1, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }), 'bay_gravel');
       mk(Pd, Id, null, new THREE.MeshStandardMaterial({ color: 0xf4e8b0, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), 'bay_line');
       parent.add(grp); grp.updateMatrixWorld(true);
-      items.push({ center: new THREE.Vector3(F(c).x, F(c).y, F(c).z), radius: 60, groups: [{ obj: grp, max: 260 }] });
+      items.push({ center: new THREE.Vector3(F(c).x, F(c).y, F(c).z), radius: 75, groups: [{ obj: grp, max: 300 }] });
       }
     }
 
@@ -492,8 +502,16 @@ export function planCorn(seed) {
       for (const c of BAY_C) for (const sg of [-1, 1]) {
         const s = c - BAY_HALF - BAY_RAMP - 3, s2 = c - BAY_HALF - BAY_RAMP - 42;
         const s3 = c - BAY_HALF - BAY_RAMP + 1;   // entry of the ramp: big board standing above the bank
-        if (!(inClearing(s2, sg) || sunW(s2, sg) > 0.1 || openAt(s2, sg).w > 0.2)) sign(grp, b, 'PASSING BAY 40m >>', s2, sg, '#2f6fb0', '#fff7e0', 3.0, 0.95, 1.5, 1.45, 0.2);
-        if (!(inClearing(s3, sg) || sunW(s3, sg) > 0.1 || openAt(s3, sg).w > 0.2)) sign(grp, b, 'PASSING BAY >>', s3, sg, '#f2c230', '#1d2d6b', 3.4, 1.15, 1.85, 1.05, 0.14);
+        if (!(inClearing(s2, sg) || sunW(s2, sg) > 0.1 || openAt(s2, sg).w > 0.2)) sign(grp, b, 'PASSING BAY 40m >>', s2, sg, '#2f6fb0', '#fff7e0', 3.4, 1.1, 1.9, 1.45, 0.2);
+        if (!(inClearing(s3, sg) || sunW(s3, sg) > 0.1 || openAt(s3, sg).w > 0.2)) sign(grp, b, 'PASSING BAY >>', s3, sg, '#f2c230', '#1d2d6b', 4.6, 1.6, 2.5, 1.05, 0.14);
+        {   // bale stack at the ramp start: 2 + 1 round bales on the bank
+          const sB_ = s3 - 1.5;
+          if (!(inClearing(sB_, sg) || sunW(sB_, sg) > 0.1 || openAt(sB_, sg).w > 0.2)) {
+            const f = F(sB_, sg * (hwOf(sB_) + 1.3)), t = f.tx * 0.45, u = f.tz * 0.45;
+            straw(b, f.x - t, f.y - 0.05, f.z - u, f.ry); straw(b, f.x + t, f.y - 0.05, f.z + u, f.ry); straw(b, f.x, f.y + 0.7, f.z, f.ry);
+            reg.circle('hay', f.x, f.z, 0.9, f.y - 0.05, {}, 6);
+          }
+        }
       }
       grp.add(b.build(lib, { shadow: false })); addItem(grp, 1500, 2000, 2000);
     }
@@ -670,6 +688,7 @@ export function planCorn(seed) {
     for (const t of trees) items.push({ center: t.center, radius: t.radius, groups: [{ obj: t.near, max: 80 }, { obj: t.far, min: 70, max: 400 }] });
     const birds = createBirds({ lib, parent, terrain, main, rnd, perch });
     // corn-only dusk fill: a warm hemisphere light that lifts the lane and the corn walls around dusk (night ~0.55), fading out again at full night
+    const DUSK_SKY = new THREE.Color(0xffb98a), DUSK_GND = new THREE.Color(0x9a5a3c), NIGHT_SKY = new THREE.Color(0xa9bde8), NIGHT_GND = new THREE.Color(0x8a6a58);
     const duskFill = new THREE.HemisphereLight(0xffb98a, 0x9a5a3c, 0); duskFill.name = 'corn_dusk_fill'; parent.add(duskFill);
     return {
       items,
@@ -677,7 +696,10 @@ export function planCorn(seed) {
         birds.update(dt, camPos, time, actors);
         const n = G.gfxNight ? G.gfxNight.value : 0;
         glowMat.opacity = 0.95 * clamp(n * 1.6, 0, 1);
-        duskFill.intensity = 1.6 * smoothstep(0.12, 0.5, n) * (1 - smoothstep(0.75, 1.0, n));
+        // full night keeps most of the fill (cooler, moonlit) so the lane, the cart and the corn face stay readable
+        const fn = smoothstep(0.75, 1.0, n);
+        duskFill.intensity = lerp(1.6, 1.5, fn) * smoothstep(0.12, 0.5, n);
+        duskFill.color.copy(DUSK_SKY).lerp(NIGHT_SKY, fn); duskFill.groundColor.copy(DUSK_GND).lerp(NIGHT_GND, fn);
         for (const it of items) if (it.farm && it.groups[0].obj.visible) it.farm.update(time, dt);
       },
     };

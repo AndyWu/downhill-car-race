@@ -45,7 +45,7 @@ export function buildGroundNet({ net, terrain, lib, parent, theme, seed }) {
         const kk = clamp(k - 1, 0, cols0 - 1), u = (kk / (cols0 - 1)) * 2 - 1, d = skirt ? skirt * (hwe + 0.9) : (dCols ? dCols[kk] : u * hwe), x = pp.px + pp.rhx * d, z = pp.pz + pp.rhz * d, i = r * cols + k;
         const dh = skirt ? skirt * hwe : d;
         const xe = pp.px + pp.rhx * dh, ze = pp.pz + pp.rhz * dh;
-        P[i * 3] = x; P[i * 3 + 1] = terrain.heightAt(skirt ? xe : x, skirt ? ze : z) - (skirt ? 0.55 : 0) - (T.meshLift && !skirt ? T.meshLift(road, s, d) : 0); P[i * 3 + 2] = z;   // meshLift: physics-only bumps (village prop pucks) kept out of the drawn road
+        P[i * 3] = x; P[i * 3 + 1] = terrain.heightAt(skirt ? xe : x, skirt ? ze : z) - (skirt ? 0.55 : 0) - (T.meshLift && (!skirt || T.meshLiftSkirt) ? T.meshLift(road, s, skirt ? dh : d) : 0); P[i * 3 + 2] = z;   // meshLift: physics-only bumps (village prop pucks) kept out of the drawn road
         if (detail && !skirt) { const nrm = terrain.normalAt(x, z, 0.3); N[i * 3] = nrm.x; N[i * 3 + 1] = nrm.y; N[i * 3 + 2] = nrm.z; } else N[i * 3 + 1] = 1;
         T.roadUV(road, s, skirt ? skirt * hwe : d, hwe, uvo); UV[i * 2] = uvo[0]; UV[i * 2 + 1] = uvo[1];
         T.roadColor(road, s, skirt ? skirt * hwe : d, pp, rnz, col); C[i * 3] = col[0]; C[i * 3 + 1] = col[1]; C[i * 3 + 2] = col[2];

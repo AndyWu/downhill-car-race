@@ -181,18 +181,58 @@ export function planVillage(seed) {
     return [...P.map((v) => -v).reverse(), 0, ...P];
   };
   const terrainOpts = { hillAmp: 6, hillFar: 16, hillNear: 70, rutScale: 0, noiseScale: 0.4, crown: 0.07, sideSlope: 0.18, shoulderOut: OUT, verge, vergeNoFade: true };
+  const mp2 = {}, mq2 = {};
+  let jFrames = null;
+  const worldUV = (z, x, zz) => { const dx = x - z.x0, dz = zz - z.z0; return [(dx * z.rx + dz * z.rz) / 2.6, (z.J + dx * z.rz - dz * z.rx) / 2.6]; };
+  const junctionFrames = () => {   // one frame per junction end (main-street zone + the branch ends that attach there)
+    if (jFrames) return jFrames;
+    jFrames = []; const f = {};
+    for (const sp of SPLITS) for (const end of [0, 1]) {
+      const J = end ? sp.toS : sp.fromS; main.atS(J, f);
+      const fr = { x0: f.px, z0: f.pz, rx: f.rhx, rz: f.rhz, J, lo: end ? J - 42 : J - 10, hi: end ? J + 10 : J + 42, road: main, end };
+      jFrames.push(fr);
+      for (const b of branches) if (b.splitId === sp.id) {
+        const z = { ...fr, road: b.road, sh: [0, 0] }; const dd = end ? b.road.length - 52 : 52; b.road.atS(dd, mp2);
+        const wu = worldUV(z, mp2.px, mp2.pz), ownV = dd / 2.6; z.sh = [-Math.round(wu[0]), -Math.round(wu[1] - ownV)]; jFrames.push(z);
+      }
+    }
+    return jFrames;
+  };
   const theme = {
     roadMat: 'cobbles', chunk: 150, tile: 256, cell: 8, terrUV: 6, tileNear: { reach: 9, drop: 0.7 }, tileRadius: 0.5, roadColsFn,
+    meshLiftSkirt: true,   // the strip's skirt must not ride up a wall ramp either (that drew the hatched wedges at wall ends)
     meshLift: (road, s, d) => {   // solid prop bases are drawn instead of the physics-only terrain pucks under them
       const mp = {}; road.atS(s, mp); const ad = Math.abs(d);
-      let l = ad > mp.hw + 0.55 ? wallPart(road, s, d, mp.hw, registry.clear(mp.px + mp.rhx * d, mp.pz + mp.rhz * d, road.id)) : 0;
+      let l = 0;
+      if (ad > mp.hw + 0.55) {   // subtract the wall of whichever road WINS the terrain height at this vertex (a gore vertex of road A lies on road B's wall ramp: that ramp is not drawn, the brick strips / posts are)
+        const x = mp.px + mp.rhx * d, z = mp.pz + mp.rhz * d; net.project2(x, z, mq2); const wr = mq2.road, wp = {}; wr.params(mq2.idx, wp);
+        l = wallPart(wr, mq2.s, mq2.d, wp.hw, registry.clear(x, z, mq2.roadIndex));
+      }
       if (!road.field) return l;
       for (const z of road.field.zones) { if (!z.obstacles || Math.abs(z.s - s) > 8) continue; for (const ob of z.obstacles) { const dd = Math.hypot(s - ob.s, d - ob.d); if (dd < ob.r) l += ob.h * (1 - smoothstep(0.82, 1, dd / ob.r)); } }
       return l;
     },
-    roadUV: (road, s, d, hwe, o) => { o[0] = d / 2.6; o[1] = s / 2.6; },
+    roadUV: (road, s, d, hwe, o) => {   // own (d, s) cobble frame, blended into a shared world-space frame at every junction so overlapping strips show the SAME cobbles (no sheared / torn overlap)
+      const u0 = d / 2.6, v0 = s / 2.6; o[0] = u0; o[1] = v0;
+      const zs = junctionFrames();
+      if (road === main) {
+        for (const z of zs) {
+          if (z.road !== main) continue;
+          const w = 1 - smoothstep(0, 34, Math.max(z.lo - s, s - z.hi, 0)); if (w <= 0) continue;
+          main.atS(s, mp2); const wu = worldUV(z, mp2.px + mp2.rhx * d, mp2.pz + mp2.rhz * d);
+          o[0] = lerp(u0, wu[0], w); o[1] = lerp(v0, wu[1], w); return;
+        }
+        return;
+      }
+      const bz = zs.filter((z) => z.road === road);
+      for (const z of bz) {
+        const dist = z.end ? road.length - s : s, w = 1 - smoothstep(12, 52, dist); if (w <= 0) continue;
+        road.atS(s, mp2); const wu = worldUV(z, mp2.px + mp2.rhx * d, mp2.pz + mp2.rhz * d);
+        o[0] = lerp(u0, wu[0] + z.sh[0], w); o[1] = lerp(v0, wu[1] + z.sh[1], w);
+      }
+    },
     roadColor: (road, s, d, p, rnz, o) => {
-      const ad = Math.abs(d), n = 0.88 + 0.22 * (rnz.n2(s * 0.7, d * 0.9) * 0.5 + 0.5);
+      const ad = Math.abs(d), wx = p.px + p.rhx * d, wz = p.pz + p.rhz * d, n = 0.88 + 0.22 * (rnz.n2(wx * 0.8, wz * 0.8) * 0.5 + 0.5);
       let wet = 0; if (road.field) wet = road.field.wet(s, d);
       const edge = smoothstep(p.hw - 0.3, p.hw + 0.1, ad);
       const k = n * (1 - 0.5 * wet) * (1 - 0.18 * edge);
@@ -298,6 +338,34 @@ export function planVillage(seed) {
       const bays = Math.max(2, Math.round(w / 3.2));
       for (let f = 0; f < floors; f++) for (let i = 0; i < bays; i++) b.add('dark', boxG(0.9, 1.3, 0.1, 1), L(xf(-w / 2 + (w / bays) * (i + 0.5), 2.4 + f * 3.0, -0.03)), [0.1, 0.12, 0.16]);
     }
+    // decoration on a blank wall face: local frame M (x along the street, y up, z away from the street, face on z=0), wall height hgt
+    const DOOR = [[0.42, 0.28, 0.2], [0.2, 0.34, 0.3], [0.55, 0.2, 0.18], [0.3, 0.26, 0.4], [0.5, 0.38, 0.2]];
+    const wallDecor = (b, M, x0, x1, hgt, rr, dense, wb) => {
+      const L = (m) => M.clone().multiply(m);
+      for (let x = x0 + 0.6 + rr() * 1.2; x < x1 - 0.9; x += (dense ? 1.5 : 2.6) + rr() * (dense ? 2.6 : 4.2)) {
+        const t = rr();
+        if (t < 0.3 && hgt > 1.9) {   // door + step
+          const c = DOOR[Math.floor(rr() * DOOR.length)];
+          b.add('woodWeathered', boxG(1.05, 1.75, 0.12, 1), L(xf(x, 0.15 + 0.875, -0.06)), [c[0] * 1.5, c[1] * 1.5, c[2] * 1.5]);
+          b.add('dark', boxG(0.86, 0.05, 0.14, 1), L(xf(x, 1.95, -0.07)), [0.2, 0.15, 0.1]);
+          b.add('concrete', boxG(1.35, 0.14, 0.3, 1), L(xf(x, 0.07, -0.15)), [1, 0.98, 0.92]);
+          x += 1.0;
+        } else if (t < 0.64 && hgt > 1.7) {   // shuttered window with a flower box
+          const y = Math.min(hgt - 0.85, 1.35), sc = SHUT[Math.floor(rr() * SHUT.length)];
+          b.add('woodWeathered', boxG(1.05, 1.15, 0.1, 1), L(xf(x, y, -0.05)), [1.5, 1.45, 1.35]);
+          b.add('dark', boxG(0.82, 0.92, 0.12, 1), L(xf(x, y, -0.07)), [0.08, 0.1, 0.12]);
+          if (wb && rr() < 0.4) wb.add('dark', boxG(0.7, 0.8, 0.05, 1), L(xf(x, y, -0.13)), [1.0, 0.8, 0.42]);
+          for (const sx of [-1, 1]) b.add('woodWeathered', boxG(0.42, 1.1, 0.06, 1), L(xf(x + sx * 0.74, y, -0.07)), [sc[0] * 1.2, sc[1] * 1.2, sc[2] * 1.2]);
+          if (rr() < 0.55) { const fc = FLOW[Math.floor(rr() * 4)]; b.add('woodWeathered', boxG(1.05, 0.2, 0.26, 1), L(xf(x, y - 0.68, -0.14)), [0.55, 0.4, 0.3]); b.add('dark', boxG(0.95, 0.2, 0.22, 1), L(xf(x, y - 0.55, -0.14)), [fc[0] * 0.8, fc[1] * 0.8, fc[2] * 0.8]); }
+        } else if (t < 0.84) {   // ivy patch
+          const n = 6 + Math.floor(rr() * 4), top = hgt * (0.7 + rr() * 0.35);
+          for (let i = 0; i < n; i++) { const g = rr(), yy = 0.3 + (top - 0.3) * (i + rr() * 0.6) / n, xx = x + (rr() - 0.5) * 1.5; b.add('dark', sphG(0.5, 5, 4, 1), L(xf(xx, yy, -0.12 - rr() * 0.08, 0, 0, 0, 1.0 + g * 0.5, 1.0, 0.3)), [0.05 + g * 0.06, 0.2 + g * 0.14, 0.05 + g * 0.04]); }
+          x += 0.8;
+        } else {   // a lamp bracket / crate of flowers
+          const fc = FLOW[Math.floor(rr() * 4)]; b.add('woodWeathered', boxG(0.9, 0.5, 0.45, 1), L(xf(x, 0.25, -0.25)), [0.55, 0.4, 0.28]); b.add('dark', boxG(0.8, 0.22, 0.38, 1), L(xf(x, 0.58, -0.25)), [fc[0] * 0.8, fc[1] * 0.8, fc[2] * 0.8]);
+        }
+      }
+    };
     // frontage along one road. setback(s, sg) -> extra metres between street edge and the house fronts (market square, far river bank)
     function frontage(road, sgs, sLo, sHi, big, setback, narrow) {
       for (const sg of sgs) {
@@ -335,7 +403,9 @@ export function planVillage(seed) {
             const gw = reg.boxPoly(bs.M, 0, 0.35, w / 2, 0.35);
             if (reg.fits(gw, 0.31, 0.5)) {
               const M = bs.M.clone(); M.elements[13] = terrain.heightAt(bs.base.x, bs.base.z) - 0.05;
-              batchOf(prog).add('concrete', boxG(w, 3.1, 0.7, 2), M.clone().multiply(xf(0, 0.6, 0.35)), [0.95, 0.9, 0.82]);
+              const gt = PAL[Math.floor(rnd() * PAL.length)];
+              batchOf(prog).add('plaster', boxG(w, 3.1, 0.7, 2), M.clone().multiply(xf(0, 0.6, 0.35)), gt);
+              wallDecor(batchOf(prog), M, -w / 2, w / 2, 2.15, mulberry32((sc * 131) | 0), true, winOf(prog));
               batchOf(prog).add('concrete', boxG(w + 0.1, 0.2, 0.9, 2), M.clone().multiply(xf(0, 2.2, 0.35)), [0.8, 0.78, 0.75]);
               reg.poly('gardenwall', gw, M.elements[13] - 0.95, [bs.base.x, bs.base.z], { sunk: true }); addSpan(road, sg, sc - w / 2, sc + w / 2);
             }
@@ -426,7 +496,16 @@ export function planVillage(seed) {
               g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(Na, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(Ua, 2));
               g.setIndex(Ia); g = g.toNonIndexed(); g.computeVertexNormals();
               const sm = (road.length * (a0 + a1)) / 2 / (n - 1), prog = road.map ? road.map.fromS + (sm / road.map.len) * (road.map.toS - road.map.fromS) : sm;
-              batchOf(prog).add(WALLKEY[road.kind || 'main'] || 'brickwall', g, null, road.kind === 'alley' ? [1.0, 0.97, 0.9] : [1.05, 0.95, 0.88]);
+              const PT = PAL[(Math.abs(Math.floor(sm / 9)) + road.id * 3 + (sg > 0 ? 2 : 0)) % PAL.length];   // alley plaster: warm tints, not slate
+              batchOf(prog).add(WALLKEY[road.kind || 'main'] || 'brickwall', g, null, road.kind === 'alley' ? PT : [1.05, 0.95, 0.88]);
+              if (!rv) {   // doors / windows / ivy on the long blank street walls (skipped on the low parapets)
+                const sA = (road.length * a0) / (n - 1), sB = (road.length * a1) / (n - 1), rr = mulberry32((Math.floor(sA * 7) + road.id * 977 + (sg > 0 ? 31 : 0)) | 0);
+                for (let sx = sA + 1.5 + rr() * 2; sx < sB - 1.5; sx += (road.kind === 'main' ? 7 : 4.2) + rr() * 6) {
+                  road.atS(sx, pp); const tp2 = wallTop(road, sx, sg); if (tp2 < 1.75) continue;
+                  const bs = mkBasis(road, sx, sg, -0.17), pr = road.map ? road.map.fromS + (sx / road.map.len) * (road.map.toS - road.map.fromS) : sx;
+                  wallDecor(batchOf(pr), bs.M, -1.2, 1.2, tp2, rr, false, winOf(pr));
+                }
+              }
             }
             for (const [ri, nb] of [[i0, i0 - 1], [i1, i1 + 1]]) {   // end-posts where the wall stops at a junction
               if (nb < 0 || nb >= n || rowR[nb] !== 2) continue;
