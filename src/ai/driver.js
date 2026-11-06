@@ -31,7 +31,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   const FC = 9.8, FK = 0.8;
   const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
   // corn: the weak end of the field is lifted (fewer wall rubs and rescues, tighter spread); the corner/speed scale rises as skill falls
-  const villTop = world.trackId === 'village' ? 1 + 0.2 * clamp((profile.skill ?? 0.5) - 0.5, 0, 0.34) : 1; // village: the good mid-field cars pull apart instead of travelling as one pack
+  const villTop = 1; // village mid-field spread (round 4) removed: it broke the skill order in ai-sim (rho 0.77)
   const cornTop = world.trackId === 'corn' ? ((profile.skill ?? 0.5) > 0.9 ? 1.045 : (profile.skill ?? 0.5) > 0.8 ? 1.02 : (profile.skill ?? 0.5) > 0.7 ? 0.93 : 1) : 1; // spreads the top three so they stop convoying
   const cornLift = (world.trackId === 'corn' ? 1 + 0.45 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1) : 1) * cornTop * villTop;
   const P = capFn ? { ...profile, speed: { ...profile.speed, cap: capFn(profile.skill ?? 0.5), scale: (profile.speed.scale ?? 1) * cornLift, cornerFactor: profile.speed.cornerFactor * (1 + 0.25 * (cornLift - 1) / 0.45) } }
