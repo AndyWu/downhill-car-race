@@ -1,0 +1,16 @@
+# probe.mjs (r3 gameplay critic) — circuit pins / village river lanes / water at main s 1630
+## circuit: [t s, speed, surface, lateral, state.pin, state.stuck]
+{"s0":644,"side":1,"mode":"wedge","at":null,"slowT":20,"tl":[[2,0.77,"asphalt",5.9,3.4,0],[4,0.41,"asphalt",4.9,2.9,0],[20,0.06,"asphalt",4.3,0,16]]}
+{"s0":858,"side":-1,"mode":"wedge","at":null,"slowT":20,"tl":[[2,0.95,"asphalt",-5.7,3,0],[4,0.35,"asphalt",-4.5,2.2,0.2],[20,0.02,"asphalt",-5.7,0,16.2]]}
+{"s0":440,"side":-1,"mode":"idle","at":null,"slowT":16,"tl":[[2,0.27,"gravel",-11.2,0.1,2.6],[4,0.32,"gravel",-10.6,0,4.6],[20,0.71,"grass",7.2,0.4,0]]}
+{"s0":465,"side":-1,"mode":"paddle","at":null,"slowT":20,"tl":[[2,0.1,"gravel",-10.6,1.7,0.1],[4,0.1,"gravel",-10.6,2.7,0.1],[20,0.1,"gravel",-10.5,1.9,0.2]]}
+## village: steer into the river side of the Riverside lanes (path 1 of splits 2 and 3)
+{"split":2,"s":1520,"side":-1,"maxBeyondEdge":0.7,"beyond09T":0,"rescuedAt":12.2}
+{"split":2,"s":1520,"side":1,"maxBeyondEdge":0,"beyond09T":0,"rescuedAt":8.9}
+{"split":2,"s":1600,"side":-1,"maxBeyondEdge":3.5,"beyond09T":4,"rescuedAt":4}
+{"split":2,"s":1600,"side":1,"maxBeyondEdge":0.2,"beyond09T":0,"rescuedAt":2.7}
+{"split":3,"s":2480,"side":-1,"maxBeyondEdge":0.1,"rescuedAt":4.5}
+{"split":3,"s":2480,"side":1,"maxBeyondEdge":0,"rescuedAt":7.9}
+{"split":3,"s":2560,"side":-1,"maxBeyondEdge":0,"rescuedAt":2.5}
+{"split":3,"s":2560,"side":1,"maxBeyondEdge":0,"rescuedAt":2.6}
+## main street s 1610/1630/1650: project() -> split 2 path 0 (Main Street), surfaceAt -> cobble (yet the screen shows water: village-cam-chase-1630.jpg)
