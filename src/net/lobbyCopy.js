@@ -46,6 +46,8 @@ export const LOBBY_COPY = {
     full: 'All seats are filled. Tap Start Race!',
     preparing: 'Making a code…',
     start: 'Start Race',
+    startingIn: 'Starting in {n}… tap to go now',
+    waitStep: 'Last call! Anyone still joining has {n} s',
     startHint: 'AI drivers race in any empty seats.',
   },
   scanOffer: {
@@ -106,7 +108,7 @@ export function computeSteps(st) {
       steps.push({ text: fmt(C.offering.step, { slot: n }), state: !after ? 'todo' : st.scanning ? 'done' : 'active' });
       steps.push({ text: fmt(C.offering.scanStep, { slot: n }), state: after && st.scanning ? 'active' : 'todo' });
     }
-    steps.push({ text: joined ? fmt(C.offering.joinedStep, { n: joined }) : C.offering.noneJoinedStep, state: after && (joined || !st.slot) ? 'active' : 'todo' });
+    steps.push({ text: st.startWait ? fmt(C.offering.waitStep, { n: st.startWait }) : joined ? fmt(C.offering.joinedStep, { n: joined }) : C.offering.noneJoinedStep, state: st.startWait ? 'active' : after && (joined || !st.slot) ? 'active' : 'todo' });
   } else {
     const ph = st.phase;
     const scanned = ph === 'answering' || ph === 'showAnswer' || ph === 'connected';

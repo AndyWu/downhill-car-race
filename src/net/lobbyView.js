@@ -69,7 +69,7 @@ export function createLobbyView(root = document.body) {
     const players = h('ol', { class: 'peers' }, state.seatList.map((p) => h('li', { class: p.kind }, `${p.kind === 'ai' ? 'AI' : p.ready ? '✓' : '…'} ${p.name}${p.you ? ' (you)' : ''}`)));
     const foot = h('div', { class: 'foot' },
       h('button', { class: 'sec', onclick: () => actions.cancel() }, 'Back'),
-      state.role === 'host' && state.phase === 'offering' ? h('button', { onclick: () => actions.startRace() }, C.offering.start) : '',
+      state.role === 'host' && state.phase === 'offering' ? h('button', { onclick: () => actions.startRace() }, state.startWait ? C.offering.startingIn.replace('{n}', state.startWait) : C.offering.start) : '',
       state.role === 'host' && state.phase === 'offering' ? h('span', { class: 'note' }, C.offering.startHint) : '');
     const card = h('div', { class: 'card' }, h('h2', {}, title), h('div', { class: 'cols' }, steps, h('div', {}, centre, panel.bar), players), foot);
     el.replaceChildren(card);

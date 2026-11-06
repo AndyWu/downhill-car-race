@@ -49,6 +49,8 @@ export function trackInfo(t) {
   return { id, name };
 }
 
+const START_WAIT_MS = 20000, START_GRACE_MS = 10000; // family race: join window after Start Race, + grace for iPads mid-connection
+
 export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Player', camera = true, root, slowMs = CLIENT_SLOW_MS, seats = RACE_SEATS, aiNames, track } = {}) {
   maxPeers = Math.min(maxPeers, MAX_HUMANS - 1);
   const isHost = role === 'host';
@@ -72,6 +74,7 @@ export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Playe
     peers: [], steps: [], copy: LOBBY_COPY,
     seats, aiNames: aiNames || FALLBACK_AI_NAMES, seatList: [],
     track: trackInfo(track),
+    startWait: 0,                   // host: seconds left in the join window after Start Race (0 = not waiting)
   };
 
   const actions = {
@@ -197,8 +200,26 @@ export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Playe
     }
   }
 
-  function startRace() {
-    if (!isHost) return;
+  // Start Race opens a 20 s join window: the QR / reply scanner keep working so the last iPads can still join, the button
+  // counts down ("Starting in 14… tap to go now"), and an iPad whose connection is still being set up gets up to 10 s more.
+  let waitTimer = null, waitEnd = 0, waitHard = 0;
+  function startRace({ now = false } = {}) {
+    if (!isHost || closed || state.phase === 'ready') return;
+    if (now || waitTimer) return beginRace(); // second tap during the countdown: go now
+    waitEnd = Date.now() + START_WAIT_MS; waitHard = waitEnd + START_GRACE_MS;
+    waitTimer = setInterval(waitTick, 250); waitTick();
+  }
+  function waitTick() {
+    if (closed) { clearInterval(waitTimer); waitTimer = null; return; }
+    const t = Date.now(), joining = [...slots.values()].some((p) => p.state === 'connecting');
+    state.startWait = Math.max(0, Math.ceil((waitEnd - t) / 1000));
+    if (t >= waitHard || (t >= waitEnd && !joining)) return beginRace();
+    render();
+  }
+  function beginRace() {
+    if (waitTimer) { clearInterval(waitTimer); waitTimer = null; }
+    state.startWait = 0;
+    if (!isHost || closed || state.phase === 'ready') return;
     stopCamera(); state.scanning = false;
     for (const [s, p] of slots) if (p.state !== 'open') { p.close(); slots.delete(s); }
     current = null;
@@ -271,7 +292,7 @@ export function createLobby({ role, ui, maxPeers = MAX_HUMANS - 1, name = 'Playe
 
   function close({ keepPeers = true } = {}) {
     closed = true;
-    clearTimeout(slowTimer);
+    clearTimeout(slowTimer); if (waitTimer) { clearInterval(waitTimer); waitTimer = null; }
     stopCamera(); state.scanning = false;
     view?.destroy(); view = null;
     for (const [s, p] of slots) if (!keepPeers || p.state !== 'open') { p.close(); slots.delete(s); }

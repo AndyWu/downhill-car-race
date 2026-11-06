@@ -70,7 +70,7 @@ async function runRace(mode) {
   });
   chk(true, 'client connected');
   await host.waitForFunction(() => window.__game.lobby.peers.size === 1, null, { timeout: 30000 });
-  await host.evaluate(() => window.__game.lobby.startRace());
+  await host.evaluate(() => window.__game.lobby.startRace({ now: true }));
   await host.waitForFunction(() => window.__game.state.mode === 'race', null, { timeout: 30000 });
   await client.waitForFunction(() => window.__game.state.mode === 'race', null, { timeout: 30000 });
   chk(true, 'both pages in race mode');

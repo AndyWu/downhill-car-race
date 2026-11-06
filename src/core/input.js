@@ -1,14 +1,14 @@
 // Input: wheel-like device-tilt steering, split-screen swipe paddles, thumb zones, keyboard fallback.
 // Zone layout (fractions of viewport), exported so UI can draw glyphs:
-// Paddling only counts for swipes that START inside a paddle box; the handbrake / gear / headlight sit in the bottom
-// corners with a clear gap below the boxes, so a hurried paddle swipe on a small phone can't grab a lever by mistake.
+// Paddling only counts for swipes that START inside a paddle box. The paddle boxes are narrow strips in the bottom-left / bottom-right
+// corners (thumbs rest there on a phone or iPad); the handbrake, gear and headlight sit further in, with a gap, so a paddle swipe cannot grab a lever.
 export const ZONES = {
-  paddleL: { x0: 0.03, x1: 0.33, y0: 0.17, y1: 0.64 }, // left paddle box: swipe up/down
-  paddleR: { x0: 0.56, x1: 0.85, y0: 0.17, y1: 0.64 }, // right paddle box (left of the race map)
-  handbrake: { x0: 0, x1: 0.22, y0: 0.74, y1: 1 },     // bottom-left corner: press & drag down
-  headlight: { x0: 0.60, x1: 0.76, y0: 0.80, y1: 1 },  // bottom-right: tap
+  paddleL: { x0: 0, x1: 0.15, y0: 0.5, y1: 1 },        // left paddle box: narrow strip in the bottom-left corner, swipe up/down
+  paddleR: { x0: 0.85, x1: 1, y0: 0.5, y1: 1 },        // right paddle box: bottom-right corner (below the race map)
+  handbrake: { x0: 0.19, x1: 0.36, y0: 0.76, y1: 1 },  // bottom, inside the left paddle: press & drag down
+  headlight: { x0: 0.44, x1: 0.56, y0: 0.84, y1: 1 },  // bottom-centre: tap
   honk: { x0: 0.42, x1: 0.58, y0: 0, y1: 0.16 },       // top-centre: tap = horn
-  gear: { x0: 0.80, x1: 1, y0: 0.74, y1: 1 },          // bottom-right corner: drag up = forward, down = reverse
+  gear: { x0: 0.64, x1: 0.81, y0: 0.76, y1: 1 },       // bottom, inside the right paddle: drag up = forward, down = reverse
 };
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);

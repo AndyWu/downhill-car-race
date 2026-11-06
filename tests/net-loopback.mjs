@@ -309,7 +309,7 @@ async function main() {
   check(tr1.name === 'Speedway' && tr2?.name === 'Hill Village', `client lobby shows the host's track: "${tr1.name}" → "${tr2?.name}" after setTrack (on screen: "${shown}")`);
   const seats = await host.evaluate(() => lobby.state.seatList.map((p) => `${p.slot}:${p.kind}:${p.name}`));
   check(seats.length === 10 && seats.filter((x) => x.includes(':ai:')).length === 7 && seats.some((x) => /Tilly|Rosco|Vance|Dot/.test(x)), `lobby shows 10 seats, 3 humans + 7 AI from AI_ROSTER: ${seats.join(', ')}`);
-  await host.evaluate(() => lobby.startRace());
+  await host.evaluate(() => lobby.startRace({ now: true }));
   const ready = await host.evaluate(() => window.lobbyReady);
   if (!ready || ready.n !== 2) console.log('     host lobby state', JSON.stringify(await host.evaluate(() => ({ peers: lobby.state.peers, notice: lobby.state.notice, log: window.peerLog }))));
   check(ready?.lineup?.length === 10, `race lineup has 10 cars (${ready?.lineup?.map((p) => p.name).join(', ')})`);

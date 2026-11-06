@@ -391,6 +391,8 @@ export function createUI(root, opts = {}) {
     setCaption(t) { caption.textContent = t; },
     setLobbyStatus(t) { statusEl.textContent = t || ''; },
     setStartEnabled(b) { startBtn.toggleAttribute('disabled', !b); },
+    /** Host lobby: Start button text (e.g. the 20 s join-window countdown). */
+    setStartLabel(t) { if (startBtn.textContent !== t) startBtn.textContent = t; },
     /** list: [{name, you?, ready?, kind?:'host'|'human'}]; empty seats auto-fill with named AI. */
     /** Names used for AI backfill (e.g. from AI_ROSTER, worst -> best or lineup order). */
     setAINames(names) { aiRoster = Array.isArray(names) && names.length ? names.map((n) => (typeof n === 'string' ? n : n.name)) : AI_NAMES; },

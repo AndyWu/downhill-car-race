@@ -42,6 +42,7 @@ export function createUiAdapter(ui, { name = 'Player' } = {}) {
     const humans = state.seatList.filter((p) => p.kind !== 'ai');
     ui.setPlayers?.(humans, { seats: state.seats, aiBackfill: true, aiNames: state.aiNames, lineup: state.seatList });
     ui.setStartEnabled?.(state.role === 'host' && (state.phase === 'offering' || state.phase === 'radio'));
+    if (state.role === 'host') ui.setStartLabel?.(state.startWait ? state.copy.offering.startingIn.replace('{n}', state.startWait) : state.copy.offering.start);
   }
   return { render };
 }
