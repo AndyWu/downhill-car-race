@@ -1,0 +1,11 @@
+{"split":2,"s":1520,"side":-1,"maxBeyondEdge":0.3,"beyond09T":0,"rescuedAt":12.2,"surfs":["wall","cobble"]}
+{"split":2,"s":1520,"side":1,"maxBeyondEdge":0,"beyond09T":0,"rescuedAt":3,"surfs":["cobble"]}
+{"split":2,"s":1600,"side":-1,"maxBeyondEdge":3.7,"beyond09T":3.4,"rescuedAt":3.4,"surfs":["cobble","wall"]}
+{"split":2,"s":1600,"side":1,"maxBeyondEdge":0,"beyond09T":0,"rescuedAt":3.5,"surfs":["cobble"]}
+{"split":3,"s":2480,"side":-1,"maxBeyondEdge":0.3,"beyond09T":0,"rescuedAt":null,"surfs":["wall","cobble"]}
+{"split":3,"s":2480,"side":1,"maxBeyondEdge":0,"beyond09T":0,"rescuedAt":2,"surfs":["cobble"]}
+{"split":3,"s":2560,"side":-1,"maxBeyondEdge":0,"beyond09T":0,"rescuedAt":2.1,"surfs":["cobble","wall","rock"]}
+{"split":3,"s":2560,"side":1,"maxBeyondEdge":0,"beyond09T":0,"rescuedAt":3.5,"surfs":["cobble","rock"]}
+{"mainS":1610,"projSplit":2,"projPath":0,"surf":"{\"type\":\"cobble\",\"friction\":0.8,\"drag\":0.02,\"bump\":0.2}"}
+{"mainS":1630,"projSplit":2,"projPath":0,"surf":"{\"type\":\"cobble\",\"friction\":0.8,\"drag\":0.02,\"bump\":0.2}"}
+{"mainS":1650,"projSplit":2,"projPath":0,"surf":"{\"type\":\"cobble\",\"friction\":0.8,\"drag\":0.02,\"bump\":0.2}"}
