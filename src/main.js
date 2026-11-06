@@ -254,7 +254,7 @@ async function boot() {
   const CAM_MARGIN = { corn: 1.35, circuit: 3.0, village: 0.3 };   // corn: wall face is at hw + 1.6, minus the camera radius
   // measured in the cart's own street: the camera's along-road position is cart.s + (cam - cart).tangent, its lateral comes from that street's frame
   // (so a camera beside a junction or inside a house is judged against the right road). Allowed lateral: max(hw + margin, |cartLat| + 1.5).
-  function camClamp(v, hint) {
+  function camClamp(v, hint, view) {
     const m = CAM_MARGIN[builtFor];
     if (m == null || !world || !world.track || !world.track.project || !playerV) return;
     const cp = playerV.body.state.position, cs = playerV.body.state;
@@ -271,7 +271,9 @@ async function boot() {
     if (builtFor !== 'circuit') { const n = Math.min(6, Math.ceil(Math.abs(sCam - pr.s) / 6)); for (let i = 1; i < n; i++) hwN = Math.min(hwN, (world.track.sampleAt(pr.s + (sCam - pr.s) * i / n, ch).width || 6) / 2); }
     const cartOut = builtFor === 'corn' && Math.abs(pr.lateral) > hwN + 0.8;
     const lim = cartOut ? Math.abs(pr.lateral) + 0.5 : Math.max(hwN + m, Math.abs(pr.lateral) + (builtFor === 'corn' ? 0.8 : 1.5));
-    if (Math.abs(L2) > lim) { const dd = (L2 > 0 ? lim : -lim) - L2; v.x += sm.right.x * dd; v.z += sm.right.z * dd; }
+    // corn side view: stay inside the lane (the narrowest width between camera and cart, minus the lens radius) and rise a little, so it never sits in the leaves
+    if (builtFor === 'corn' && view === 'side' && !cartOut) { const sl = Math.max(0.6, hwN - 0.4); if (Math.abs(L2) > sl) { const dd = (L2 > 0 ? sl : -sl) - L2; v.x += sm.right.x * dd; v.z += sm.right.z * dd; } v.y = Math.max(v.y, cp.y + 2.0); }
+    else if (Math.abs(L2) > lim) { const dd = (L2 > 0 ? lim : -lim) - L2; v.x += sm.right.x * dd; v.z += sm.right.z * dd; }
     // corn: when the cart is wedged in the field, rise above the corn instead of sitting inside it
     if (cartOut || (builtFor === 'corn' && Math.abs(L2) > hwN + 0.9)) v.y = Math.max(v.y, cp.y + 3.4);
     // village: a camera that ended up inside a house (outside its own street's walls) is pulled back toward the cart

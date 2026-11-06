@@ -254,10 +254,10 @@ export function createUI(root, opts = {}) {
     const X = (x) => ox + (x - map.minX) * k, Y = (z) => oz + (z - map.minZ) * k; // downhill (-Z) points up the screen
     c.lineJoin = c.lineCap = 'round';
     const trace = (pts) => { c.beginPath(); pts.forEach(([x, z], i) => (i ? c.lineTo(X(x), Y(z)) : c.moveTo(X(x), Y(z)))); if (pts === map.pts && map.closed) c.closePath(); };
-    // branches (alternative streets): thinner and dashed, under the main road
+    // branches (alternative streets): dashed amber with a dark casing, under the main road
     for (const br of map.branches) {
-      trace(br); c.setLineDash([]); c.strokeStyle = 'rgba(30,20,10,.55)'; c.lineWidth = 6; c.stroke();
-      c.setLineDash([5, 3]); c.strokeStyle = 'rgba(255,190,100,.95)'; c.lineWidth = 3; c.stroke(); c.setLineDash([]);
+      trace(br); c.setLineDash([]); c.strokeStyle = 'rgba(20,12,4,.8)'; c.lineWidth = 9; c.stroke();
+      c.setLineDash([7, 3.5]); c.strokeStyle = '#ffb347'; c.lineWidth = 5; c.stroke(); c.setLineDash([]);
     }
     trace(map.pts); c.strokeStyle = 'rgba(30,20,10,.55)'; c.lineWidth = 6; c.stroke();
     c.strokeStyle = 'rgba(245,232,205,.9)'; c.lineWidth = 2.5; c.stroke();

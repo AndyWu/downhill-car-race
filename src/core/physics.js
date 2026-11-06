@@ -119,7 +119,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
     const speed = v.length();
     const hb = state.handbrake;
     let contacts = 0; _nSum.set(0, 0, 0);
-    let slipMax = 0, bumpMax = 0, wallN = 0;
+    let slipMax = 0, bumpMax = 0, wallN = 0, cornN = 0;
 
     for (let i = 0; i < 4; i++) {
       const wc = state.wheelContacts[i];
@@ -145,7 +145,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       N = clamp(N, 0, 8 * m * G);
       if (N <= 0) { wc.compression = clamp(comp / travel, 0, 1.5); continue; }
       wc.contact = true; wc.compression = clamp(comp / travel, 0, 1.5); wc.load = N; wc.surface = g.surf.type || 'dirt';
-      contacts++; _nSum.add(_ws); if (wallStop && wc.surface === 'wall') wallN++;
+      contacts++; _nSum.add(_ws); if (wallStop && wc.surface === 'wall') wallN++; else if (wallStop && wc.surface === 'corn') cornN++;
       bumpMax = Math.max(bumpMax, Math.abs(rate) * (0.3 + g.bump));
       // contact point & velocity
       _cp.copy(_anchor).addScaledVector(_up, -t);
@@ -213,6 +213,19 @@ export function createVehicleBody(specIn, world, opts = {}) {
           q.premultiply(_dq).normalize();
           w.y *= 0.9;
         }
+      }
+    }
+    // rubbing the corn: swing the nose back along the lane (about 3 deg/s away from the wall, plus a gentle align) so a paddling cart re-centres itself
+    if (cornN > 0 && world.track && world.track.sampleAt && state.s > 3) {
+      const tgc = world.track.sampleAt(Math.max(0, state.s)).tangent;
+      _fwd.set(0, 0, -1).applyQuaternion(q);
+      const tl = Math.hypot(tgc.x, tgc.z), fl = Math.hypot(_fwd.x, _fwd.z);
+      if (tl > 0.01 && fl > 0.01 && v.x * _fwd.x + v.z * _fwd.z > -0.5) {
+        let da = Math.atan2(-tgc.z, tgc.x) - Math.atan2(-_fwd.z, _fwd.x);
+        da = Math.atan2(Math.sin(da), Math.cos(da));
+        const sg = state.lateral >= 0 ? 1 : -1;
+        _dq.setFromAxisAngle(_yAxis, clamp(da, -0.5, 0.5) * Math.min(1, h * 1.2) + sg * 0.07 * h);
+        q.premultiply(_dq).normalize();
       }
     }
     // aero drag
@@ -402,7 +415,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
         const offRd = state._edge || state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall' || c.surface === 'corn'));
         state.pin = offRd && state.speed < 1.5 && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.4);
         state.sinceRec = (state.sinceRec == null ? 99 : state.sinceRec) + dt;
-        if ((state.pin > 3.5 || state.stuck > 4) && state.sinceRec > 3 && state.speed < 1.0) { state.pin = 0; state.stuck = 0; this.recover(8); }
+        if ((state.pin > 3 || state.stuck > 3) && state.sinceRec > 3 && state.speed < 1.0) { state.pin = 0; state.stuck = 0; this.recover(8); }
       } else if (state.stuck > (state.surface === 'wall' || state.surface === 'corn' ? 3.5 : 5) && !this.noRecover) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);

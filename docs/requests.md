@@ -217,3 +217,8 @@ Append requests as `- [from Agent N → Agent M] ...`
 ## Map loop round 4
 ### Map loop round 4 — village fixer
 - `src/scene/tracks/ground2.js` (1 line): the road-strip skirt row now also calls `T.meshLift` when the theme sets `meshLiftSkirt: true` (village only; default behaviour unchanged). The skirt used to ride up the terrain wall ramp at wall ends / gores and drew the hatched plank wedges.
+
+## Map loop round 4
+### Map loop round 4 — circuit fixer
+- No shared-file edits. `circuit.js` only: hairpin gravel zone widened (s 392-502, |kap| > 0.02), friction 0.5 / drag 1.5 (physics clamps surface drag at 1.5, so this is the maximum), apex dust HPF 0.25 -> 0.30, lighter mineral gravel tint and 2x finer texture, camber clamp 0.13 -> 0.10 (kap*9), night moon-fill hemisphere light (circuit only), softer night-ribbon hairpin fade.
+- Timing s 370-520 at 16 m/s entry (pursuit-steer harness, real physics): before flat 10.40 / brake-12 10.20 / brake-10 10.95 / brake-8 12.20 s; after flat 11.10 / brake-12 10.60 / brake-10 11.25 / brake-8 12.35 s. Flat out now costs +0.5 s over the best line (was +0.2); more needs a stronger gravel/wall scrub in `core/physics.js` (surface drag is clamped at 1.5, wall hits only remove the outward velocity) — [circuit fixer -> gameplay fixer].

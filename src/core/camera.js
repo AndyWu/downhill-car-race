@@ -87,7 +87,7 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
     // occlusion: walls / houses are heightfield bumps. March from the cart to the wanted camera spot; if terrain rises above the
     // line, pull the camera in to the last clear point, then keep it above the ground (smoothed by the follow below)
     // corridor clamp: corn walls / circuit barriers are meshes the heightfield march cannot see, so keep the camera inside the road corridor
-    if (clampLat && camMode !== 'hood') clampLat(_cw, hint);
+    if (clampLat && camMode !== 'hood') clampLat(_cw, hint, camMode);
     const hf = typeof heightAt === 'function' ? heightAt() : heightAt;
     if (hf && camMode !== 'hood') {
       _o.copy(tg.position); _o.y += 0.9;
@@ -109,7 +109,7 @@ export function createCockpitCamera(camera, { group, parts }, { mode = 'cockpit'
         _cw.copy(tg.position).addScaledVector(_cf, -5.2); _cw.y += 2.3; tClear = clearT(_cw);
       }
       if (tClear < 1) { const t = Math.max(0.05, tClear); _cw.set(_o.x + (_cw.x - _o.x) * t, _o.y + (_cw.y - _o.y) * t, _o.z + (_cw.z - _o.z) * t); }
-      if (clampLat) clampLat(_cw, hint);
+      if (clampLat) clampLat(_cw, hint, camMode);
       const hc = hf(_cw.x, _cw.z); if (Number.isFinite(hc) && _cw.y < hc + 0.6) _cw.y = hc + 0.6;
     }
     if (!chaseInit.v) { chasePos.copy(_cw); _lookS.copy(_lookP); chaseInit.v = true; }
