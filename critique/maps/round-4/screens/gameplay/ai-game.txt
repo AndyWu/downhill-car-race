@@ -1,0 +1,9 @@
+== village
+player truck 0: rho(skill,s@90) 0.73  Ace 1030 > Rosco 790 > Maeve 789 > Buster 788 > Tilly 776 > Vance 734 > Dot 733 > Clementine 711 > Barnaby 678
+player truck 4: rho(skill,s@90) 0.68  Ace 1030 > Maeve 779 > Rosco 741 > Buster 737 > Tilly 729 > Dot 724 > Vance 698 > Clementine 694 > Barnaby 676
+== corn
+player truck 0: rho(skill,s@90) 0.90  Ace 997 > Rosco 774 > Maeve 773 > Buster 770 > Vance 770 > Clementine 692 > Dot 679 > Barnaby 448 > Tilly 447
+player truck 4: rho(skill,s@90) 0.95  Ace 1001 > Vance 810 > Rosco 809 > Maeve 807 > Buster 779 > Clementine 718 > Barnaby 577 > Dot 577 > Tilly 574
+== circuit
+player truck 0: rho(skill,s@90) 0.93  Ace 967 > Rosco 843 > Vance 814 > Maeve 808 > Buster 744 > Clementine 681 > Dot 666 > Tilly 651 > Barnaby 606
+player truck 4: rho(skill,s@90) 0.88  Ace 968 > Maeve 890 > Rosco 837 > Vance 837 > Buster 744 > Clementine 683 > Barnaby 655 > Tilly 655 > Dot 653

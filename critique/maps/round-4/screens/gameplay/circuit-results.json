@@ -1,0 +1,1831 @@
+{
+ "track": "circuit",
+ "race": {
+  "good": true,
+  "t": 369.9,
+  "grid": [
+   "You:4",
+   "Barnaby:9",
+   "Tilly:8",
+   "Clementine:7",
+   "Dot:6",
+   "Buster:5",
+   "Rosco:0",
+   "Maeve:3",
+   "Vance:2",
+   "Ace:1"
+  ],
+  "loops": [],
+  "order90": [
+   "You(1157)",
+   "Ace(1021)",
+   "Rosco(915)",
+   "Maeve(913)",
+   "Vance(900)",
+   "Buster(802)",
+   "Dot(792)",
+   "Clementine(729)",
+   "Barnaby(666)",
+   "Tilly(650)"
+  ],
+  "finish": {
+   "You": 251.7,
+   "Ace": 267.7,
+   "Vance": 283,
+   "Maeve": 297.5,
+   "Rosco": 306.1,
+   "Dot": 329.7,
+   "Buster": 332.6,
+   "Tilly": 346.9,
+   "Clementine": 351.6,
+   "Barnaby": 370.1
+  },
+  "leadChanges": 2,
+  "pRank1": 3.4,
+  "rescues": [
+   {
+    "who": "Tilly",
+    "t": 69.7,
+    "from": 475,
+    "s": 488,
+    "latAfter": 0,
+    "surf": "asphalt",
+    "path": ""
+   },
+   {
+    "who": "Rosco",
+    "t": 95.2,
+    "from": 937,
+    "s": 991,
+    "latAfter": 0,
+    "surf": "asphalt",
+    "path": ""
+   },
+   {
+    "who": "Maeve",
+    "t": 114.1,
+    "from": 1102,
+    "s": 1114,
+    "latAfter": 0,
+    "surf": "asphalt",
+    "path": ""
+   },
+   {
+    "who": "Barnaby",
+    "t": 115.6,
+    "from": 873,
+    "s": 885,
+    "latAfter": 0,
+    "surf": "asphalt",
+    "path": ""
+   },
+   {
+    "who": "Maeve",
+    "t": 186.4,
+    "from": 1853,
+    "s": 1866,
+    "latAfter": 0,
+    "surf": "asphalt",
+    "path": ""
+   },
+   {
+    "who": "Barnaby",
+    "t": 222,
+    "from": 1792,
+    "s": 1852,
+    "latAfter": 0,
+    "surf": "asphalt",
+    "path": ""
+   }
+  ],
+  "stuckEv": [
+   {
+    "who": "Tilly",
+    "t": 67.2,
+    "s": 475,
+    "lat": 7.5,
+    "surf": "grass",
+    "dur": 2.5
+   },
+   {
+    "who": "Rosco",
+    "t": 92.7,
+    "s": 935,
+    "lat": 4.1,
+    "surf": "asphalt",
+    "dur": 2.5
+   },
+   {
+    "who": "Maeve",
+    "t": 111.6,
+    "s": 1101,
+    "lat": 1.5,
+    "surf": "asphalt",
+    "dur": 2.5
+   },
+   {
+    "who": "Barnaby",
+    "t": 113.1,
+    "s": 873,
+    "lat": 6.5,
+    "surf": "grass",
+    "dur": 2.5
+   },
+   {
+    "who": "Maeve",
+    "t": 183.9,
+    "s": 1853,
+    "lat": -0.2,
+    "surf": "asphalt",
+    "dur": 2.5
+   },
+   {
+    "who": "Barnaby",
+    "t": 219.3,
+    "s": 1790,
+    "lat": 3.4,
+    "surf": "asphalt",
+    "dur": 1.6
+   }
+  ],
+  "postFinishRespawns": 0,
+  "offRoad": {
+   "You": 0,
+   "Barnaby": 2.3,
+   "Tilly": 3.1,
+   "Clementine": 0,
+   "Dot": 2,
+   "Buster": 0,
+   "Rosco": 0,
+   "Maeve": 0,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "slow": {
+   "You": 0,
+   "Barnaby": 5,
+   "Tilly": 2.5,
+   "Clementine": 0,
+   "Dot": 0,
+   "Buster": 0,
+   "Rosco": 2.5,
+   "Maeve": 5,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "choices": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "final": [
+   "You 3222 F252",
+   "Barnaby 3224 F370",
+   "Tilly 3226 F347",
+   "Clementine 3222 F352",
+   "Dot 3225 F330",
+   "Buster 3223 F333",
+   "Rosco 3227 F306",
+   "Maeve 3232 F298",
+   "Vance 3234 F283",
+   "Ace 3237 F268"
+  ],
+  "ranks": [
+   {
+    "t": 30,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": true,
+    "playerS": 383,
+    "aceS": 294,
+    "near": 0
+   },
+   {
+    "t": 60,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": true,
+    "playerS": 761,
+    "aceS": 639,
+    "near": 0
+   },
+   {
+    "t": 330,
+    "rank": "1/10",
+    "lap": "Lap 3/3",
+    "lapOn": true,
+    "playerS": 3222,
+    "aceS": 3237,
+    "near": 6
+   },
+   {
+    "t": 360,
+    "rank": "1/10",
+    "lap": "Lap 3/3",
+    "lapOn": true,
+    "playerS": 3222,
+    "aceS": 3237,
+    "near": 8
+   }
+  ]
+ },
+ "relaxed": {
+  "good": false,
+  "t": 365,
+  "grid": [
+   "You:4",
+   "Barnaby:9",
+   "Tilly:8",
+   "Clementine:7",
+   "Dot:6",
+   "Buster:5",
+   "Rosco:0",
+   "Maeve:3",
+   "Vance:2",
+   "Ace:1"
+  ],
+  "loops": [],
+  "order90": [
+   "Ace(987)",
+   "You(964)",
+   "Rosco(869)",
+   "Maeve(865)",
+   "Vance(851)",
+   "Buster(775)",
+   "Dot(771)",
+   "Clementine(708)",
+   "Tilly(653)",
+   "Barnaby(653)"
+  ],
+  "finish": {
+   "Ace": 284.5,
+   "You": 290.3,
+   "Maeve": 295.5,
+   "Rosco": 313.8,
+   "Vance": 313.9,
+   "Dot": 325.1,
+   "Buster": 336,
+   "Tilly": 351.1,
+   "Clementine": 354.2,
+   "Barnaby": 365.2
+  },
+  "leadChanges": 3,
+  "pRank1": 7.2,
+  "rescues": [
+   {
+    "who": "Tilly",
+    "t": 67.8,
+    "from": 453,
+    "s": 481,
+    "latAfter": 0.3,
+    "surf": "asphalt",
+    "path": ""
+   },
+   {
+    "who": "Maeve",
+    "t": 120.2,
+    "from": 1157,
+    "s": 1169,
+    "latAfter": 0,
+    "surf": "asphalt",
+    "path": ""
+   },
+   {
+    "who": "Dot",
+    "t": 127.8,
+    "from": 1115,
+    "s": 1127,
+    "latAfter": 0,
+    "surf": "asphalt",
+    "path": ""
+   },
+   {
+    "who": "Vance",
+    "t": 178,
+    "from": 1719,
+    "s": 1731,
+    "latAfter": 0,
+    "surf": "asphalt",
+    "path": ""
+   }
+  ],
+  "stuckEv": [
+   {
+    "who": "Tilly",
+    "t": 65.3,
+    "s": 454,
+    "lat": 7.6,
+    "surf": "wall",
+    "dur": 2.5
+   },
+   {
+    "who": "Maeve",
+    "t": 117.7,
+    "s": 1155,
+    "lat": -1.9,
+    "surf": "asphalt",
+    "dur": 2.5
+   },
+   {
+    "who": "Dot",
+    "t": 125.4,
+    "s": 1114,
+    "lat": 1.2,
+    "surf": "asphalt",
+    "dur": 2.4
+   },
+   {
+    "who": "Vance",
+    "t": 175.5,
+    "s": 1719,
+    "lat": -7.5,
+    "surf": "grass",
+    "dur": 2.5
+   }
+  ],
+  "postFinishRespawns": 0,
+  "offRoad": {
+   "You": 0,
+   "Barnaby": 0,
+   "Tilly": 3.1,
+   "Clementine": 0,
+   "Dot": 0,
+   "Buster": 0,
+   "Rosco": 0,
+   "Maeve": 0,
+   "Vance": 2.9,
+   "Ace": 0
+  },
+  "slow": {
+   "You": 0,
+   "Barnaby": 0,
+   "Tilly": 2.5,
+   "Clementine": 0,
+   "Dot": 2.4,
+   "Buster": 0,
+   "Rosco": 0,
+   "Maeve": 2.7,
+   "Vance": 2.5,
+   "Ace": 0
+  },
+  "choices": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "final": [
+   "You 3223 F290",
+   "Barnaby 3224 F365",
+   "Tilly 3226 F351",
+   "Clementine 3222 F354",
+   "Dot 3225 F325",
+   "Buster 3223 F336",
+   "Rosco 3223 F314",
+   "Maeve 3232 F296",
+   "Vance 3226 F314",
+   "Ace 3234 F284"
+  ],
+  "ranks": [
+   {
+    "t": 30,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": true,
+    "playerS": 304,
+    "aceS": 289,
+    "near": 1
+   },
+   {
+    "t": 60,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": true,
+    "playerS": 627,
+    "aceS": 617,
+    "near": 1
+   },
+   {
+    "t": 330,
+    "rank": "2/10",
+    "lap": "Lap 3/3",
+    "lapOn": true,
+    "playerS": 3223,
+    "aceS": 3234,
+    "near": 5
+   },
+   {
+    "t": 360,
+    "rank": "2/10",
+    "lap": "Lap 3/3",
+    "lapOn": true,
+    "playerS": 3223,
+    "aceS": 3234,
+    "near": 8
+   }
+  ]
+ },
+ "bad": {
+  "res": [
+   {
+    "s0": 86,
+    "side": -1,
+    "maxLat": 7.7,
+    "afterBad": {
+     "s": 95,
+     "lat": -7.6,
+     "sp": 0.2,
+     "surf": "grass"
+    },
+    "recover": 1.8,
+    "stuckT": 0.5,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 86,
+    "side": 1,
+    "maxLat": 7.7,
+    "afterBad": {
+     "s": 95,
+     "lat": 7.7,
+     "sp": 0.3,
+     "surf": "grass"
+    },
+    "recover": 1.7,
+    "stuckT": 0.4,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 215,
+    "side": -1,
+    "maxLat": 7.7,
+    "afterBad": {
+     "s": 224,
+     "lat": -7.6,
+     "sp": 0.3,
+     "surf": "grass"
+    },
+    "recover": 2.3,
+    "stuckT": 0.9,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 215,
+    "side": 1,
+    "maxLat": 7.7,
+    "afterBad": {
+     "s": 225,
+     "lat": 7.7,
+     "sp": 0.8,
+     "surf": "grass"
+    },
+    "recover": 1.5,
+    "stuckT": 0.2,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 354,
+    "side": -1,
+    "maxLat": 7.7,
+    "afterBad": {
+     "s": 363,
+     "lat": -7.6,
+     "sp": 0.1,
+     "surf": "grass"
+    },
+    "recover": 2.1,
+    "stuckT": 0.7,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 354,
+    "side": 1,
+    "maxLat": 7.7,
+    "afterBad": {
+     "s": 363,
+     "lat": 7.6,
+     "sp": 0.1,
+     "surf": "grass"
+    },
+    "recover": 1.9,
+    "stuckT": 0.6,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 483,
+    "side": -1,
+    "maxLat": 8.6,
+    "afterBad": {
+     "s": 501,
+     "lat": -8,
+     "sp": 5.4,
+     "surf": "grass"
+    },
+    "recover": 1.2,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 483,
+    "side": 1,
+    "maxLat": 7.6,
+    "afterBad": {
+     "s": 491,
+     "lat": 7.6,
+     "sp": 0.2,
+     "surf": "grass"
+    },
+    "recover": 2.9,
+    "stuckT": 1.5,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 622,
+    "side": -1,
+    "maxLat": 7.6,
+    "afterBad": {
+     "s": 630,
+     "lat": -7.5,
+     "sp": 0.1,
+     "surf": "grass"
+    },
+    "recover": 3,
+    "stuckT": 2.4,
+    "resc": [
+     {
+      "t": 2.1,
+      "from": 630,
+      "to": 640,
+      "lat": 0,
+      "surf": "asphalt"
+     }
+    ],
+    "respawns": 1
+   },
+   {
+    "s0": 622,
+    "side": 1,
+    "maxLat": 7.6,
+    "afterBad": {
+     "s": 631,
+     "lat": 7.6,
+     "sp": 0.2,
+     "surf": "grass"
+    },
+    "recover": 1.9,
+    "stuckT": 0.6,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 751,
+    "side": -1,
+    "maxLat": 9.9,
+    "afterBad": {
+     "s": 759,
+     "lat": -9.9,
+     "sp": 2.5,
+     "surf": "wall"
+    },
+    "recover": 2.1,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 751,
+    "side": 1,
+    "maxLat": 8.3,
+    "afterBad": {
+     "s": 761,
+     "lat": 8.2,
+     "sp": 0,
+     "surf": "grass"
+    },
+    "recover": 2.8,
+    "stuckT": 1.1,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 880,
+    "side": -1,
+    "maxLat": 8.3,
+    "afterBad": {
+     "s": 889,
+     "lat": -8.3,
+     "sp": 0.3,
+     "surf": "grass"
+    },
+    "recover": 2.1,
+    "stuckT": 0.5,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 880,
+    "side": 1,
+    "maxLat": 7.6,
+    "afterBad": {
+     "s": 890,
+     "lat": 7.6,
+     "sp": 0,
+     "surf": "grass"
+    },
+    "recover": 3,
+    "stuckT": 2.3,
+    "resc": [
+     {
+      "t": 2.1,
+      "from": 890,
+      "to": 971,
+      "lat": 0,
+      "surf": "asphalt"
+     }
+    ],
+    "respawns": 1
+   },
+   {
+    "s0": 998,
+    "side": -1,
+    "maxLat": 8.1,
+    "afterBad": {
+     "s": 1009,
+     "lat": -8,
+     "sp": 1.7,
+     "surf": "grass"
+    },
+    "recover": 1.4,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 998,
+    "side": 1,
+    "maxLat": 7.6,
+    "afterBad": {
+     "s": 1006,
+     "lat": 7.6,
+     "sp": 0.2,
+     "surf": "grass"
+    },
+    "recover": 2.3,
+    "stuckT": 0.9,
+    "resc": [],
+    "respawns": 0
+   }
+  ],
+  "wedge": [
+   {
+    "s0": 322,
+    "side": -1,
+    "sp0": 0.06,
+    "surf": "grass",
+    "lat": -7.6,
+    "speedEnd": 14,
+    "rescuedAt": 2.7,
+    "after": {
+     "s": 341,
+     "lat": 0,
+     "surf": "asphalt",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 322,
+    "side": 1,
+    "sp0": 0.09,
+    "surf": "grass",
+    "lat": 7.5,
+    "speedEnd": 14.08,
+    "rescuedAt": 2.6,
+    "after": {
+     "s": 340,
+     "lat": 0,
+     "surf": "asphalt",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 483,
+    "side": -1,
+    "sp0": 3.15,
+    "surf": "wall",
+    "lat": -8.4,
+    "speedEnd": 15.86,
+    "rescuedAt": 4.9,
+    "after": {
+     "s": 508,
+     "lat": 0,
+     "surf": "asphalt",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 483,
+    "side": 1,
+    "sp0": 0.21,
+    "surf": "grass",
+    "lat": 7.5,
+    "speedEnd": 15.9,
+    "rescuedAt": 6.3,
+    "after": {
+     "s": 500,
+     "lat": 0,
+     "surf": "asphalt",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 644,
+    "side": -1,
+    "sp0": 1.33,
+    "surf": "grass",
+    "lat": -7.5,
+    "speedEnd": 16,
+    "rescuedAt": 6.2,
+    "after": {
+     "s": 662,
+     "lat": 0,
+     "surf": "asphalt",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 644,
+    "side": 1,
+    "sp0": 0.07,
+    "surf": "grass",
+    "lat": 7.5,
+    "speedEnd": 16.2,
+    "rescuedAt": 2.7,
+    "after": {
+     "s": 662,
+     "lat": 0,
+     "surf": "asphalt",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 858,
+    "side": -1,
+    "sp0": 0.44,
+    "surf": "grass",
+    "lat": -7.5,
+    "speedEnd": 0.01,
+    "rescuedAt": null,
+    "after": null
+   },
+   {
+    "s0": 858,
+    "side": 1,
+    "sp0": 0.44,
+    "surf": "grass",
+    "lat": 7.6,
+    "speedEnd": 0,
+    "rescuedAt": null,
+    "after": null
+   }
+  ],
+  "solo": {
+   "finished": true,
+   "t": 245.4,
+   "respawns": 0,
+   "offRoad": 0
+  }
+ },
+ "wall": {
+  "hits": [
+   {
+    "s0": 40,
+    "side": -1,
+    "maxVy": 1.13,
+    "maxAirAboveGround": 0.3,
+    "airT": 0,
+    "maxLat": 7.8,
+    "surf": "grass"
+   },
+   {
+    "s0": 40,
+    "side": 1,
+    "maxVy": 1.09,
+    "maxAirAboveGround": 0.32,
+    "airT": 0.05,
+    "maxLat": 7.8,
+    "surf": "grass"
+   },
+   {
+    "s0": 150,
+    "side": -1,
+    "maxVy": 1.22,
+    "maxAirAboveGround": 0.27,
+    "airT": 0,
+    "maxLat": 7.8,
+    "surf": "grass"
+   },
+   {
+    "s0": 150,
+    "side": 1,
+    "maxVy": 1.12,
+    "maxAirAboveGround": 0.3,
+    "airT": 0,
+    "maxLat": 7.7,
+    "surf": "grass"
+   },
+   {
+    "s0": 270,
+    "side": -1,
+    "maxVy": 1.19,
+    "maxAirAboveGround": 0.29,
+    "airT": 0.1,
+    "maxLat": 9.9,
+    "surf": "grass"
+   },
+   {
+    "s0": 270,
+    "side": 1,
+    "maxVy": 0.65,
+    "maxAirAboveGround": 0.3,
+    "airT": 0.05,
+    "maxLat": 7.7,
+    "surf": "asphalt"
+   },
+   {
+    "s0": 300,
+    "side": -1,
+    "maxVy": 1.33,
+    "maxAirAboveGround": 0.4,
+    "airT": 0.3,
+    "maxLat": 9.1,
+    "surf": "wall"
+   },
+   {
+    "s0": 300,
+    "side": 1,
+    "maxVy": 1.59,
+    "maxAirAboveGround": 0.27,
+    "airT": 0,
+    "maxLat": 7.7,
+    "surf": "grass"
+   },
+   {
+    "s0": 440,
+    "side": -1,
+    "maxVy": 1.7,
+    "maxAirAboveGround": 0.3,
+    "airT": 0.05,
+    "maxLat": 11.9,
+    "surf": "gravel"
+   },
+   {
+    "s0": 440,
+    "side": 1,
+    "maxVy": 0.77,
+    "maxAirAboveGround": 0.25,
+    "airT": 0.1,
+    "maxLat": 10.9,
+    "surf": "wall"
+   },
+   {
+    "s0": 452,
+    "side": -1,
+    "maxVy": 1.67,
+    "maxAirAboveGround": 0.29,
+    "airT": 0.1,
+    "maxLat": 11.5,
+    "surf": "wall"
+   },
+   {
+    "s0": 452,
+    "side": 1,
+    "maxVy": 0.7,
+    "maxAirAboveGround": 0.51,
+    "airT": 0.25,
+    "maxLat": 8.7,
+    "surf": "grass"
+   },
+   {
+    "s0": 750,
+    "side": -1,
+    "maxVy": 1.54,
+    "maxAirAboveGround": 0.4,
+    "airT": 0.5,
+    "maxLat": 10.1,
+    "surf": "grass"
+   },
+   {
+    "s0": 750,
+    "side": 1,
+    "maxVy": 1.66,
+    "maxAirAboveGround": 0.31,
+    "airT": 0.15,
+    "maxLat": 9.5,
+    "surf": "grass"
+   },
+   {
+    "s0": 940,
+    "side": -1,
+    "maxVy": 1.56,
+    "maxAirAboveGround": 0.3,
+    "airT": 0.05,
+    "maxLat": 11.7,
+    "surf": "grass"
+   },
+   {
+    "s0": 940,
+    "side": 1,
+    "maxVy": 0.69,
+    "maxAirAboveGround": 0.3,
+    "airT": 0,
+    "maxLat": 7.7,
+    "surf": "asphalt"
+   }
+  ],
+  "pins": [
+   {
+    "s0": 440,
+    "side": -1,
+    "mode": "paddle",
+    "latIn": -11.5,
+    "spIn": 0.13,
+    "surf": "gravel",
+    "rescuedAt": null,
+    "minSp": 0.2,
+    "maxSp": 12.25,
+    "sEnd": 546,
+    "latEnd": -7.8
+   },
+   {
+    "s0": 440,
+    "side": -1,
+    "mode": "idle",
+    "latIn": -11.5,
+    "spIn": 0.13,
+    "surf": "gravel",
+    "rescuedAt": 2.8,
+    "minSp": 0.03,
+    "maxSp": 0.31,
+    "sEnd": 477,
+    "latEnd": 0
+   },
+   {
+    "s0": 440,
+    "side": 1,
+    "mode": "paddle",
+    "latIn": 5.6,
+    "spIn": 11.35,
+    "surf": "asphalt",
+    "rescuedAt": null,
+    "minSp": 2.9,
+    "maxSp": 11.67,
+    "sEnd": 580,
+    "latEnd": 11.8
+   },
+   {
+    "s0": 440,
+    "side": 1,
+    "mode": "idle",
+    "latIn": 5.6,
+    "spIn": 11.35,
+    "surf": "asphalt",
+    "rescuedAt": null,
+    "minSp": 0.84,
+    "maxSp": 11.28,
+    "sEnd": 546,
+    "latEnd": 8.5
+   },
+   {
+    "s0": 452,
+    "side": -1,
+    "mode": "paddle",
+    "latIn": -11.5,
+    "spIn": 0.68,
+    "surf": "gravel",
+    "rescuedAt": null,
+    "minSp": 0.83,
+    "maxSp": 12.45,
+    "sEnd": 600,
+    "latEnd": -7.7
+   },
+   {
+    "s0": 452,
+    "side": -1,
+    "mode": "idle",
+    "latIn": -11.5,
+    "spIn": 0.68,
+    "surf": "gravel",
+    "rescuedAt": 2.8,
+    "minSp": 0.01,
+    "maxSp": 0.39,
+    "sEnd": 478,
+    "latEnd": 0
+   },
+   {
+    "s0": 452,
+    "side": 1,
+    "mode": "paddle",
+    "latIn": 7.5,
+    "spIn": 4.76,
+    "surf": "grass",
+    "rescuedAt": 4.6,
+    "minSp": 0.03,
+    "maxSp": 4.35,
+    "sEnd": 496,
+    "latEnd": 0
+   },
+   {
+    "s0": 452,
+    "side": 1,
+    "mode": "idle",
+    "latIn": 7.5,
+    "spIn": 4.76,
+    "surf": "grass",
+    "rescuedAt": 4.4,
+    "minSp": 0.02,
+    "maxSp": 4.11,
+    "sEnd": 495,
+    "latEnd": 0
+   },
+   {
+    "s0": 465,
+    "side": -1,
+    "mode": "paddle",
+    "latIn": -10.7,
+    "spIn": 3.89,
+    "surf": "wall",
+    "rescuedAt": null,
+    "minSp": 4.13,
+    "maxSp": 12.08,
+    "sEnd": 643,
+    "latEnd": -8
+   },
+   {
+    "s0": 465,
+    "side": -1,
+    "mode": "idle",
+    "latIn": -10.7,
+    "spIn": 3.89,
+    "surf": "wall",
+    "rescuedAt": null,
+    "minSp": 1.81,
+    "maxSp": 3.71,
+    "sEnd": 514,
+    "latEnd": -6.5
+   },
+   {
+    "s0": 465,
+    "side": 1,
+    "mode": "paddle",
+    "latIn": 7.3,
+    "spIn": 1.49,
+    "surf": "grass",
+    "rescuedAt": 3.8,
+    "minSp": 0.02,
+    "maxSp": 1.82,
+    "sEnd": 496,
+    "latEnd": 0
+   },
+   {
+    "s0": 465,
+    "side": 1,
+    "mode": "idle",
+    "latIn": 7.3,
+    "spIn": 1.49,
+    "surf": "grass",
+    "rescuedAt": 6.6,
+    "minSp": 0.03,
+    "maxSp": 1.59,
+    "sEnd": 496,
+    "latEnd": 0
+   },
+   {
+    "s0": 760,
+    "side": -1,
+    "mode": "paddle",
+    "latIn": -7.7,
+    "spIn": 5.16,
+    "surf": "grass",
+    "rescuedAt": null,
+    "minSp": 5.3,
+    "maxSp": 12.17,
+    "sEnd": 922,
+    "latEnd": -11.7
+   },
+   {
+    "s0": 760,
+    "side": -1,
+    "mode": "idle",
+    "latIn": -7.7,
+    "spIn": 5.16,
+    "surf": "grass",
+    "rescuedAt": 10.6,
+    "minSp": 0.03,
+    "maxSp": 4.93,
+    "sEnd": 816,
+    "latEnd": 0
+   },
+   {
+    "s0": 760,
+    "side": 1,
+    "mode": "paddle",
+    "latIn": 8.7,
+    "spIn": 0.35,
+    "surf": "grass",
+    "rescuedAt": null,
+    "minSp": 0.46,
+    "maxSp": 13.68,
+    "sEnd": 916,
+    "latEnd": 6.6
+   },
+   {
+    "s0": 760,
+    "side": 1,
+    "mode": "idle",
+    "latIn": 8.7,
+    "spIn": 0.35,
+    "surf": "grass",
+    "rescuedAt": 2.9,
+    "minSp": 0.01,
+    "maxSp": 0.22,
+    "sEnd": 781,
+    "latEnd": 0
+   },
+   {
+    "s0": 280,
+    "side": -1,
+    "mode": "paddle",
+    "latIn": -9.7,
+    "spIn": 0.41,
+    "surf": "grass",
+    "rescuedAt": null,
+    "minSp": 0.58,
+    "maxSp": 12.31,
+    "sEnd": 428,
+    "latEnd": -10.7
+   },
+   {
+    "s0": 280,
+    "side": -1,
+    "mode": "idle",
+    "latIn": -9.7,
+    "spIn": 0.41,
+    "surf": "grass",
+    "rescuedAt": 3,
+    "minSp": 0.05,
+    "maxSp": 0.2,
+    "sEnd": 308,
+    "latEnd": 0
+   },
+   {
+    "s0": 280,
+    "side": 1,
+    "mode": "paddle",
+    "latIn": 7.6,
+    "spIn": 0.47,
+    "surf": "grass",
+    "rescuedAt": null,
+    "minSp": 0.32,
+    "maxSp": 12.22,
+    "sEnd": 457,
+    "latEnd": 0.3
+   },
+   {
+    "s0": 280,
+    "side": 1,
+    "mode": "idle",
+    "latIn": 7.6,
+    "spIn": 0.47,
+    "surf": "grass",
+    "rescuedAt": 3.6,
+    "minSp": 0.01,
+    "maxSp": 0.66,
+    "sEnd": 308,
+    "latEnd": 0
+   }
+  ]
+ },
+ "cams": [
+  {
+   "s": 465,
+   "view": "chase",
+   "into": 0,
+   "camLat": 1.7,
+   "cartLat": 1.7,
+   "camAboveGround": 2.52,
+   "w": 10,
+   "ang": 1.42
+  },
+  {
+   "s": 465,
+   "view": "chase",
+   "into": 1,
+   "camLat": -4.8,
+   "cartLat": -10.5,
+   "camAboveGround": 2.91,
+   "w": 10,
+   "ang": 1.42
+  },
+  {
+   "s": 465,
+   "view": "far",
+   "into": 0,
+   "camLat": -0.3,
+   "cartLat": 1.7,
+   "camAboveGround": 4.57,
+   "w": 10,
+   "ang": 1.42
+  },
+  {
+   "s": 465,
+   "view": "far",
+   "into": 1,
+   "camLat": 0.5,
+   "cartLat": -10.5,
+   "camAboveGround": 5.8,
+   "w": 10,
+   "ang": 1.42
+  },
+  {
+   "s": 465,
+   "view": "side",
+   "into": 1,
+   "camLat": -10,
+   "cartLat": -10.4,
+   "camAboveGround": 1.28,
+   "w": 10,
+   "ang": 1.42
+  },
+  {
+   "s": 750,
+   "view": "chase",
+   "into": 0,
+   "camLat": 2.3,
+   "cartLat": 1.8,
+   "camAboveGround": 2.48,
+   "w": 10,
+   "ang": 1.11
+  },
+  {
+   "s": 750,
+   "view": "chase",
+   "into": 1,
+   "camLat": -5.2,
+   "cartLat": -9.5,
+   "camAboveGround": 2.91,
+   "w": 10,
+   "ang": 1.11
+  },
+  {
+   "s": 750,
+   "view": "far",
+   "into": 0,
+   "camLat": 0.9,
+   "cartLat": 1.8,
+   "camAboveGround": 4.45,
+   "w": 10,
+   "ang": 1.11
+  },
+  {
+   "s": 750,
+   "view": "far",
+   "into": 1,
+   "camLat": -0.8,
+   "cartLat": -9.5,
+   "camAboveGround": 5.78,
+   "w": 10,
+   "ang": 1.11
+  },
+  {
+   "s": 750,
+   "view": "side",
+   "into": 1,
+   "camLat": -10.7,
+   "cartLat": -9.5,
+   "camAboveGround": 1.33,
+   "w": 10,
+   "ang": 1.11
+  },
+  {
+   "s": 925,
+   "view": "chase",
+   "into": 0,
+   "camLat": 1.3,
+   "cartLat": 1.2,
+   "camAboveGround": 2.42,
+   "w": 10,
+   "ang": 0.81
+  },
+  {
+   "s": 925,
+   "view": "chase",
+   "into": 1,
+   "camLat": -6.3,
+   "cartLat": -10.8,
+   "camAboveGround": 2.81,
+   "w": 10,
+   "ang": 0.81
+  },
+  {
+   "s": 925,
+   "view": "far",
+   "into": 0,
+   "camLat": 0.1,
+   "cartLat": 1.2,
+   "camAboveGround": 4.46,
+   "w": 10,
+   "ang": 0.81
+  },
+  {
+   "s": 925,
+   "view": "far",
+   "into": 1,
+   "camLat": -2.2,
+   "cartLat": -10.8,
+   "camAboveGround": 5.64,
+   "w": 10,
+   "ang": 0.81
+  },
+  {
+   "s": 925,
+   "view": "side",
+   "into": 1,
+   "camLat": -11.3,
+   "cartLat": -10.8,
+   "camAboveGround": 1.32,
+   "w": 10,
+   "ang": 0.81
+  }
+ ],
+ "cams2": [
+  {
+   "tag": "w280",
+   "s": 292,
+   "view": "chase",
+   "into": 0,
+   "path": "main",
+   "camLat": 1.3,
+   "cartLat": 0.7,
+   "hw": 5,
+   "camAboveGround": 2.37,
+   "dist": 6.6,
+   "surf": "asphalt"
+  },
+  {
+   "tag": "w280",
+   "s": 292,
+   "view": "far",
+   "into": 0,
+   "path": "main",
+   "camLat": 1.9,
+   "cartLat": 0.7,
+   "hw": 5,
+   "camAboveGround": 4.42,
+   "dist": 12.7,
+   "surf": "asphalt"
+  },
+  {
+   "tag": "w280",
+   "s": 279,
+   "view": "chase",
+   "into": 1,
+   "path": "main",
+   "camLat": -4.2,
+   "cartLat": -9.4,
+   "hw": 5,
+   "camAboveGround": 2.98,
+   "dist": 5.1,
+   "surf": "grass"
+  },
+  {
+   "tag": "w280",
+   "s": 279,
+   "view": "far",
+   "into": 1,
+   "path": "main",
+   "camLat": 1.2,
+   "cartLat": -9.3,
+   "hw": 5,
+   "camAboveGround": 5.95,
+   "dist": 10.5,
+   "surf": "grass"
+  },
+  {
+   "tag": "w280",
+   "s": 279,
+   "view": "side",
+   "into": 1,
+   "path": "main",
+   "camLat": -8.4,
+   "cartLat": -9.3,
+   "hw": 5,
+   "camAboveGround": 1.49,
+   "dist": 4.3,
+   "surf": "grass"
+  },
+  {
+   "tag": "w452",
+   "s": 460,
+   "view": "chase",
+   "into": 0,
+   "path": "main",
+   "camLat": 2.6,
+   "cartLat": 1.3,
+   "hw": 5,
+   "camAboveGround": 2.57,
+   "dist": 6.3,
+   "surf": "asphalt"
+  },
+  {
+   "tag": "w452",
+   "s": 459,
+   "view": "far",
+   "into": 0,
+   "path": "main",
+   "camLat": 3.9,
+   "cartLat": 1.2,
+   "hw": 5,
+   "camAboveGround": 4.64,
+   "dist": 12.1,
+   "surf": "asphalt"
+  },
+  {
+   "tag": "w452",
+   "s": 448,
+   "view": "chase",
+   "into": 1,
+   "path": "main",
+   "camLat": -4.2,
+   "cartLat": -10.2,
+   "hw": 5,
+   "camAboveGround": 2.94,
+   "dist": 6.2,
+   "surf": "gravel"
+  },
+  {
+   "tag": "w452",
+   "s": 448,
+   "view": "far",
+   "into": 1,
+   "path": "main",
+   "camLat": 1.3,
+   "cartLat": -10.2,
+   "hw": 5,
+   "camAboveGround": 5.86,
+   "dist": 11.9,
+   "surf": "gravel"
+  },
+  {
+   "tag": "w452",
+   "s": 448,
+   "view": "side",
+   "into": 1,
+   "path": "main",
+   "camLat": -8.9,
+   "cartLat": -10.2,
+   "hw": 5,
+   "camAboveGround": 1.29,
+   "dist": 4.8,
+   "surf": "gravel"
+  },
+  {
+   "tag": "w760",
+   "s": 780,
+   "view": "chase",
+   "into": 0,
+   "path": "main",
+   "camLat": -2.3,
+   "cartLat": -1.2,
+   "hw": 5,
+   "camAboveGround": 2.45,
+   "dist": 7.1,
+   "surf": "asphalt"
+  },
+  {
+   "tag": "w760",
+   "s": 780,
+   "view": "far",
+   "into": 0,
+   "path": "main",
+   "camLat": -3.3,
+   "cartLat": -1.2,
+   "hw": 5,
+   "camAboveGround": 4.48,
+   "dist": 13.4,
+   "surf": "asphalt"
+  },
+  {
+   "tag": "w760",
+   "s": 762,
+   "view": "chase",
+   "into": 1,
+   "path": "main",
+   "camLat": -6.7,
+   "cartLat": -9.3,
+   "hw": 5,
+   "camAboveGround": 2.54,
+   "dist": 5.1,
+   "surf": "grass"
+  },
+  {
+   "tag": "w760",
+   "s": 762,
+   "view": "far",
+   "into": 1,
+   "path": "main",
+   "camLat": 1.5,
+   "cartLat": -9.1,
+   "hw": 5,
+   "camAboveGround": 5.85,
+   "dist": 10.6,
+   "surf": "grass"
+  },
+  {
+   "tag": "w760",
+   "s": 762,
+   "view": "side",
+   "into": 1,
+   "path": "main",
+   "camLat": -7.8,
+   "cartLat": -9.1,
+   "hw": 5,
+   "camAboveGround": 2.29,
+   "dist": 4.4,
+   "surf": "grass"
+  },
+  {
+   "tag": "w940",
+   "s": 949,
+   "view": "chase",
+   "into": 0,
+   "path": "main",
+   "camLat": 1.8,
+   "cartLat": 0.9,
+   "hw": 5,
+   "camAboveGround": 2.46,
+   "dist": 6.4,
+   "surf": "asphalt"
+  },
+  {
+   "tag": "w940",
+   "s": 948,
+   "view": "far",
+   "into": 0,
+   "path": "main",
+   "camLat": 2.5,
+   "cartLat": 0.9,
+   "hw": 5,
+   "camAboveGround": 4.53,
+   "dist": 12.3,
+   "surf": "asphalt"
+  },
+  {
+   "tag": "w940",
+   "s": 933,
+   "view": "chase",
+   "into": 1,
+   "path": "main",
+   "camLat": -5.5,
+   "cartLat": -10.6,
+   "hw": 5,
+   "camAboveGround": 2.87,
+   "dist": 6.2,
+   "surf": "grass"
+  },
+  {
+   "tag": "w940",
+   "s": 934,
+   "view": "far",
+   "into": 1,
+   "path": "main",
+   "camLat": -0.8,
+   "cartLat": -10.4,
+   "hw": 5,
+   "camAboveGround": 5.68,
+   "dist": 11.8,
+   "surf": "grass"
+  },
+  {
+   "tag": "w940",
+   "s": 934,
+   "view": "side",
+   "into": 1,
+   "path": "main",
+   "camLat": -10.6,
+   "cartLat": -10.4,
+   "hw": 5,
+   "camAboveGround": 1.31,
+   "dist": 4.7,
+   "surf": "grass"
+  }
+ ],
+ "map": [
+  {
+   "s": 965,
+   "rect": [
+    848,
+    77,
+    100,
+    276
+   ],
+   "choices": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  {
+   "s": 2253,
+   "rect": [
+    848,
+    77,
+    100,
+    276
+   ],
+   "choices": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  }
+ ],
+ "cost": [
+  {
+   "s": "grid",
+   "calls": 144,
+   "tris": 261024,
+   "geoms": 150,
+   "tex": 45,
+   "ms": 8
+  },
+  {
+   "s": 11,
+   "calls": 108,
+   "tris": 187786,
+   "geoms": 130,
+   "tex": 46,
+   "ms": 3
+  },
+  {
+   "s": 215,
+   "calls": 73,
+   "tris": 170982,
+   "geoms": 139,
+   "tex": 46,
+   "ms": 5
+  },
+  {
+   "s": 429,
+   "calls": 160,
+   "tris": 294826,
+   "geoms": 157,
+   "tex": 46,
+   "ms": 3
+  },
+  {
+   "s": 644,
+   "calls": 143,
+   "tris": 265204,
+   "geoms": 151,
+   "tex": 46,
+   "ms": 3
+  },
+  {
+   "s": 858,
+   "calls": 101,
+   "tris": 221472,
+   "geoms": 154,
+   "tex": 46,
+   "ms": 2
+  },
+  {
+   "s": 1040,
+   "calls": 153,
+   "tris": 267146,
+   "geoms": 154,
+   "tex": 46,
+   "ms": 2
+  }
+ ],
+ "phone": {
+  "rects": {
+   ".sbd-padbox.l": {
+    "x": 21,
+    "y": 65,
+    "w": 256,
+    "h": 185,
+    "text": "Paddle"
+   },
+   ".sbd-padbox.r": {
+    "x": 473,
+    "y": 65,
+    "w": 247,
+    "h": 185,
+    "text": "Paddle"
+   },
+   ".sbd-map": {
+    "x": 767,
+    "y": 54,
+    "w": 73,
+    "h": 201,
+    "text": ""
+   },
+   ".sbd-rank": {
+    "x": 6,
+    "y": 6,
+    "w": 67,
+    "h": 44,
+    "text": "5/10"
+   },
+   ".sbd-lap": {
+    "x": 93,
+    "y": 11,
+    "w": 63,
+    "h": 25,
+    "text": "Lap 1/3"
+   },
+   ".sbd-horn": {
+    "x": 402,
+    "y": 6,
+    "w": 39,
+    "h": 26,
+    "text": ""
+   },
+   ".sbd-view": {
+    "x": 448,
+    "y": 6,
+    "w": 34,
+    "h": 26,
+    "text": "Cockpit"
+   },
+   ".sbd-peg": {
+    "x": 793,
+    "y": 7,
+    "w": 44,
+    "h": 44,
+    "text": ""
+   },
+   ".sbd-toast": "hidden"
+  },
+  "overlaps": []
+ },
+ "mem": [
+  [
+   161,
+   40
+  ],
+  [
+   161,
+   40
+  ],
+  [
+   161,
+   40
+  ],
+  [
+   174,
+   40
+  ],
+  [
+   161,
+   40
+  ]
+ ]
+}
