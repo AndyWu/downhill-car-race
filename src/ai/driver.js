@@ -225,7 +225,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const flatCad = Math.min(4.6, (3.7 + 0.5 * (P.skill ?? 0.5)) * (1 + 0.8 * (1 - clamp(speed / 6, 0, 1))));
     let catchUp = 1; // flat: backmarkers dig in when the field is pulling away, so nobody gets lapped
     if (flat && others.length) { let lead = s; for (const o of others) if (o.s > lead) lead = o.s; catchUp = 1 + CU * clamp((lead - s - 100) / 250, 0, 1); }
-    const standing = flat && t < 7 ? 1 + 0.3 * (1 - t / 7) : 1; // flat start: everybody is off the line promptly (the player starts mid-grid)
+    const standing = flat && t < 7 ? 1 + (0.3 + 1.2 * Math.max(0, (P.skill ?? 0.5) - 0.65)) * (1 - t / 7) : 1; // stronger launch for the better drivers so a human in mid-grid does not lead at once // flat start: everybody is off the line promptly (the player starts mid-grid)
     const cadence = paceK * standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.

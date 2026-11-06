@@ -126,7 +126,7 @@ export function planVillage(seed) {
       hz.push({ ...h, s: mapS(road, h.s), halfLength: h.halfLength * k, ...sp });
     }
   };
-  main.field = createHazardField(main, seed + 11, { order: ['puddle', 'rock', 'puddle', 'stall', 'rock', 'puddle'], start: 190, startJit: 25, gap1: 55, gap2: 60, endGap: 110, stallEdge: true, noStall: SPLITS.flatMap((sp) => [[sp.fromS - 30, sp.fromS + 115], [sp.toS - 115, sp.toS + 30]]) });
+  main.field = createHazardField(main, seed + 11, { order: ['puddle', 'rock', 'puddle', 'stall', 'rock', 'puddle'], start: 190, startJit: 25, gap1: 55, gap2: 60, endGap: 110, stallEdge: true, noStall: [[-1e9, 1e9]] });
   main.field.zones.forEach((z, zi) => {   // main-street stalls: all props on ONE kerb side (a clear 4 m lane on the other) instead of a zig-zag chicane that trapped the AI
     if (z.kind !== 'stall') return;
     const side = zi % 2 ? 1 : -1;
@@ -136,7 +136,7 @@ export function planVillage(seed) {
   });
   addHaz(main, main.field);
   const softRocks = (f) => { for (const z of f.zones) if (z.kind === 'rock') { z.bump = 0.5; z.friction = 0.84; } };   // visible rubble, but not a speed trap
-  softRocks(main.field);
+  softRocks(main.field); for (const z of main.field.zones) if (z.kind === 'rock') { z.bump = 0.3; z.friction = 0.88; z.drag = 0.02; }
   for (const b of branches) {
     const kind = b.road.kind;
     const opts = kind === 'market' ? { order: ['stall', 'puddle', 'stall', 'stall'], start: 92, startJit: 8, gap1: 14, gap2: 8, endGap: 24 }

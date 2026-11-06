@@ -954,7 +954,7 @@ async function boot() {
       if (v.setLOD) {
         _sph.center.copy(v.group.position); _sph.radius = 2.5;
         const visible = _fr.intersectsSphere(_sph);
-        const nearD = countdown ? 11 : 27, farD = countdown ? 13 : 33;
+        const nearD = countdown ? 6.5 : 27, farD = countdown ? 8 : 33;
         const want = v.lod === 'far' ? (d < nearD && visible ? 'near' : 'far') : ((d > farD || (!visible && d > 5)) ? 'far' : 'near');
         if (want !== v.lod) { v.lod = want; v.setLOD(want); }
       }
