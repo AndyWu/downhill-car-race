@@ -2,3 +2,8 @@
 player truck 0: rho(skill,s@90) 0.88  Ace 1053 > Rosco 803 > Maeve 802 > Buster 801 > Vance 801 > Tilly 799 > Dot 751 > Clementine 710 > Barnaby 676
 player truck 4: rho(skill,s@90) 0.90  Ace 1053 > Vance 955 > Maeve 772 > Rosco 744 > Tilly 738 > Buster 733 > Dot 713 > Clementine 700 > Barnaby 675
 === corn
+player truck 0: rho(skill,s@90) 0.85  Ace 1003 > Rosco 805 > Maeve 803 > Vance 791 > Buster 780 > Clementine 745 > Barnaby 510 > Dot 498 > Tilly 496
+player truck 4: rho(skill,s@90) 0.87  Ace 1007 > Rosco 808 > Vance 808 > Maeve 805 > Buster 785 > Clementine 771 > Barnaby 754 > Tilly 723 > Dot 651
+=== circuit
+player truck 0: rho(skill,s@90) 0.93  Ace 980 > Rosco 853 > Vance 837 > Maeve 824 > Buster 754 > Clementine 688 > Dot 671 > Tilly 656 > Barnaby 650
+player truck 4: rho(skill,s@90) 0.87  Ace 981 > Maeve 891 > Rosco 856 > Vance 822 > Buster 756 > Clementine 687 > Barnaby 652 > Dot 647 > Tilly 643

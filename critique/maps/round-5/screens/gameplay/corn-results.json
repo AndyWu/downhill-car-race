@@ -1,0 +1,337 @@
+{
+ "track": "corn",
+ "race": {
+  "good": true,
+  "t": 407.6,
+  "grid": [
+   "You:4",
+   "Barnaby:9",
+   "Tilly:8",
+   "Clementine:7",
+   "Dot:6",
+   "Buster:5",
+   "Rosco:0",
+   "Maeve:3",
+   "Vance:2",
+   "Ace:1"
+  ],
+  "loops": [
+   [
+    "Dot",
+    1885,
+    1885,
+    1.2
+   ]
+  ],
+  "order90": [
+   "You(1122)",
+   "Rosco(929)",
+   "Vance(926)",
+   "Ace(923)",
+   "Maeve(894)",
+   "Buster(797)",
+   "Clementine(776)",
+   "Dot(733)",
+   "Tilly(710)",
+   "Barnaby(708)"
+  ],
+  "finish": {
+   "You": 238.8,
+   "Vance": 284.8,
+   "Ace": 285,
+   "Maeve": 315.1,
+   "Rosco": 344.2,
+   "Buster": 351.4,
+   "Tilly": 351.7,
+   "Clementine": 352.9,
+   "Barnaby": 385.9,
+   "Dot": 407.8
+  },
+  "leadChanges": 1,
+  "pRank1": 39.5,
+  "rescues": [
+   {
+    "who": "Dot",
+    "t": 241.4,
+    "from": 1883,
+    "s": 1885,
+    "latAfter": 0,
+    "surf": "dirt",
+    "path": ""
+   },
+   {
+    "who": "Dot",
+    "t": 242.6,
+    "from": 1885,
+    "s": 1897,
+    "latAfter": 0,
+    "surf": "dirt",
+    "path": ""
+   }
+  ],
+  "stuckEv": [
+   {
+    "who": "Dot",
+    "t": 240.4,
+    "s": 1882,
+    "lat": -0.9,
+    "surf": "dirt",
+    "dur": 2.2
+   }
+  ],
+  "postFinishRespawns": 0,
+  "offRoad": {
+   "You": 0,
+   "Barnaby": 0,
+   "Tilly": 0,
+   "Clementine": 0,
+   "Dot": 0,
+   "Buster": 0.3,
+   "Rosco": 0,
+   "Maeve": 0,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "slow": {
+   "You": 0,
+   "Barnaby": 0,
+   "Tilly": 0,
+   "Clementine": 0,
+   "Dot": 2.5,
+   "Buster": 0,
+   "Rosco": 0,
+   "Maeve": 0,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "choices": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "final": [
+   "You 3241 F239",
+   "Barnaby 3233 F386",
+   "Tilly 3240 F352",
+   "Clementine 3231 F353",
+   "Dot 3231 F408",
+   "Buster 3244 F351",
+   "Rosco 3229 F344",
+   "Maeve 3231 F315",
+   "Vance 3244 F285",
+   "Ace 3265 F285"
+  ],
+  "ranks": [
+   {
+    "t": 30,
+    "rank": "3/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 292,
+    "aceS": 262,
+    "near": 4
+   },
+   {
+    "t": 60,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 690,
+    "aceS": 599,
+    "near": 0
+   },
+   {
+    "t": 330,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3240,
+    "aceS": 3263,
+    "near": 3
+   },
+   {
+    "t": 360,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3240,
+    "aceS": 3264,
+    "near": 7
+   },
+   {
+    "t": 390,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3241,
+    "aceS": 3264,
+    "near": 8
+   }
+  ]
+ },
+ "relaxed": {
+  "good": false,
+  "t": 405.5,
+  "grid": [
+   "You:4",
+   "Barnaby:9",
+   "Tilly:8",
+   "Clementine:7",
+   "Dot:6",
+   "Buster:5",
+   "Rosco:0",
+   "Maeve:3",
+   "Vance:2",
+   "Ace:1"
+  ],
+  "loops": [],
+  "order90": [
+   "Ace(1017)",
+   "You(979)",
+   "Rosco(896)",
+   "Vance(893)",
+   "Maeve(887)",
+   "Buster(792)",
+   "Tilly(786)",
+   "Clementine(731)",
+   "Dot(730)",
+   "Barnaby(724)"
+  ],
+  "finish": {
+   "Ace": 273.1,
+   "You": 279,
+   "Vance": 301.4,
+   "Maeve": 317.8,
+   "Rosco": 345.8,
+   "Buster": 363.3,
+   "Tilly": 363.6,
+   "Clementine": 375.5,
+   "Barnaby": 381.5,
+   "Dot": 405.7
+  },
+  "leadChanges": 1,
+  "pRank1": null,
+  "rescues": [
+   {
+    "who": "Dot",
+    "t": 132.8,
+    "from": 1035,
+    "s": 1037,
+    "latAfter": 0,
+    "surf": "dirt",
+    "path": ""
+   }
+  ],
+  "stuckEv": [
+   {
+    "who": "Barnaby",
+    "t": 314.2,
+    "s": 2660,
+    "lat": 4.3,
+    "surf": "corn",
+    "dur": 1.9
+   }
+  ],
+  "postFinishRespawns": 0,
+  "offRoad": {
+   "You": 0,
+   "Barnaby": 3.3,
+   "Tilly": 0,
+   "Clementine": 0,
+   "Dot": 0.5,
+   "Buster": 1.5,
+   "Rosco": 0,
+   "Maeve": 0,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "slow": {
+   "You": 0,
+   "Barnaby": 2.3,
+   "Tilly": 0,
+   "Clementine": 0,
+   "Dot": 2.4,
+   "Buster": 0,
+   "Rosco": 0,
+   "Maeve": 0,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "choices": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "final": [
+   "You 3235 F279",
+   "Barnaby 3233 F382",
+   "Tilly 3240 F364",
+   "Clementine 3231 F376",
+   "Dot 3231 F406",
+   "Buster 3245 F363",
+   "Rosco 3230 F346",
+   "Maeve 3232 F318",
+   "Vance 3241 F301",
+   "Ace 3262 F273"
+  ],
+  "ranks": [
+   {
+    "t": 30,
+    "rank": "4/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 278,
+    "aceS": 311,
+    "near": 4
+   },
+   {
+    "t": 60,
+    "rank": "2/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 624,
+    "aceS": 675,
+    "near": 3
+   },
+   {
+    "t": 330,
+    "rank": "2/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3234,
+    "aceS": 3261,
+    "near": 3
+   },
+   {
+    "t": 360,
+    "rank": "2/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3234,
+    "aceS": 3262,
+    "near": 4
+   },
+   {
+    "t": 390,
+    "rank": "2/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3235,
+    "aceS": 3262,
+    "near": 8
+   }
+  ]
+ }
+}
