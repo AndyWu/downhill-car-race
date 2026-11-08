@@ -189,6 +189,13 @@ export function createUI(root, opts = {}) {
   // ---------- lobby ----------
   const stepsEl = h('ol', { class: 'sbd-steps' });
   const qrBox = h('div', { class: 'sbd-qrbox' }, h('div', { class: 'ph' }, 'Code appears here'));
+  // Tap the code to show it full-screen (so a camera across the table can read it); tap again to shrink. Not for the camera view.
+  const qrBig = h('div', { class: 'sbd-qrbig', onClick: () => qrBig.classList.remove('on') });
+  function qrZoom(on) {
+    if (on && !qrBox.classList.contains('scan') && qrBox.querySelector('canvas,img')) { qrBig.replaceChildren(qrBox.querySelector('canvas,img').cloneNode(true)); const src = qrBox.querySelector('canvas'); const c = qrBig.querySelector('canvas'); if (src && c) c.getContext('2d').drawImage(src, 0, 0); qrBig.append(h('div', { class: 'sbd-qrbig-hint' }, 'Tap to make smaller')); qrBig.classList.add('on'); }
+    else qrBig.classList.remove('on');
+  }
+  qrBox.addEventListener('click', () => qrZoom(true));
   const caption = h('div', { class: 'sbd-caption' });
   const actions = h('div', { class: 'sbd-actions' });
   const seatsEl = h('ul', { class: 'sbd-seats' });
@@ -203,7 +210,8 @@ export function createUI(root, opts = {}) {
   }
   mk('lobby', 'sbd-barn sbd-lobby',
     h('div', { class: 'sbd-ply sbd-modal' }, lobbyTitle,
-      h('div', { class: 'sbd-lobby-cols' }, stepsEl, h('div', { class: 'sbd-qrcol' }, qrBox, caption, actions), seatsEl),
+      h('div', { class: 'sbd-lobby-cols' }, h('div', { class: 'sbd-lcol' }, stepsEl, actions), h('div', { class: 'sbd-qrcol' }, qrBox, caption), seatsEl),
+      qrBig,
       statusEl,
       h('div', { class: 'sbd-foot' }, btn('Back', 'small chalk', () => { cb('onLobbyBack'); api.show('title'); }), startBtn)));
 
@@ -374,11 +382,12 @@ export function createUI(root, opts = {}) {
       if (typeof src === 'string') qrBox.append(h('img', { src, alt: 'QR code' }));
       else if (src) qrBox.append(src);
       else qrBox.append(h('div', { class: 'ph' }, 'Code appears here'));
-      caption.textContent = text;
+      if (qrBig.classList.contains('on')) { if (src) qrZoom(true); else qrZoom(false); } // keep a full-screen code current
+      caption.textContent = text + (src ? ' · tap the code to make it bigger' : '');
     },
     /** Shows camera feed (HTMLVideoElement) with framing reticle. */
     showScanner(video, text = 'Line the code up inside the corners') {
-      qrBox.classList.add('scan'); qrBox.replaceChildren();
+      qrBox.classList.add('scan'); qrBox.replaceChildren(); qrZoom(false);
       if (video) { video.setAttribute('playsinline', ''); video.muted = true; qrBox.append(video); }
       qrBox.append(h('div', { class: 'sbd-reticle' }, h('b'), h('i')));
       caption.textContent = text;
@@ -388,7 +397,7 @@ export function createUI(root, opts = {}) {
     /** Shows a small chalk "ready to race offline" mark on the title screen. */
     setOfflineReady(b) { offlineMark.classList.toggle('on', !!b); },
     clearQR() { api.showQR(null, ''); },
-    setCaption(t) { caption.textContent = t; },
+    setCaption(t) { caption.textContent = t + (!qrBox.classList.contains('scan') && qrBox.querySelector('canvas,img') ? ' · tap the code to make it bigger' : ''); },
     setLobbyStatus(t) { statusEl.textContent = t || ''; },
     setStartEnabled(b) { startBtn.toggleAttribute('disabled', !b); },
     /** Host lobby: Start button text (e.g. the 20 s join-window countdown). */

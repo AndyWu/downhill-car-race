@@ -26,7 +26,7 @@ export function createLobbyPanel() {
   let lastCode = null, qrCanvas = null, pasteOpen = false, pasteVal = '', copied = false;
 
   const qr = (code) => {
-    if (code !== lastCode) { qrCanvas = renderQR(code, { size: 520 }); qrCanvas.className = 'qr'; lastCode = code; }
+    if (code !== lastCode) { qrCanvas = renderQR(code, { size: 1000 }); qrCanvas.className = 'qr'; lastCode = code; }
     return qrCanvas;
   };
 
