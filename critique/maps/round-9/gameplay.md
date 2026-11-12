@@ -1,0 +1,36 @@
+# GAMEPLAY CRITIQUE — MAP ROUND 9 (corn only)
+**Score:** corn 8 / 10 (round 8: 7)
+
+Build: dev server (`npx vite --port 4652`, stopped afterwards) on HEAD `d24d9bf`. Same harness as round 8 (race/relaxed/bad + extra wedge/scrape/straight) plus `held.mjs` (held-wheel trace) and `ai-sim.mjs` 3 and 8 seeds. Raw data in `screens/gameplay/` (`corn-results.json`, `extra.json`, `ai-sim-3.txt`, `ai-sim-8.txt`, race-end jpgs). Paddle input numeric.
+
+| Round-8 target | r8 | r9 | met? |
+|---|---|---|---|
+| No double rescue | Dot x2 twice | none (2 good-race AI rescues, 1 relaxed; every `respawns` change is one incident) | yes |
+| Good race AI rescues <= 4, none within 3 s | 6 events | **2** (Ace 18.9 s, Tilly 32.6 s, 13.7 s apart); relaxed 1 (Vance 280.1 s) | yes |
+| ai-sim worst/best <= 1.40 | 1.49 | 3 seeds **1.40** (per seed 1.38-1.42); 8 seeds **1.37**; in game 1.35 good / 1.32 relaxed | yes, marginal on 3 seeds |
+| Lead changes >= 0.5 in sim | 0.0 | **0.7** (3 seeds), **0.9** (8 seeds): Vance wins seeds 3, 6, 8 of 8 | yes |
+| Good-race Spearman >= 0.85 | 0.77 | in game **0.95** good, **0.98** relaxed; sim 0.94 (3), 0.93 (8; worst seed 7 = 0.78) | yes |
+| No Buster/Tilly above Maeve/Rosco (good race) | Buster tied Maeve, Tilly beat Rosco | Tilly last-but-one, Rosco 310.1 ahead; **Buster 323.2 vs Maeve 323.6** (Buster 0.4 s ahead, a photo finish, not a clear inversion) | nearly |
+
+## What works (max 3 bullets)
+- **The AI field is a field and the double rescue is gone.** Order in game is Ace, Vance, Rosco, Buster, Maeve, Dot, Clementine, Tilly, Barnaby (good) and Ace, Vance, Rosco, Maeve, Buster, Dot, ... (relaxed): near skill order, and the human is 1st (241 s, wins by 34 s) in the good race and 2nd (288 s, 14 s behind Ace, 8 s ahead of Vance) in the relaxed race. Total AI rescues 2 and 1, no cart is rescued twice, no post-finish respawns. The stale-buffer test artefact is also gone: right-side nose-in trials right after a teleport are no longer rescued in 0.1-0.3 s (hands-off wedge 3.8 s every time, 0 spurious rescues in 8 s of paddled-into-wall trials).
+- **Sim now has margin and drama.** 8-seed averages: worst/best 1.37, rho 0.93, 0.9 lead changes per race, Vance first in 3 of 8 seeds (Ace/Vance within 4-12 s everywhere). The five slowest still spread 345-374 s, the slowest AI travels 119 m in the first 20 s (target 60), and the 8-seed run lists only 2-10 rescues per driver over 8 races (Clementine 10 and Barnaby 9 are the weak spots, see problem 2).
+- **Human recovery is the best so far.** Bad-driving recovery median 0.1 s / max 0.4 s (r8 0.5 / 0.8), 0 rescues across 16 trials, solo race 227.9 s with 0 rescues, 32 full-lock scrapes: 0 rescues, min speed 7.8 m/s, 180-213 m gained in 15 s (r8 137-173). 40 s of unsteered paddling covers 583-623 m (r8 499-602), 0 rescues, 4.8-7.6 s of it in the corn.
+
+## Problems (ranked, most severe first)
+1. **[Human assist, feel] A held wheel becomes an autopilot after about 4 s.** `held.mjs`: full lock into the corn at 12 m/s, 12 s, six trials: lateral -2.6 -> -0.1 m by 7-9 s and 0.0 at 12 s, heading error 0 deg, speed climbing 10 -> 16 m/s while the steer input is still 100 % into the wall. Within ~4.5 s the input is ignored entirely and the cart is dead centre on the lane at full lane speed. It is not unfair in race terms (the good player's 34 s margin comes from solo pace 228-241 s vs Ace 274-276 s, the relaxed player is only 2nd, and a straight-paddling cart still loses 4.8-7.6 s per 40 s in the corn), and a child who leans on the wheel is rewarded rather than stalled, which suits the audience. But it is the game taking the wheel: a player can hold one direction for the whole map and still be on the line. An adult who deliberately steers into the corn cannot, and the cart straightens out of a slide it was not asked to leave. If anything the edge is against the AI, which gets no lane-keep and shows the 2.5-3.5 s stalls below. Suggest capping the late-hold correction so it ends at the lane edge (|lat| ~1.5 m) rather than centring, so a held wheel still feels like driving.
+2. **[AI] Remaining stalls/rescues are still concentrated in the first bay exits.** Good race: Tilly and Barnaby both stalled at s 204-205 for 2.5 and 3.5 s at t = 30 s and Tilly was teleported (32.6 s). Ace, the best AI, was rescued at s 171 at 18.9 s: a lead cart teleported 3 m during the opening reads as a glitch, even if it is invisible to the pack. Sim: Ace 3 s at s 676, Clementine 5 s at s 235, Tilly 5 s at s 2872. 8-seed rescue counts Clementine 10, Barnaby 9, Maeve 4 (Maeve 3.3 s max stall) are the heavy hitters. None are doubles and none cluster, so this is polish.
+3. **[AI, minor] In-game Maeve still sits behind Rosco (13 s in both races) and ties Buster (0.4 s good race).** Skill 0.73 vs 0.62. In the sim Maeve is ahead of Rosco in 6 of 8 seeds, so the player pack's pace lift is what mixes the middle. Not an inversion that a family would notice, but Maeve is the "third best driver" the 8+ target wanted ahead of Rosco/Buster.
+4. **[AI, minor] Races repeat.** Ace 266-269, Vance 272-282, Maeve 314-322 are near-identical across seeds; Vance's hot start decides a close Ace/Vance finish (gaps 1-12 s) but the middle ranks barely move between seeds. Vance's hot start reads as a sprinter-who-fades story (Vance within 3 m of Ace at 90 s in game, Ace then pulls 8 s clear) rather than an arbitrary swap: it is fun and gives a real fight for the front, but only for that pair. In the sim Vance wins about 3 of 8, which is the right rate.
+5. **[UI, carry-over, not scored]** "Lap 1/3" label on a one-lap map (r8 note), unchanged.
+
+## Is the human-only lane-keep fair, and is the hot start fun?
+Fairness: yes in race outcomes, borderline in feel. The assist adds no speed beyond not-rubbing (full-lock scrapes 7.8-13 m/s early, then lane speed once re-centred, i.e. the cart rejoins the lane, not exceeds it) and never beats the line a good driver takes; the relaxed child finishes 2nd, 14 s behind Ace, which is the right place. The remaining dissonance is purely "who is driving": after 1.5 s deep the wheel is overruled and after ~4 s ignored. The post-rescue steer latch worked (0 re-rescues, drives off at 16-17 m/s). Vance's hot start is fun: a visible rival who surges early, tied with Ace at 90 s and winning a third of the seeds, gives the AI-only race a story. It is arbitrary only in that no other cart has such a window.
+
+## What would raise it to 9+ (it is at 8)
+- Make the held-wheel lane-keep stop at the lane edge instead of fully centring (problem 1).
+- Remove the early stalls at s ~170-235 and ~205 (Ace at 171, Clementine 235, Tilly/Barnaby 205): bay-1 exit geometry or an AI steer fade in the corn.
+- Lift Maeve above Rosco in the player pack (so good-race order is strictly by skill) and give the middle (Dot/Clementine/Tilly) a little per-seed variance.
+
+## Score notes
+- **7 -> 8:** every explicit r8 target is met on evidence (no doubles, 2 and 1 rescues, sim 1.37-1.40, 0.7-0.9 lead changes, rho 0.93-0.98), the stale-state artefact is gone, and human recovery improved again. Not 9: the sim margin on 3 seeds is 1.40 flat, a lead cart is still rescued in the opening seconds, the held wheel feels like an autopilot, and Maeve/Buster is a photo finish in the good race.
