@@ -19,6 +19,7 @@ export function forwardXZ(q) {
  *  human       optional () => state of the human player to chase/ease off from
  *  headlight   boolean | () => boolean ; default reads world.timeOfDay / world.isDark
  */
+const RESCUED = new WeakMap();   // world -> last corn rescue {o: driver token, t, s}
 export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, human, headlight } = {}) {
   // On the slower tracks the terrain, not the driver, sets the speed unless the driver holds back: tier the target speed by skill.
   const TRACK_CAP = { village: (k) => 8.2 + 7.6 * k, corn: (k) => 10.4 + 6.2 * k };
@@ -32,12 +33,13 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
   // corn: the weak end of the field is lifted (fewer wall rubs and rescues, tighter spread); the corner/speed scale rises as skill falls
   const villTop = 1; // village mid-field spread (round 4) removed: it broke the skill order in ai-sim (rho 0.77)
-  const cornTop = world.trackId === 'corn' ? ((profile.skill ?? 0.5) > 0.9 ? 0.98 : (profile.skill ?? 0.5) > 0.8 ? 1.04 : (profile.skill ?? 0.5) > 0.7 ? 0.92 : 1) : 1; // spreads the top three so they stop convoying
-  const cornLift = (world.trackId === 'corn' ? (1 + 0.45 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1)) * ((profile.skill ?? 0.5) > 0.3 && (profile.skill ?? 0.5) < 0.5 ? 1.04 : 1) : 1) * cornTop * villTop; // Dot (0.4) was the slowest finisher: a little lift keeps worst/best clear of the 1.5 limit
+  const cornTop = world.trackId === 'corn' ? ((profile.skill ?? 0.5) > 0.9 ? 0.955 : (profile.skill ?? 0.5) > 0.8 ? 1.04 : (profile.skill ?? 0.5) > 0.7 ? 0.92 : 1.06) : 1; // spreads the top three (and the whole back of the field is a little quicker: worst/best must stay clear of 1.5) so they stop convoying
+  const cornLift = (world.trackId === 'corn' ? (1 + 0.45 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1)) * ((profile.skill ?? 0.5) > 0.3 && (profile.skill ?? 0.5) < 0.5 ? 1.04 : (profile.skill ?? 0.5) < 0.3 ? 1.04 : 1) : 1) * cornTop * villTop; // Dot (0.4) was the slowest finisher: a little lift keeps worst/best clear of the 1.5 limit
   const cornPatience = world.trackId === 'corn' && (profile.skill ?? 0.5) > 0.8 && (profile.skill ?? 0.5) < 0.9 ? 0 : null; // the slipstreamer does not sit behind Maeve all the way to the line: he goes round her in the next bay
   const P = capFn ? { ...profile, speed: { ...profile.speed, cap: capFn(profile.skill ?? 0.5), scale: (profile.speed.scale ?? 1) * cornLift, cornerFactor: profile.speed.cornerFactor * (1 + 0.25 * (cornLift - 1) / 0.45) } }
     : flat ? { ...profile, speed: { ...profile.speed, cap: capOf(profile.speed.cap) } } : profile;
   rng = rng || createRng(1);
+  const me = {}; if (world.trackId === 'corn') RESCUED.delete(world);   // a new race (drivers are built together): forget the last race's rescues
   // ---- village: pick a street through every split according to personality (progress-s plan, sampleAt(s, choice)) ----
   let choice;
   const splits = world.splits || [];
@@ -83,6 +85,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
 
   function think(dt, self, others = []) {
     t += dt;
+    if (world.trackId === 'corn') self.aiCart = true;   // tells physics this cart is AI-driven (the corn wall assists are for human drivers only)
     lastS = Math.max(lastS, self.s);
     const s = self.s, speed = Math.max(0, self.speed || 0);
     const px = self.position.x, pz = self.position.z;
@@ -103,6 +106,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     }
     // corn passing bays: the lane opens to ~7 m for ~60 m, so patient drivers lift the 'stay behind' cap there and go round
     const bay = plan.narrow && (plan.widthAt(s) > 5 || plan.widthAt(clamp(s + 14, 0, L)) > 5);
+    const cornLane = world.trackId === 'corn' && plan.narrow && !bay;   // corn lane outside a bay: nobody shoves or nudges a rival (two locked carts stall the whole queue behind them)
     const outBy = Math.max(0, Math.abs(self.lateral) - plan.widthAt(s) / 2); // metres beyond the verge
     const Ld = Math.max(P.look.min, P.look.time * speed) + 2.5 * outBy; // look further to rejoin the road at a shallow angle
     const sT = clamp(s + Ld, 0, L);
@@ -126,7 +130,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
         } else {
           goal = plan.narrow || bendy ? 0 : clamp(ahead.lateral - eT, -2.5, 2.5) * P.draft.strength; // sit in the slipstream (no room to weave in a lane)
         }
-      } else if (P.aggression > 0.5 && aheadDs < 6 && (ahead.speed || 0) > speed - 0.3 && Math.abs(dl) < 1.2) {
+      } else if (P.aggression > 0.5 && !cornLane && aheadDs < 6 && (ahead.speed || 0) > speed - 0.3 && Math.abs(dl) < 1.2) {
         goal = clamp(ahead.lateral - eT, -1.5, 1.5) * 0.5; // nudge a rival that is not slower
       } else if (P.carAvoid > 0 && !bendy && aheadDs < 12 && Math.abs(dl) < 1.8 && speed > (ahead.speed || 0) - 0.5) {
         goal = (dl >= 0 ? -1 : 1) * 2.0 * P.carAvoid;
@@ -135,7 +139,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (bendy) { passSide = 0; passCool = Math.max(passCool, t + 1.5); }
     if (P.pass && passSide && t <= passUntil && alongside && !goal) goal = clamp(alongside.lateral + passSide * 1.9 - eT, -3.5, 3.5); // hold the line until clear
     if (P.pass && t > passUntil) passSide = 0;
-    if (P.aggression > 0.5 && alongside && !(flat && bendy)) goal = clamp(alongside.lateral - eT, -2.5, 2.5) * (flat ? 0.15 : 0.35); // shove (speedway: never in a corner, and only a nudge on the straights: two carts locked together stall)
+    if (P.aggression > 0.5 && !cornLane && alongside && !(flat && bendy)) goal = clamp(alongside.lateral - eT, -2.5, 2.5) * (flat ? 0.15 : 0.35); // shove (speedway: never in a corner, and only a nudge on the straights: two carts locked together stall)
     else if (flat && alongside && !goal && !bendy) goal = (alongside.lateral > self.lateral ? -1 : 1) * clamp(2.5 - Math.abs(alongside.lateral - self.lateral), 0.4, 2) * 0.9; // flat straights: never run shoulder to shoulder (contact spins the weaker cart)
     else if (P.carAvoid > 0 && alongside && !goal) goal = (alongside.lateral > self.lateral ? -1 : 1) * (0.5 + Math.max(0, 2.2 - Math.abs(alongside.lateral - self.lateral))) * P.carAvoid; // give room, more when closer
     // a parked / stopped cart on a wide road (spun car, finished car, idle player): everybody steers round it
@@ -178,7 +182,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       const hs = typeof human === 'function' ? human() : null;
       if (hs && hs !== self) ref = hs.s;
       else { ref = 0; for (const o of others) ref += o.s; ref /= others.length; }
-      rb = 1 + (world.trackId !== 'country' && (P.skill ?? 0.5) > 0.7 ? 0.09 : 0.05) * rubberBand * clamp((ref - s) / 60, -1, 1); // new maps: the best AI chase a fleeing human harder
+      rb = 1 + (world.trackId !== 'country' && (P.skill ?? 0.5) > 0.7 ? (world.trackId === 'corn' && (P.skill ?? 0.5) < 0.9 ? 0.04 : 0.09) : 0.05) * rubberBand * clamp((ref - s) / 60, -1, 1); // new maps: the best AI chase a fleeing human harder
     }
     // leader ease: a car clear of the next AI behind it matches that chaser's pace (minus a little) so races stay close.
     // Strength scales with the gap (20 m -> 60 m) and the profile's leaderEase; it never raises speed.
@@ -187,16 +191,17 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       const hs = typeof human === 'function' ? human() : null;
       let gapB = Infinity;
       for (const o of others) if (o !== hs && o.s < s && s - o.s < gapB) { gapB = s - o.s; chaserV = o.speed || 0; }
-      if (gapB < Infinity) easeK = clamp((gapB - 20) / 40, 0, 1) * P.leaderEase * rubberBand;
+      if (gapB < Infinity) easeK = clamp((gapB - 20) / 40, 0, 1) * P.leaderEase * rubberBand * (world.trackId === 'corn' && (P.skill ?? 0.5) < 0.7 ? 0.25 : 1);   // corn: the quicker backmarkers are not held for the slower ones (the back of the field was a convoy)
     }
     let vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (outBy > 0 ? 0.65 : 1);
-    if (plan.narrow && !bay && ahead && aheadDs < 7 && Math.abs(ahead.lateral - self.lateral) < 1.4 && P.aggression < 0.5) {
+    const crawl = world.trackId === 'corn' && speed < 3.8;   // corn: a cart already crawling never holds back for one in front (the queue behind a bogged cart would stall dead): it noses on, and the bump frees both
+    if (plan.narrow && !bay && ahead && aheadDs < 7 && Math.abs(ahead.lateral - self.lateral) < 1.4 && P.aggression < 0.5 && !crawl) {
       vt = Math.min(vt, (ahead.speed || 0) + 0.4 + (1 - (cornPatience ?? P.patience ?? 0.5)) * 1.6); // patient on a lane too narrow to pass
     }
     // speedway: never run into the back of a cart in a braking zone / corner (the pile-up at the hairpin entry): follow it, close up to ~1 m/s faster only
     if (flat && ahead && aheadDs < 14 && Math.abs(ahead.lateral - self.lateral) < 1.5 && (bendy || aheadDs < 5 || (plan.speedAt(clamp(s + 25, 0, L)) < vt - 1))) vt = Math.min(vt, (ahead.speed || 0) + 0.8 + aheadDs * 0.3);
     // corn lane outside a bay: carts of equal pace running level fuse and crawl together; the one level with / behind another eases off until they are in single file
-    if (level && world.trackId === 'corn' && plan.narrow && !bay) vt = Math.min(vt, speed - 0.7);
+    if (level && !crawl && world.trackId === 'corn' && plan.narrow && !bay) vt = Math.min(vt, speed - 0.7);
     vt *= 1 - 0.04 * easeK; // lift off a touch (and paddle less, below) when clear of the AI behind
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
@@ -326,6 +331,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   }
   return { think, rescueAhead, get dbg() { return dbg; }, profile: P, plan, get choice() { return choice; }, get recoveries() { return recoveries; },
     /** seconds continuously below 1.5 m/s (recovery manoeuvres didn't free the car). Host should call body.recover(~8) when needsRescue. */
-    get stuckFor() { return stuckTotal; }, get needsRescue() { return stuckTotal > 2.5; },
-    clearStuck() { stuckTotal = 0; stuckT = 0; consec = 0; } };
+    get stuckFor() { return stuckTotal; },
+    // corn: carts jammed together are lifted out one at a time (>= 3 s apart within ~100 m): the first one gone often frees the rest, and nobody sees three carts vanish at once
+    get needsRescue() { if (stuckTotal <= 2.5) return false; if (world.trackId === 'corn') { const g = RESCUED.get(world); if (g && g.o !== me && Math.abs(t - g.t) < 3 && Math.abs(lastS - g.s) < 100 && stuckTotal < 5.5) return false; } return true; },
+    clearStuck() { if (world.trackId === 'corn' && stuckTotal > 2.5) RESCUED.set(world, { o: me, t, s: lastS }); stuckTotal = 0; stuckT = 0; consec = 0; } };
 }

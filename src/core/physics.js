@@ -91,7 +91,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
   let paddleCooldownL = 0, paddleCooldownR = 0;
   const hasWorld = !!world;
   const flatTrack = !!(world && world.flags && world.flags.flat);
-  const cornTrack = !!(world && world.trackId === 'corn'), CK = globalThis.__CK || (typeof process !== 'undefined' && process.env && process.env.CK ? JSON.parse(process.env.CK) : {}), CORN_ALIGN = CK.al ?? 3.0, CORN_AWAY = CK.aw ?? 0.4;
+  const cornTrack = !!(world && world.trackId === 'corn'), CORN_ALIGN = 3.0, CORN_AWAY = 0.4;
   const wallStop = !!(world && world.flags && world.flags.wallSurface);   // circuit: 'wall' surfaces are barriers, not ramps
   const crrEff = flatTrack ? crr * FLAT_ROLL : crr;
   const padV0 = flatTrack ? FLAT_V0 : PADDLE_V0;
@@ -227,20 +227,20 @@ export function createVehicleBody(specIn, world, opts = {}) {
         let da = Math.atan2(-tgc.z, tgc.x) - Math.atan2(-_fwd.z, _fwd.x);
         da = Math.atan2(Math.sin(da), Math.cos(da));
         const sg = state.lateral >= 0 ? 1 : -1;
-        const deep = cornTrack && Math.abs(state.lateral) - ((world.track.sampleAt(Math.max(0, state.s)).width || 3.5) / 2) > 0.35;   // corn: a wheel well into the corn swings the nose back much harder (held lock must not pin the cart there)
+        const deep = cornTrack && !state.aiCart && Math.abs(state.lateral) - ((world.track.sampleAt(Math.max(0, state.s)).width || 3.5) / 2) > 0.35;   // corn: a wheel well into the corn swings the nose back much harder (held lock must not pin the cart there)
         _dq.setFromAxisAngle(_yAxis, clamp(da, -0.5, 0.5) * Math.min(1, h * (deep ? CORN_ALIGN : 1.2)) + sg * (deep ? CORN_AWAY : 0.07) * h);   // ~4 deg/s away from the wall (round 6's ~11 deg/s fought the player's steering)
         q.premultiply(_dq).normalize();
       }
     }
-    // corn only: the lane is one cart wide, so a wheel that is more than ~0.35 m into the corn is eased back toward the lane (a push that grows with depth, capped at ~2.5 m/s of inward drift):
+    // corn only, human-driven carts only (AI carts set state.aiCart in think(): in a dense pack the push only makes them bump each other more): the lane is one cart wide, so a wheel that is more than ~0.35 m into the corn is eased back toward the lane (a push that grows with depth, capped at ~2.5 m/s of inward drift):
     // a cart held against the wall slides back out instead of crawling along it, and a nose-in cart is shoved sideways off the corn rather than pinned there
-    if (world.trackId === 'corn' && (cornN > 0 || wallN > 0) && world.track && world.track.sampleAt && state.s > 3) {
+    if (cornTrack && !state.aiCart && (cornN > 0 || wallN > 0) && world.track && world.track.sampleAt && state.s > 3) {
       const sc = world.track.sampleAt(Math.max(0, state.s)), rc = sc.right;
       if (rc) {
         const sg = state.lateral >= 0 ? 1 : -1, depth = Math.abs(state.lateral) - (sc.width || 3.5) / 2;
         if (depth > 0.35) {
           const vin = -(v.x * rc.x + v.z * rc.z) * sg;   // inward speed (toward the lane centre)
-          if (vin < 2.5) { const a = (CK.push ?? 1) * Math.min(9, 3.5 + 6 * (depth - 0.35)) * h; v.x -= rc.x * sg * a; v.z -= rc.z * sg * a; }
+          if (vin < 2.5) { const a = Math.min(9, 3.5 + 6 * (depth - 0.35)) * h; v.x -= rc.x * sg * a; v.z -= rc.z * sg * a; }
         }
       }
     }
@@ -385,9 +385,9 @@ export function createVehicleBody(specIn, world, opts = {}) {
       const sp = state.velocity.length();
       const steerScale = 1 / (1 + Math.pow(sp / 16, 2) * 0.7);
       let stIn = clamp(fin(inp.steer), -1, 1);
-      if (cornTrack && state.s > 3 && Math.abs(state.lateral) > 1.6 && world.track && world.track.sampleAt) {   // corn: steering further into the corn gives way once a wheel is well in (a held full lock cannot dig the cart into the wall)
+      if (cornTrack && !state.aiCart && state.s > 3 && Math.abs(state.lateral) > 1.6 && world.track && world.track.sampleAt) {   // corn: steering further into the corn gives way once a wheel is well in (a held full lock cannot dig the cart into the wall)
         const dpt = Math.abs(state.lateral) - (world.track.sampleAt(Math.max(0, state.s)).width || 3.5) / 2;
-        if (dpt > 0.3 && stIn * state.lateral > 0) stIn *= clamp(1 - (CK.st ?? 3) * (dpt - 0.3), 0, 1);
+        if (dpt > 0.3 && stIn * state.lateral > 0) stIn *= clamp(1 - 3 * (dpt - 0.3), 0, 1);
       }
       const tgt = stIn * lock * (0.35 + 0.65 * steerScale);
       const dA = sRate * dt;
@@ -459,7 +459,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
               state._pwA -= 0.25;
               for (let i = 0; i < 12; i++) buf[i] = buf[i + 1];
               buf[12] = state.s; state._pwN = Math.min(13, (state._pwN || 0) + 1);
-              if (state._pwN >= 13 && buf[12] - buf[0] < 1) wedged = true;
+              if (state._pwN >= 11 && buf[12] - buf[2] < 0.9) wedged = true;   // under 0.9 m of progress in 2.5 s
             }
           }
         }
