@@ -1,0 +1,1048 @@
+{
+ "track": "corn",
+ "race": {
+  "good": true,
+  "t": 412.8,
+  "grid": [
+   "You:4",
+   "Barnaby:9",
+   "Tilly:8",
+   "Clementine:7",
+   "Dot:6",
+   "Buster:5",
+   "Rosco:0",
+   "Maeve:3",
+   "Vance:2",
+   "Ace:1"
+  ],
+  "loops": [
+   [
+    "Dot",
+    704,
+    704,
+    0.2
+   ],
+   [
+    "Dot",
+    2117,
+    2117,
+    0.3
+   ]
+  ],
+  "order90": [
+   "You(1077)",
+   "Ace(990)",
+   "Vance(921)",
+   "Buster(784)",
+   "Maeve(780)",
+   "Rosco(733)",
+   "Clementine(708)",
+   "Tilly(707)",
+   "Dot(659)",
+   "Barnaby(658)"
+  ],
+  "finish": {
+   "You": 241.2,
+   "Ace": 274.6,
+   "Vance": 296.8,
+   "Buster": 333.8,
+   "Maeve": 334.1,
+   "Tilly": 355.7,
+   "Rosco": 364.6,
+   "Clementine": 365.1,
+   "Barnaby": 405.4,
+   "Dot": 413
+  },
+  "leadChanges": 2,
+  "pRank1": 53.6,
+  "rescues": [
+   {
+    "who": "Rosco",
+    "t": 81.3,
+    "from": 663,
+    "s": 682,
+    "latAfter": 0,
+    "surf": "dirt",
+    "path": ""
+   },
+   {
+    "who": "Dot",
+    "t": 101.5,
+    "from": 702,
+    "s": 704,
+    "latAfter": 0,
+    "surf": "gravel",
+    "path": ""
+   },
+   {
+    "who": "Dot",
+    "t": 101.7,
+    "from": 704,
+    "s": 737,
+    "latAfter": 0,
+    "surf": "dirt",
+    "path": ""
+   },
+   {
+    "who": "Tilly",
+    "t": 204.7,
+    "from": 1703,
+    "s": 1715,
+    "latAfter": 0,
+    "surf": "dirt",
+    "path": ""
+   },
+   {
+    "who": "Dot",
+    "t": 285.2,
+    "from": 2115,
+    "s": 2117,
+    "latAfter": 0.1,
+    "surf": "gravel",
+    "path": ""
+   },
+   {
+    "who": "Dot",
+    "t": 285.5,
+    "from": 2117,
+    "s": 2132,
+    "latAfter": 0,
+    "surf": "dirt",
+    "path": ""
+   }
+  ],
+  "stuckEv": [
+   {
+    "who": "Maeve",
+    "t": 72,
+    "s": 644,
+    "lat": 1.3,
+    "surf": "dirt",
+    "dur": 2
+   },
+   {
+    "who": "Rosco",
+    "t": 78.8,
+    "s": 663,
+    "lat": -2.2,
+    "surf": "corn",
+    "dur": 2.5
+   },
+   {
+    "who": "Tilly",
+    "t": 202.2,
+    "s": 1702,
+    "lat": 1.4,
+    "surf": "dirt",
+    "dur": 2.5
+   },
+   {
+    "who": "Clementine",
+    "t": 202.3,
+    "s": 1701,
+    "lat": 0.9,
+    "surf": "dirt",
+    "dur": 3.2
+   }
+  ],
+  "postFinishRespawns": 0,
+  "offRoad": {
+   "You": 0,
+   "Barnaby": 0,
+   "Tilly": 0,
+   "Clementine": 0,
+   "Dot": 1.5,
+   "Buster": 0,
+   "Rosco": 4.4,
+   "Maeve": 0,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "slow": {
+   "You": 0,
+   "Barnaby": 0,
+   "Tilly": 2.5,
+   "Clementine": 3.2,
+   "Dot": 5.2,
+   "Buster": 0,
+   "Rosco": 4,
+   "Maeve": 2,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "choices": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "final": [
+   "You 3242 F241",
+   "Barnaby 3231 F405",
+   "Tilly 3244 F356",
+   "Clementine 3227 F365",
+   "Dot 3231 F413",
+   "Buster 3243 F334",
+   "Rosco 3231 F365",
+   "Maeve 3231 F334",
+   "Vance 3238 F297",
+   "Ace 3262 F275"
+  ],
+  "ranks": [
+   {
+    "t": 30,
+    "rank": "5/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 267,
+    "aceS": 277,
+    "near": 5
+   },
+   {
+    "t": 60,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 646,
+    "aceS": 637,
+    "near": 1
+   },
+   {
+    "t": 330,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3242,
+    "aceS": 3261,
+    "near": 2
+   },
+   {
+    "t": 360,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3242,
+    "aceS": 3261,
+    "near": 5
+   },
+   {
+    "t": 390,
+    "rank": "1/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3242,
+    "aceS": 3261,
+    "near": 7
+   }
+  ]
+ },
+ "relaxed": {
+  "good": false,
+  "t": 422,
+  "grid": [
+   "You:4",
+   "Barnaby:9",
+   "Tilly:8",
+   "Clementine:7",
+   "Dot:6",
+   "Buster:5",
+   "Rosco:0",
+   "Maeve:3",
+   "Vance:2",
+   "Ace:1"
+  ],
+  "loops": [],
+  "order90": [
+   "Ace(921)",
+   "Rosco(813)",
+   "Vance(811)",
+   "Buster(773)",
+   "You(770)",
+   "Maeve(752)",
+   "Dot(701)",
+   "Clementine(698)",
+   "Barnaby(592)",
+   "Tilly(591)"
+  ],
+  "finish": {
+   "Ace": 284.5,
+   "You": 301.5,
+   "Vance": 323.4,
+   "Buster": 336.3,
+   "Maeve": 336.6,
+   "Rosco": 352.2,
+   "Dot": 387.2,
+   "Clementine": 387.8,
+   "Barnaby": 422,
+   "Tilly": 422.2
+  },
+  "leadChanges": 1,
+  "pRank1": null,
+  "rescues": [
+   {
+    "who": "Clementine",
+    "t": 285.1,
+    "from": 2248,
+    "s": 2260,
+    "latAfter": 0,
+    "surf": "dirt",
+    "path": ""
+   }
+  ],
+  "stuckEv": [
+   {
+    "who": "Clementine",
+    "t": 282.6,
+    "s": 2247,
+    "lat": -0.1,
+    "surf": "dirt",
+    "dur": 2.5
+   },
+   {
+    "who": "Barnaby",
+    "t": 282.8,
+    "s": 2246,
+    "lat": 0.7,
+    "surf": "dirt",
+    "dur": 3
+   },
+   {
+    "who": "Tilly",
+    "t": 282.8,
+    "s": 2245,
+    "lat": 1.7,
+    "surf": "dirt",
+    "dur": 3
+   }
+  ],
+  "postFinishRespawns": 0,
+  "offRoad": {
+   "You": 3.4,
+   "Barnaby": 0,
+   "Tilly": 3.4,
+   "Clementine": 0,
+   "Dot": 0,
+   "Buster": 4.4,
+   "Rosco": 0,
+   "Maeve": 0,
+   "Vance": 1.4,
+   "Ace": 0
+  },
+  "slow": {
+   "You": 0,
+   "Barnaby": 3,
+   "Tilly": 3,
+   "Clementine": 2.5,
+   "Dot": 0,
+   "Buster": 0,
+   "Rosco": 0,
+   "Maeve": 0,
+   "Vance": 0,
+   "Ace": 0
+  },
+  "choices": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "final": [
+   "You 3232 F302",
+   "Barnaby 3234 F422",
+   "Tilly 3242 F422",
+   "Clementine 3225 F388",
+   "Dot 3231 F387",
+   "Buster 3246 F336",
+   "Rosco 3230 F352",
+   "Maeve 3231 F337",
+   "Vance 3239 F323",
+   "Ace 3261 F284"
+  ],
+  "ranks": [
+   {
+    "t": 30,
+    "rank": "6/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 202,
+    "aceS": 248,
+    "near": 7
+   },
+   {
+    "t": 60,
+    "rank": "6/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 442,
+    "aceS": 573,
+    "near": 4
+   },
+   {
+    "t": 330,
+    "rank": "2/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3231,
+    "aceS": 3260,
+    "near": 2
+   },
+   {
+    "t": 360,
+    "rank": "2/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3232,
+    "aceS": 3260,
+    "near": 5
+   },
+   {
+    "t": 390,
+    "rank": "2/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3232,
+    "aceS": 3260,
+    "near": 7
+   },
+   {
+    "t": 420,
+    "rank": "2/10",
+    "lap": "Lap 1/3",
+    "lapOn": false,
+    "playerS": 3232,
+    "aceS": 3261,
+    "near": 9
+   }
+  ]
+ },
+ "bad": {
+  "res": [
+   {
+    "s0": 257,
+    "side": -1,
+    "maxLat": 3.3,
+    "afterBad": {
+     "s": 286,
+     "lat": -2.4,
+     "sp": 9.1,
+     "surf": "corn"
+    },
+    "recover": 0.4,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 257,
+    "side": 1,
+    "maxLat": 2.7,
+    "afterBad": {
+     "s": 279,
+     "lat": 2.5,
+     "sp": 7,
+     "surf": "dirt"
+    },
+    "recover": 0.5,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 1
+   },
+   {
+    "s0": 644,
+    "side": -1,
+    "maxLat": 2.8,
+    "afterBad": {
+     "s": 678,
+     "lat": -2.4,
+     "sp": 9.8,
+     "surf": "dirt"
+    },
+    "recover": 0.5,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 644,
+    "side": 1,
+    "maxLat": 2.7,
+    "afterBad": {
+     "s": 662,
+     "lat": 2.5,
+     "sp": 5.9,
+     "surf": "dirt"
+    },
+    "recover": 0.5,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 1
+   },
+   {
+    "s0": 1062,
+    "side": -1,
+    "maxLat": 3.8,
+    "afterBad": {
+     "s": 1091,
+     "lat": -2.3,
+     "sp": 8.7,
+     "surf": "corn"
+    },
+    "recover": 0.6,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 1062,
+    "side": 1,
+    "maxLat": 2.9,
+    "afterBad": {
+     "s": 1082,
+     "lat": 2.6,
+     "sp": 5.9,
+     "surf": "dirt"
+    },
+    "recover": 0.8,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 1
+   },
+   {
+    "s0": 1448,
+    "side": -1,
+    "maxLat": 2.7,
+    "afterBad": {
+     "s": 1480,
+     "lat": -2.6,
+     "sp": 9.5,
+     "surf": "corn"
+    },
+    "recover": 0.5,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 1448,
+    "side": 1,
+    "maxLat": 2.5,
+    "afterBad": {
+     "s": 1468,
+     "lat": 2.5,
+     "sp": 6.6,
+     "surf": "dirt"
+    },
+    "recover": 0.5,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 1
+   },
+   {
+    "s0": 1866,
+    "side": -1,
+    "maxLat": 4.1,
+    "afterBad": {
+     "s": 1893,
+     "lat": -2.3,
+     "sp": 8.9,
+     "surf": "dirt"
+    },
+    "recover": 0.7,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 1866,
+    "side": 1,
+    "maxLat": 4.2,
+    "afterBad": {
+     "s": 1885,
+     "lat": 2.6,
+     "sp": 5.3,
+     "surf": "dirt"
+    },
+    "recover": 0.6,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 1
+   },
+   {
+    "s0": 2253,
+    "side": -1,
+    "maxLat": 2.6,
+    "afterBad": {
+     "s": 2283,
+     "lat": -2.4,
+     "sp": 9.5,
+     "surf": "dirt"
+    },
+    "recover": 0.6,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 2253,
+    "side": 1,
+    "maxLat": 2.5,
+    "afterBad": {
+     "s": 2276,
+     "lat": 2.2,
+     "sp": 7.2,
+     "surf": "dirt"
+    },
+    "recover": 0.6,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 1
+   },
+   {
+    "s0": 2639,
+    "side": -1,
+    "maxLat": 4.4,
+    "afterBad": {
+     "s": 2658,
+     "lat": -4.1,
+     "sp": 7.4,
+     "surf": "dirt"
+    },
+    "recover": 0.5,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 2639,
+    "side": 1,
+    "maxLat": 4.4,
+    "afterBad": {
+     "s": 2656,
+     "lat": 0,
+     "sp": 0.5,
+     "surf": "dirt"
+    },
+    "recover": 0.8,
+    "stuckT": 0.1,
+    "resc": [],
+    "respawns": 2
+   },
+   {
+    "s0": 2993,
+    "side": -1,
+    "maxLat": 2.7,
+    "afterBad": {
+     "s": 3030,
+     "lat": -2.4,
+     "sp": 10.6,
+     "surf": "dirt"
+    },
+    "recover": 0.5,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 0
+   },
+   {
+    "s0": 2993,
+    "side": 1,
+    "maxLat": 2.5,
+    "afterBad": {
+     "s": 3014,
+     "lat": 2.2,
+     "sp": 7.3,
+     "surf": "dirt"
+    },
+    "recover": 0.5,
+    "stuckT": 0,
+    "resc": [],
+    "respawns": 1
+   }
+  ],
+  "wedge": [
+   {
+    "s0": 965,
+    "side": -1,
+    "sp0": 4.53,
+    "surf": "dirt",
+    "lat": -1.7,
+    "speedEnd": 15.37,
+    "rescuedAt": 0.1,
+    "after": {
+     "s": 982,
+     "lat": -1.9,
+     "surf": "corn",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 965,
+    "side": 1,
+    "sp0": 8.24,
+    "surf": "dirt",
+    "lat": 2.7,
+    "speedEnd": 6.71,
+    "rescuedAt": null,
+    "after": null
+   },
+   {
+    "s0": 1448,
+    "side": -1,
+    "sp0": 8.45,
+    "surf": "dirt",
+    "lat": -2.4,
+    "speedEnd": 6.3,
+    "rescuedAt": null,
+    "after": null
+   },
+   {
+    "s0": 1448,
+    "side": 1,
+    "sp0": 5.31,
+    "surf": "dirt",
+    "lat": 2.3,
+    "speedEnd": 15.5,
+    "rescuedAt": 0.1,
+    "after": {
+     "s": 1466,
+     "lat": 2.3,
+     "surf": "dirt",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 1931,
+    "side": -1,
+    "sp0": 9.26,
+    "surf": "dirt",
+    "lat": -2.3,
+    "speedEnd": 15.24,
+    "rescuedAt": 15.4,
+    "after": {
+     "s": 2040,
+     "lat": 0,
+     "surf": "mud",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 1931,
+    "side": 1,
+    "sp0": 7.84,
+    "surf": "corn",
+    "lat": 2.6,
+    "speedEnd": 15.12,
+    "rescuedAt": 18.8,
+    "after": {
+     "s": 2058,
+     "lat": 0,
+     "surf": "dirt",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 2574,
+    "side": -1,
+    "sp0": 7.18,
+    "surf": "sand",
+    "lat": -2.5,
+    "speedEnd": 14.85,
+    "rescuedAt": 15.1,
+    "after": {
+     "s": 2657,
+     "lat": 0,
+     "surf": "dirt",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   },
+   {
+    "s0": 2574,
+    "side": 1,
+    "sp0": 4.12,
+    "surf": "dirt",
+    "lat": 1.9,
+    "speedEnd": 15.28,
+    "rescuedAt": 0.1,
+    "after": {
+     "s": 2598,
+     "lat": 2.2,
+     "surf": "corn",
+     "drivesOff": true,
+     "reRescues": 0
+    }
+   }
+  ],
+  "solo": {
+   "finished": true,
+   "t": 227.9,
+   "respawns": 0,
+   "offRoad": 0
+  }
+ },
+ "wall": {
+  "hits": [
+   {
+    "s0": 322,
+    "side": -1,
+    "maxVy": 1.04,
+    "maxAirAboveGround": 0.34,
+    "airT": 0.3,
+    "maxLat": 2.8,
+    "surf": "dirt"
+   },
+   {
+    "s0": 322,
+    "side": 1,
+    "maxVy": 1.14,
+    "maxAirAboveGround": 0.33,
+    "airT": 0.3,
+    "maxLat": 3.1,
+    "surf": "dirt"
+   },
+   {
+    "s0": 965,
+    "side": -1,
+    "maxVy": 0.74,
+    "maxAirAboveGround": 0.34,
+    "airT": 0.35,
+    "maxLat": 3.5,
+    "surf": "dirt"
+   },
+   {
+    "s0": 965,
+    "side": 1,
+    "maxVy": 0.94,
+    "maxAirAboveGround": 0.46,
+    "airT": 0.85,
+    "maxLat": 3.6,
+    "surf": "dirt"
+   },
+   {
+    "s0": 1609,
+    "side": -1,
+    "maxVy": 1.07,
+    "maxAirAboveGround": 0.37,
+    "airT": 0.75,
+    "maxLat": 3.1,
+    "surf": "dirt"
+   },
+   {
+    "s0": 1609,
+    "side": 1,
+    "maxVy": 0.62,
+    "maxAirAboveGround": 0.34,
+    "airT": 0.35,
+    "maxLat": 2.7,
+    "surf": "dirt"
+   },
+   {
+    "s0": 2253,
+    "side": -1,
+    "maxVy": 0.89,
+    "maxAirAboveGround": 0.33,
+    "airT": 0.3,
+    "maxLat": 2.8,
+    "surf": "dirt"
+   },
+   {
+    "s0": 2253,
+    "side": 1,
+    "maxVy": 0.58,
+    "maxAirAboveGround": 0.33,
+    "airT": 0.05,
+    "maxLat": 2.8,
+    "surf": "dirt"
+   },
+   {
+    "s0": 2896,
+    "side": -1,
+    "maxVy": 0.77,
+    "maxAirAboveGround": 0.35,
+    "airT": 0.5,
+    "maxLat": 3.2,
+    "surf": "corn"
+   },
+   {
+    "s0": 2896,
+    "side": 1,
+    "maxVy": 0.95,
+    "maxAirAboveGround": 0.37,
+    "airT": 0.45,
+    "maxLat": 3.4,
+    "surf": "dirt"
+   }
+  ],
+  "pins": [
+   {
+    "s0": 805,
+    "side": -1,
+    "mode": "paddle",
+    "latIn": -1,
+    "spIn": 4.7,
+    "surf": "dirt",
+    "rescuedAt": 0.1,
+    "minSp": 4.83,
+    "maxSp": 4.83,
+    "sEnd": 823,
+    "latEnd": -1.1
+   },
+   {
+    "s0": 805,
+    "side": -1,
+    "mode": "idle",
+    "latIn": -1.7,
+    "spIn": 2.86,
+    "surf": "dirt",
+    "rescuedAt": 0.1,
+    "minSp": 2.78,
+    "maxSp": 2.78,
+    "sEnd": 826,
+    "latEnd": -1.6
+   },
+   {
+    "s0": 805,
+    "side": 1,
+    "mode": "paddle",
+    "latIn": 2.3,
+    "spIn": 2.26,
+    "surf": "corn",
+    "rescuedAt": 0.1,
+    "minSp": 2.24,
+    "maxSp": 2.24,
+    "sEnd": 830,
+    "latEnd": 2.2
+   },
+   {
+    "s0": 805,
+    "side": 1,
+    "mode": "idle",
+    "latIn": 0.9,
+    "spIn": 3.44,
+    "surf": "dirt",
+    "rescuedAt": 0.1,
+    "minSp": 3.39,
+    "maxSp": 3.39,
+    "sEnd": 834,
+    "latEnd": 1.2
+   },
+   {
+    "s0": 1770,
+    "side": -1,
+    "mode": "paddle",
+    "latIn": -2.6,
+    "spIn": 10.63,
+    "surf": "dirt",
+    "rescuedAt": null,
+    "minSp": 10.68,
+    "maxSp": 14.11,
+    "sEnd": 1989,
+    "latEnd": -2.3
+   },
+   {
+    "s0": 1770,
+    "side": -1,
+    "mode": "idle",
+    "latIn": -2.1,
+    "spIn": 4.84,
+    "surf": "corn",
+    "rescuedAt": 0.1,
+    "minSp": 4.85,
+    "maxSp": 4.85,
+    "sEnd": 1787,
+    "latEnd": -2.1
+   },
+   {
+    "s0": 1770,
+    "side": 1,
+    "mode": "paddle",
+    "latIn": 1.8,
+    "spIn": 2.09,
+    "surf": "rock",
+    "rescuedAt": 0.1,
+    "minSp": 2.43,
+    "maxSp": 2.43,
+    "sEnd": 1790,
+    "latEnd": 1.8
+   },
+   {
+    "s0": 1770,
+    "side": 1,
+    "mode": "idle",
+    "latIn": 2.1,
+    "spIn": 2.47,
+    "surf": "corn",
+    "rescuedAt": 0.1,
+    "minSp": 1.83,
+    "maxSp": 1.83,
+    "sEnd": 1795,
+    "latEnd": 2.3
+   },
+   {
+    "s0": 2735,
+    "side": -1,
+    "mode": "paddle",
+    "latIn": -2.5,
+    "spIn": 10.47,
+    "surf": "mud",
+    "rescuedAt": null,
+    "minSp": 8.55,
+    "maxSp": 14.44,
+    "sEnd": 2948,
+    "latEnd": -2.2
+   },
+   {
+    "s0": 2735,
+    "side": -1,
+    "mode": "idle",
+    "latIn": -2,
+    "spIn": 3.97,
+    "surf": "corn",
+    "rescuedAt": 0.1,
+    "minSp": 3.89,
+    "maxSp": 3.89,
+    "sEnd": 2753,
+    "latEnd": -2.1
+   },
+   {
+    "s0": 2735,
+    "side": 1,
+    "mode": "paddle",
+    "latIn": 2.1,
+    "spIn": 3.01,
+    "surf": "dirt",
+    "rescuedAt": 0.1,
+    "minSp": 3.01,
+    "maxSp": 3.01,
+    "sEnd": 2757,
+    "latEnd": 1.9
+   },
+   {
+    "s0": 2735,
+    "side": 1,
+    "mode": "idle",
+    "latIn": 2.2,
+    "spIn": 3.8,
+    "surf": "corn",
+    "rescuedAt": 0.1,
+    "minSp": 3.17,
+    "maxSp": 3.17,
+    "sEnd": 2762,
+    "latEnd": 2.5
+   }
+  ]
+ }
+}
