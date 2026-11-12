@@ -226,7 +226,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
         let da = Math.atan2(-tgc.z, tgc.x) - Math.atan2(-_fwd.z, _fwd.x);
         da = Math.atan2(Math.sin(da), Math.cos(da));
         const sg = state.lateral >= 0 ? 1 : -1;
-        _dq.setFromAxisAngle(_yAxis, clamp(da, -0.5, 0.5) * Math.min(1, h * 2.4) + sg * 0.2 * h);   // ~11 deg/s away from the wall: rubbing the corn turns the cart back visibly
+        _dq.setFromAxisAngle(_yAxis, clamp(da, -0.5, 0.5) * Math.min(1, h * 1.2) + sg * 0.07 * h);   // ~4 deg/s away from the wall (round 6's ~11 deg/s fought the player's steering)
         q.premultiply(_dq).normalize();
       }
     }
@@ -421,12 +421,12 @@ export function createVehicleBody(specIn, world, opts = {}) {
         if ((state._pc = (state._pc || 0) + 1) % 8 === 1) { const sm = world.track && world.track.sampleAt ? world.track.sampleAt(Math.max(0, state.s)) : null; state._edge = sm ? Math.abs(state.lateral) > (sm.width || 6) / 2 - edgeIn : false; }
         const offRd = state._edge || state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall' || c.surface === 'corn'));
         const inCorn = state._cornAge < 1.5; // corn touched in the last 1.5 s
-        // wedged in the corn: a nose-in cart creeps and bounces around 0..2.5 m/s (the nudge swings it), so that whole band counts and the timer drains slowly
-        state.pin = (offRd || inCorn || (world.trackId === 'corn' && state.speed < 1.0)) && state.speed < (inCorn ? 2.5 : 1.5) && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt * (inCorn ? 1.2 : 1) : Math.max(0, (state.pin || 0) - dt * (inCorn ? 0.2 : 0.4));
-        // a cart paddling along the corn wall (wheel in the corn, under 9.5 m/s) for 6 s is not finding its own way back: lift it onto the lane
-        state._rub = state._cornAge < 0.6 && state.speed < 9.5 && state.handbrake < 0.2 && state.s > 3 ? (state._rub || 0) + dt : Math.max(0, (state._rub || 0) - dt * 0.5);
+        // wedged in the corn: only a cart that has really stopped (< 1 m/s) counts; one still scraping along the corn is left to drive out
+        state.pin = (offRd || inCorn) && state.speed < (inCorn ? 1.0 : 1.5) && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt * (inCorn ? 1.2 : 1) : Math.max(0, (state.pin || 0) - dt * 0.4);
+        // a cart crawling along the corn wall (wheel in the corn, under 3 m/s) for 6 s is not finding its own way back: lift it onto the lane
+        state._rub = state._cornAge < 0.6 && state.speed < 3 && state.handbrake < 0.2 && state.s > 3 ? (state._rub || 0) + dt : Math.max(0, (state._rub || 0) - dt * 0.5);
         state.sinceRec = (state.sinceRec == null ? 99 : state.sinceRec) + dt;
-        if (((state.pin > 3 || state.stuck > 3) && state.sinceRec > 3 && state.speed < (inCorn ? 2.5 : 1.0)) || (state._rub > 6 && state.sinceRec > 3)) { state.pin = 0; state.stuck = 0; state._rub = 0; this.recover(8); }
+        if (((state.pin > 3 || state.stuck > 3) && state.sinceRec > 3 && state.speed < 1.0) || (state._rub > 6 && state.sinceRec > 3)) { state.pin = 0; state.stuck = 0; state._rub = 0; this.recover(8); }
       } else if (state.stuck > (state.surface === 'wall' || state.surface === 'corn' ? 3.5 : 5) && !this.noRecover) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);
