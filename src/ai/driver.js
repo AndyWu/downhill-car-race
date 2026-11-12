@@ -32,8 +32,9 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
   // corn: the weak end of the field is lifted (fewer wall rubs and rescues, tighter spread); the corner/speed scale rises as skill falls
   const villTop = 1; // village mid-field spread (round 4) removed: it broke the skill order in ai-sim (rho 0.77)
-  const cornTop = world.trackId === 'corn' ? ((profile.skill ?? 0.5) > 0.9 ? 1.045 : (profile.skill ?? 0.5) > 0.8 ? 1.02 : (profile.skill ?? 0.5) > 0.7 ? 0.93 : 1) : 1; // spreads the top three so they stop convoying
-  const cornLift = (world.trackId === 'corn' ? 1 + 0.45 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1) : 1) * cornTop * villTop;
+  const cornTop = world.trackId === 'corn' ? ((profile.skill ?? 0.5) > 0.9 ? 0.98 : (profile.skill ?? 0.5) > 0.8 ? 1.02 : (profile.skill ?? 0.5) > 0.7 ? 0.93 : 1) : 1; // spreads the top three so they stop convoying
+  const cornLift = (world.trackId === 'corn' ? (1 + 0.45 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1)) * ((profile.skill ?? 0.5) > 0.3 && (profile.skill ?? 0.5) < 0.5 ? 1.04 : 1) : 1) * cornTop * villTop; // Dot (0.4) was the slowest finisher: a little lift keeps worst/best clear of the 1.5 limit
+  const cornPatience = world.trackId === 'corn' && (profile.skill ?? 0.5) > 0.8 && (profile.skill ?? 0.5) < 0.9 ? 0 : null; // the slipstreamer does not sit behind Maeve all the way to the line: he goes round her in the next bay
   const P = capFn ? { ...profile, speed: { ...profile.speed, cap: capFn(profile.skill ?? 0.5), scale: (profile.speed.scale ?? 1) * cornLift, cornerFactor: profile.speed.cornerFactor * (1 + 0.25 * (cornLift - 1) / 0.45) } }
     : flat ? { ...profile, speed: { ...profile.speed, cap: capOf(profile.speed.cap) } } : profile;
   rng = rng || createRng(1);
@@ -63,6 +64,9 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   const L = plan.length;
   const lapL = world.flags && world.flags.closed && world.track.lapLength ? world.track.lapLength : 0;
 
+  // heading change over the next 30 m of the plan: > ~0.14 rad means a corner (circuit: no passing / lateral swerves there, follow the line)
+  const hdgAt = (x) => { const a = clamp(x, 0, L), b = clamp(x + 4, 0, L); return Math.atan2(plan.xAt(b) - plan.xAt(a), plan.zAt(b) - plan.zAt(a)); };
+  const bendAt = (x) => { const d = hdgAt(x + 30) - hdgAt(x); return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))); };
   const FLOOR = 8.5;
   const CU = 0.4;
   let dbg = null, lastS = 0;
@@ -103,11 +107,12 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const sT = clamp(s + Ld, 0, L);
     const eT = plan.offsetAt(sT);
     const hw = plan.widthAt(s) / 2;
+    const bendy = flat && Math.max(bendAt(s - 6), bendAt(s + 10), bendAt(s + 30)) > 0.14;
     let passedNow = false;
     if (ahead) {
       const dl = ahead.lateral - self.lateral;
       const slower = (ahead.speed || 0) < speed - 0.1;
-      if (P.pass && aheadDs < 16 && Math.abs(dl) < 2.4 && slower && t > passCool) {
+      if (P.pass && !bendy && aheadDs < 16 && Math.abs(dl) < 2.4 && slower && t > passCool) {
         // overtake: pick a side with road to spare and go around instead of sitting behind
         if (!passSide || t > passUntil) { passSide = ahead.lateral > 0 ? -1 : 1; passStart = t; passedNow = true; }
         let latPass = ahead.lateral + passSide * 1.9;
@@ -115,20 +120,22 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
         if (Math.abs(latPass) > hw - 1.2 || t - passStart > 6) { passSide = 0; passCool = t + 4; } // no room / not working: stay put
         else { passUntil = t + 1.5; goal = clamp(latPass - eT, -3.5, 3.5); }
       } else if (P.draft.range > 0 && aheadDs <= P.draft.range) {
-        if (P.draft.overtake && (!plan.narrow || bay) && aheadDs < 3.5 && speed > (ahead.speed || 0) + 0.2) {
+        if (P.draft.overtake && !bendy && (!plan.narrow || bay) && aheadDs < 3.5 && speed > (ahead.speed || 0) + 0.2) {
           goal = (ahead.lateral > eT ? -1 : 1) * 1.8; // slingshot past
         } else {
-          goal = plan.narrow ? 0 : clamp(ahead.lateral - eT, -2.5, 2.5) * P.draft.strength; // sit in the slipstream (no room to weave in a lane)
+          goal = plan.narrow || bendy ? 0 : clamp(ahead.lateral - eT, -2.5, 2.5) * P.draft.strength; // sit in the slipstream (no room to weave in a lane)
         }
       } else if (P.aggression > 0.5 && aheadDs < 6 && (ahead.speed || 0) > speed - 0.3 && Math.abs(dl) < 1.2) {
         goal = clamp(ahead.lateral - eT, -1.5, 1.5) * 0.5; // nudge a rival that is not slower
-      } else if (P.carAvoid > 0 && aheadDs < 12 && Math.abs(dl) < 1.8 && speed > (ahead.speed || 0) - 0.5) {
+      } else if (P.carAvoid > 0 && !bendy && aheadDs < 12 && Math.abs(dl) < 1.8 && speed > (ahead.speed || 0) - 0.5) {
         goal = (dl >= 0 ? -1 : 1) * 2.0 * P.carAvoid;
       }
     }
+    if (bendy) { passSide = 0; passCool = Math.max(passCool, t + 1.5); }
     if (P.pass && passSide && t <= passUntil && alongside && !goal) goal = clamp(alongside.lateral + passSide * 1.9 - eT, -3.5, 3.5); // hold the line until clear
     if (P.pass && t > passUntil) passSide = 0;
     if (P.aggression > 0.5 && alongside) goal = clamp(alongside.lateral - eT, -2.5, 2.5) * 0.35; // shove
+    else if (flat && alongside && !goal && !bendy) goal = (alongside.lateral > self.lateral ? -1 : 1) * clamp(2.5 - Math.abs(alongside.lateral - self.lateral), 0.4, 2) * 0.9; // flat straights: never run shoulder to shoulder (contact spins the weaker cart)
     else if (P.carAvoid > 0 && alongside && !goal) goal = (alongside.lateral > self.lateral ? -1 : 1) * (0.5 + Math.max(0, 2.2 - Math.abs(alongside.lateral - self.lateral))) * P.carAvoid; // give room, more when closer
     // a parked / stopped cart on a wide road (spun car, finished car, idle player): everybody steers round it
     if (!goal && ahead && !plan.narrow && (ahead.speed || 0) < 1.2 && aheadDs < 16 && Math.abs(ahead.lateral - self.lateral) < 2.3 && speed > 1.5 && hw > 3.2) {
@@ -136,6 +143,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       goal = clamp(ahead.lateral + side * 2.3 - eT, -3.5, 3.5);
       if (Math.abs(eT + goal) > hw - 1.0) goal = clamp(ahead.lateral - side * 2.3 - eT, -3.5, 3.5);
     }
+    if (flat && goal !== 0) goal = clamp(goal, -(hw - 1.8) - eT, (hw - 1.8) - eT); // never choose a line off the asphalt
     if (goal !== 0 && plan.costAt(sT, eT + goal) > plan.costAt(sT, eT) + 1) goal = 0; // don't drive into a hazard for it
     extra += (goal - extra) * (1 - Math.exp(-dt / 0.4));
 
@@ -182,7 +190,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     }
     let vt = Math.min(plan.speedAt(s), plan.speedAt(clamp(s + speed * P.speed.lookTime, 0, L))) * P.speed.scale * (outBy > 0 ? 0.65 : 1);
     if (plan.narrow && !bay && ahead && aheadDs < 7 && Math.abs(ahead.lateral - self.lateral) < 1.4 && P.aggression < 0.5) {
-      vt = Math.min(vt, (ahead.speed || 0) + 0.4 + (1 - (P.patience ?? 0.5)) * 1.6); // patient on a lane too narrow to pass
+      vt = Math.min(vt, (ahead.speed || 0) + 0.4 + (1 - (cornPatience ?? P.patience ?? 0.5)) * 1.6); // patient on a lane too narrow to pass
     }
     vt *= 1 - 0.04 * easeK; // lift off a touch (and paddle less, below) when clear of the AI behind
     const over = speed - vt - P.brake.dead;
@@ -232,8 +240,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const flatCad = Math.min(4.6, (3.7 + 0.5 * (P.skill ?? 0.5)) * (1 + 0.8 * (1 - clamp(speed / 6, 0, 1))));
     let catchUp = 1; // flat: backmarkers dig in when the field is pulling away, so nobody gets lapped
     if (flat && others.length) { let lead = s; for (const o of others) if (o.s > lead) lead = o.s; catchUp = 1 + CU * clamp((lead - s - 100) / 250, 0, 1); }
-    const standing = flat && t < 9 ? 1 + (0.45 + 1.6 * Math.max(0, (P.skill ?? 0.5) - 0.5)) * (1 - t / 9) : 1; // stronger launch for the better drivers so a human in mid-grid does not lead at once // flat start: everybody is off the line promptly (the player starts mid-grid)
-    const cadence = paceK * standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (wave ? 1 + 0.085 * Math.sin(t * 6.283 / wave.per + wave.ph) : 1) * (PD.mode === 'optimal' ? want : 1);
+    const standing = flat && t < 11 ? 1 + (0.45 + 1.6 * Math.max(0, (P.skill ?? 0.5) - 0.5) + 0.3 * clamp(((P.skill ?? 0.5) - 0.5) / 0.3, 0, 1)) * (1 - t / 11) : 1; // stronger launch for the better drivers so a human in mid-grid does not lead at once // flat start: everybody is off the line promptly (the player starts mid-grid)
+    const cadence = paceK * standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (wave ? 1 + ((P.skill ?? 0.5) > 0.65 ? 0.11 : 0.085) * Math.sin(t * 6.283 / wave.per + wave.ph) : 1) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;
@@ -293,17 +301,22 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       reverse,
     };
   }
-  /** how far past the trap a rescued cart should be put: >= 12 m, clear of hazards, past tight corners (planned speed < 7 m/s) so it is not re-rescued */
-  function rescueAhead() {
-    let a = 12;
+  /** how far past the trap a rescued cart should be put: >= 12 m, clear of hazards, past tight corners (planned speed < 7 m/s) so it is not re-rescued.
+   *  A cart rescued again within 8 s (the first drop landed in the same trouble) goes 28 m on; `others` (states) keeps it from landing on top of another cart. */
+  let lastResc = -99;
+  function rescueAhead(others) {
+    let a = t - lastResc < 8 ? 28 : 12;
+    lastResc = t;
+    const base = Math.max(lastS, 0);
     for (let k = 0; k < 14; k++) {
-      const x = clamp(lastS + a, 0, L);
+      const x = clamp(base + a, 0, L);
       let bad = plan.speedAt(x) < 7 || plan.speedAt(clamp(x + 8, 0, L)) < 6;
       for (const h of plan.hazards) if (Math.abs(h.s - x) < h.ra + 3) bad = true;
+      if (!bad && others) for (const o of others) { let d = o.s - x; if (lapL) d = ((d + lapL / 2) % lapL + lapL) % lapL - lapL / 2; if (Math.abs(d) < 7) bad = true; } // not on top of another cart
       if (!bad) break;
       a += 3;
     }
-    return Math.min(a, 40);
+    return Math.min(a, 46);
   }
   return { think, rescueAhead, get dbg() { return dbg; }, profile: P, plan, get choice() { return choice; }, get recoveries() { return recoveries; },
     /** seconds continuously below 1.5 m/s (recovery manoeuvres didn't free the car). Host should call body.recover(~8) when needsRescue. */

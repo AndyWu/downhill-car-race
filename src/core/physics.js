@@ -217,6 +217,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       }
     }
     // rubbing the corn: swing the nose back along the lane (about 3 deg/s away from the wall, plus a gentle align) so a paddling cart re-centres itself
+    state._cornN = cornN; state._cornAge = cornN > 0 ? 0 : (state._cornAge == null ? 99 : state._cornAge) + h;
     if (cornN > 0 && world.track && world.track.sampleAt && state.s > 3) {
       const tgc = world.track.sampleAt(Math.max(0, state.s)).tangent;
       _fwd.set(0, 0, -1).applyQuaternion(q);
@@ -225,7 +226,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
         let da = Math.atan2(-tgc.z, tgc.x) - Math.atan2(-_fwd.z, _fwd.x);
         da = Math.atan2(Math.sin(da), Math.cos(da));
         const sg = state.lateral >= 0 ? 1 : -1;
-        _dq.setFromAxisAngle(_yAxis, clamp(da, -0.5, 0.5) * Math.min(1, h * 1.2) + sg * 0.07 * h);
+        _dq.setFromAxisAngle(_yAxis, clamp(da, -0.5, 0.5) * Math.min(1, h * 2.4) + sg * 0.2 * h);   // ~11 deg/s away from the wall: rubbing the corn turns the cart back visibly
         q.premultiply(_dq).normalize();
       }
     }
@@ -407,16 +408,25 @@ export function createVehicleBody(specIn, world, opts = {}) {
         const offAsph = state._edge || state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall' || c.surface === 'gravel'));
         // slow crawl on grass/gravel (not just dead stop) also counts: speed < 1.5 anywhere, < 4 when truly off the asphalt
         const offSoft = state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'gravel'));
-        const slow = state.speed < 1.5 || (offSoft && state.speed < 4 && state.forwardSpeed < 4);
-        state.pin = offAsph && slow && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.4);
-        if (state.pin > 4) { state.pin = 0; state.stuck = 0; this.recover(9); }
+        // a no-input crawl (0..2.5 m/s) between asphalt and grass counts too: it used to flicker around 1.5 m/s and never filled the timer
+        const slow = state.speed < 2.5 || (offSoft && state.speed < 4 && state.forwardSpeed < 4);
+        state.pin = offAsph && slow && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.25);
+        // paddling across the infield / run-off at speed (no wheel on the asphalt, 3 m+ beyond the edge) for 7 s: that is a shortcut or a lost child, lift it back
+        const onGrassOnly = state.wheelContacts.some((c) => c.contact) && state.wheelContacts.every((c) => !c.contact || c.surface === 'grass' || c.surface === 'gravel');
+        state._inf = onGrassOnly && state.s > 3 ? (state._inf || 0) + dt : Math.max(0, (state._inf || 0) - dt * 2);
+        if (state.pin > 4 || state._inf > 7) { state.pin = 0; state._inf = 0; state.stuck = 0; this.recover(9); }
       } else if (wallStop && !this.noRecover) {
         // village / corn: same slow-draining pinned-cart timer as the speedway, but also for a cart nose-in at the lane edge (any surface)
-        if ((state._pc = (state._pc || 0) + 1) % 8 === 1) { const sm = world.track && world.track.sampleAt ? world.track.sampleAt(Math.max(0, state.s)) : null; state._edge = sm ? Math.abs(state.lateral) > (sm.width || 6) / 2 - 0.6 : false; }
+        const edgeIn = world.trackId === 'corn' ? 1.1 : 0.6; // corn lane is ~3.4 m wide: a cart 1 m from the corn is already against it
+        if ((state._pc = (state._pc || 0) + 1) % 8 === 1) { const sm = world.track && world.track.sampleAt ? world.track.sampleAt(Math.max(0, state.s)) : null; state._edge = sm ? Math.abs(state.lateral) > (sm.width || 6) / 2 - edgeIn : false; }
         const offRd = state._edge || state.wheelContacts.some((c) => c.contact && (c.surface === 'grass' || c.surface === 'wall' || c.surface === 'corn'));
-        state.pin = offRd && state.speed < 1.5 && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt : Math.max(0, (state.pin || 0) - dt * 0.4);
+        const inCorn = state._cornAge < 1.5; // corn touched in the last 1.5 s
+        // wedged in the corn: a nose-in cart creeps and bounces around 0..2.5 m/s (the nudge swings it), so that whole band counts and the timer drains slowly
+        state.pin = (offRd || inCorn || (world.trackId === 'corn' && state.speed < 1.0)) && state.speed < (inCorn ? 2.5 : 1.5) && state.handbrake < 0.2 && state.s > 3 ? (state.pin || 0) + dt * (inCorn ? 1.2 : 1) : Math.max(0, (state.pin || 0) - dt * (inCorn ? 0.2 : 0.4));
+        // a cart paddling along the corn wall (wheel in the corn, under 9.5 m/s) for 6 s is not finding its own way back: lift it onto the lane
+        state._rub = state._cornAge < 0.6 && state.speed < 9.5 && state.handbrake < 0.2 && state.s > 3 ? (state._rub || 0) + dt : Math.max(0, (state._rub || 0) - dt * 0.5);
         state.sinceRec = (state.sinceRec == null ? 99 : state.sinceRec) + dt;
-        if ((state.pin > 3 || state.stuck > 3) && state.sinceRec > 3 && state.speed < 1.0) { state.pin = 0; state.stuck = 0; this.recover(8); }
+        if (((state.pin > 3 || state.stuck > 3) && state.sinceRec > 3 && state.speed < (inCorn ? 2.5 : 1.0)) || (state._rub > 6 && state.sinceRec > 3)) { state.pin = 0; state.stuck = 0; state._rub = 0; this.recover(8); }
       } else if (state.stuck > (state.surface === 'wall' || state.surface === 'corn' ? 3.5 : 5) && !this.noRecover) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);

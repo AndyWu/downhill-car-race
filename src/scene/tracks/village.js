@@ -161,7 +161,7 @@ export function planVillage(seed) {
     return 0;
   };
   const wallTop = (road, s, sg) => lerp(WALL, road.kind === 'river' ? LOWR : LOW, lowEdge(road, s, sg));
-  const PHYS_RIVER = 1.25;   // the river-side parapet is DRAWN 0.5 m high (wallTop) but contains like a 1.25 m wall: a cart steering into the water is turned back, not launched over it
+  const PHYS_RIVER = 1.5;   // the river-side parapet is DRAWN 0.5 m high (wallTop) but contains like a 1.25 m wall: a cart steering into the water is turned back, not launched over it
   const physTop = (road, s, sg) => (road.kind === 'river' && sg === road.riverSide ? lerp(WALL, PHYS_RIVER, lowEdge(road, s, sg)) : wallTop(road, s, sg));
   const verge = (road, s, d, hw, c2 = 99) => {   // c2: clearance to the nearest OTHER road's edge (junction gores)
     const r = Math.abs(d) - (hw + 0.1);
@@ -274,7 +274,8 @@ export function planVillage(seed) {
     const inSpan = (road, sg, s) => { const m = spans.get(road); if (!m) return false; for (const [a, b] of m[sg]) if (s > a - 0.35 && s < b + 0.35) return true; return false; };
     const clearOf = (x, z) => { nw.project2(x, z, qq); const rd = qq.road; rd.params(qq.idx, pp); return Math.abs(qq.d) - pp.hw; };
     const free = (x, z, r) => { for (const p of placed) if (Math.hypot(p.x - x, p.z - z) < (p.r + r) * 0.72) return false; return true; };
-    const PAL = [[1.0, 0.92, 0.74], [0.98, 0.78, 0.66], [1.0, 0.9, 0.7], [0.92, 0.86, 0.66], [0.98, 0.84, 0.66], [1.0, 0.82, 0.5], [0.96, 0.7, 0.62], [1.0, 0.92, 0.8]];
+    const PAL = [[1.0, 0.92, 0.74], [0.98, 0.78, 0.66], [1.0, 0.9, 0.7], [0.92, 0.86, 0.66], [0.98, 0.84, 0.66], [1.0, 0.82, 0.5], [0.96, 0.7, 0.62], [1.0, 0.92, 0.8]].map((c) => [c[0] * 1.14, c[1] * 1.0, c[2] * 0.82]);   // warm plaster: the cool sky ambient greys plain tints, so push them yellow
+    const WPAL = [[1.28, 0.98, 0.62], [1.22, 0.88, 0.58], [1.2, 0.94, 0.54], [1.28, 1.04, 0.72]];   // warm plaster for free-standing garden / alley walls (the cool sky ambient greys it, so push it yellow)
     const SHUT = [[0.2, 0.45, 0.3], [0.65, 0.2, 0.18], [0.2, 0.32, 0.6], [0.85, 0.72, 0.25], [0.3, 0.5, 0.5]];
     const FLOW = [[0.9, 0.15, 0.2], [0.95, 0.7, 0.15], [0.9, 0.4, 0.7], [0.95, 0.95, 0.9]];
 
@@ -356,8 +357,8 @@ export function planVillage(seed) {
           for (const sx of [-1, 1]) b.add('woodWeathered', boxG(0.42, 1.1, 0.06, 1), L(xf(x + sx * 0.74, y, -0.07)), [sc[0] * 1.2, sc[1] * 1.2, sc[2] * 1.2]);
           if (rr() < 0.55) { const fc = FLOW[Math.floor(rr() * 4)]; b.add('woodWeathered', boxG(1.05, 0.2, 0.26, 1), L(xf(x, y - 0.68, -0.14)), [0.55, 0.4, 0.3]); b.add('dark', boxG(0.95, 0.2, 0.22, 1), L(xf(x, y - 0.55, -0.14)), [fc[0] * 0.8, fc[1] * 0.8, fc[2] * 0.8]); }
         } else if (t < 0.86) {   // ivy patch: a flat carpet of small leaf cards lying on the wall (no lumpy volumes)
-          const n = 34 + Math.floor(rr() * 14), top = hgt * (0.7 + rr() * 0.3), wd = 0.55 + rr() * 0.5;
-          for (let i = 0; i < n; i++) { const g = rr(), yy = 0.2 + (top - 0.2) * Math.pow(rr(), 0.85), xx = x + (rr() - 0.5) * wd * 2 * (1 - 0.35 * yy / top); b.add('dark', boxG(0.26 + g * 0.1, 0.19 + g * 0.06, 0.015, 1), L(xf(xx, yy, -0.045 - rr() * 0.025, (rr() - 0.5) * 0.3, (rr() - 0.5) * 0.3, rr() * 3.14)), [0.1 + g * 0.14, 0.36 + g * 0.24, 0.08 + g * 0.08]); }
+          const n = 40 + Math.floor(rr() * 14), top = hgt * (0.7 + rr() * 0.3), wd = 0.55 + rr() * 0.5;
+          for (let i = 0; i < n; i++) { const g = rr(), yy = 0.2 + (top - 0.2) * Math.pow(rr(), 0.85), xx = x + (rr() - 0.5) * wd * 2 * (1 - 0.35 * yy / top); b.add('dark', boxG(0.2 + g * 0.09, 0.15 + g * 0.05, 0.015, 1), L(xf(xx, yy, -0.045 - rr() * 0.025, (rr() - 0.5) * 0.3, (rr() - 0.5) * 0.3, rr() * 3.14)), [0.1 + g * 0.12, 0.3 + g * 0.22, 0.07 + g * 0.07]); }
           x += 0.6;
         } else x += 0.6;
       }
@@ -399,7 +400,7 @@ export function planVillage(seed) {
             const gw = reg.boxPoly(bs.M, 0, 0.35, w / 2, 0.35);
             if (reg.fits(gw, 0.31, 0.5)) {
               const M = bs.M.clone(); M.elements[13] = terrain.heightAt(bs.base.x, bs.base.z) - 0.05;
-              const gt = PAL[Math.floor(rnd() * PAL.length)];
+              const gt = WPAL[Math.floor(rnd() * WPAL.length)];
               batchOf(prog).add('plaster', boxG(w, 3.1, 0.7, 2), M.clone().multiply(xf(0, 0.6, 0.35)), gt);
               wallDecor(batchOf(prog), M, -w / 2, w / 2, 2.15, mulberry32((sc * 131) | 0), true, winOf(prog));
               batchOf(prog).add('concrete', boxG(w + 0.1, 0.2, 0.9, 2), M.clone().multiply(xf(0, 2.2, 0.35)), [0.92, 0.84, 0.72]);
@@ -505,7 +506,7 @@ export function planVillage(seed) {
               g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(Na, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(Ua, 2));
               g.setIndex(Ia); g = g.toNonIndexed(); g.computeVertexNormals();
               const sm = (road.length * (a0 + a1)) / 2 / (n - 1), prog = road.map ? road.map.fromS + (sm / road.map.len) * (road.map.toS - road.map.fromS) : sm;
-              const PT = PAL[(Math.abs(Math.floor(sm / 9)) + road.id * 3 + (sg > 0 ? 2 : 0)) % PAL.length];   // alley plaster: warm tints, not slate
+              const PT = WPAL[(Math.abs(Math.floor(sm / 9)) + road.id * 3 + (sg > 0 ? 2 : 0)) % WPAL.length];   // alley plaster: warm tints, not slate
               batchOf(prog).add(WALLKEY[road.kind || 'main'] || 'brickwall', g, null, road.kind === 'alley' ? PT : [1.05, 0.95, 0.88]);
               if (!rv) {   // doors / windows / ivy on the long blank street walls (skipped on the low parapets)
                 const sA = (road.length * a0) / (n - 1), sB = (road.length * a1) / (n - 1), rr = mulberry32((Math.floor(sA * 7) + road.id * 977 + (sg > 0 ? 31 : 0)) | 0);

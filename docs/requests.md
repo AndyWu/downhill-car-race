@@ -227,3 +227,6 @@ Append requests as `- [from Agent N → Agent M] ...`
 ### Corn fixer
 - Shared edit (unavoidable): `src/graphics/postfx.js` lens-mud splatter shader. The "near-black blobs on the lane" in the corn critiques are not scene decals (corn draws none; its pools are road vertex colours) but the lens mud drops spawned when driving through a mud zone. Colour changed from (0.2,0.14,0.08)->(0.045,0.03,0.018) to wet brown (0.42,0.28,0.16)->(0.2,0.125,0.065), highlight 0.3 -> 0.5, scene-lit floor 0.16 -> 0.34. Affects all maps' mud lens drops; no scene / country-road geometry or physics change.
 - `corn.js`: extra ragged-edge card pass (same instanced mesh, no new draw calls).
+
+### Map loop round 6 — village fixer
+- No shared-file edits. `village.js` only: `theme.roadUV` now blends each strip into the shared world-space junction frame by true proximity to another road's strip (`registry.clear`, 1.5 to 20 m) instead of distance along the branch, so the merge ends (s 715-740, 1680-1700, 2630-2660) and the Main Street wedge at s 2605-2615 show the same cobbles in both overlapping strips; warm wall plaster (`WPAL`), flat leaf-card ivy, square brick gore end posts, river parapet physical height 1.25 to 1.5 m (still drawn 0.5 m).

@@ -110,11 +110,11 @@ export function planCircuit(seed) {
   // hairpin gravel trap: the run-off on the OUTSIDE of the hairpin (not the other bends) is draggy gravel, so taking it flat out costs ~1.5-2 s over a braked line (measured s 370-520 at 16 m/s entry; see docs/requests.md round 4)
   const gravelAt = (s, d) => {
     const u = ((s % LAP) + LAP) % LAP;
-    if (u < 392 || u > 502) return false;
+    if (u < (globalThis.__CIRC?.GS ?? 392) || u > 502) return false;
     const k = tab(kapT, u);
     return Math.abs(k) > 0.02 && (d < 0 ? k > 0 : k < 0);
   };
-  const HPF = 0.3, GRAVEL_DRAG = 1.5;
+  const CV = globalThis.__CIRC || {}; const HPF = CV.HPF ?? 0.3, GRAVEL_DRAG = CV.GD ?? 1.5, GRAVEL_F = CV.GF ?? 0.5; // TMPCV
   const hairpinW = (s) => { const u = ((s % LAP) + LAP) % LAP; return u < 405 || u > 500 ? 0 : smoothstep(0.028, 0.05, Math.abs(tab(kapT, u))); };
   const surface = (info) => {
     const ad = Math.abs(info.d), hw = info.hw;
@@ -122,7 +122,7 @@ export function planCircuit(seed) {
     if (ad <= hw + 0.05) return { type: 'asphalt', friction: hpF, drag: 0, bump: 0.02 };
     if (ad <= hw + 1.5) return { type: 'asphalt', friction: 0.85 * hpF, drag: 0.02, bump: 0.1 };      // kerbs
     if (ad < hw + offAt(info.s, info.d < 0 ? -1 : 1) - 0.05) {
-      if (gravelAt(info.s, info.d)) return { type: 'gravel', friction: 0.5, drag: GRAVEL_DRAG, bump: 0.25 };
+      if (gravelAt(info.s, info.d)) return { type: 'gravel', friction: GRAVEL_F, drag: GRAVEL_DRAG, bump: 0.25 };
       return { type: 'grass', friction: 0.55, drag: 0.3, bump: 0.2 };   // run-off
     }
     return { type: 'wall', friction: 0.3, drag: 1.4, bump: 0.5 };

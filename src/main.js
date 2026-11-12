@@ -764,7 +764,7 @@ async function boot() {
           let extra = 0;
           for (const o of vs) if (o !== v && o._rescT != null && game.state.raceTime - o._rescT < 0.6 && Math.abs(o.body.state.s - v.body.state.s) < 8) extra += 9;
           v._rescT = game.state.raceTime;
-          v.body.recover((v.ai.rescueAhead ? v.ai.rescueAhead() : 12) + extra, 3, v.ai.choice || null);
+          v.body.recover((v.ai.rescueAhead ? v.ai.rescueAhead(others) : 12) + extra, 3, v.ai.choice || null);
           if (v.ai.clearStuck) v.ai.clearStuck();
         }
         if (v.finished) inp = { ...idle, handbrake: 0.7 };
