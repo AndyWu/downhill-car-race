@@ -1,0 +1,91 @@
+==== village
+   routes: Barnaby{"1":1,"2":0,"3":1} Tilly{"1":0,"2":0,"3":1} Clementine{"1":1,"2":0,"3":1} Dot{"1":1,"2":0,"3":1} Buster{"1":1,"2":1,"3":1} Rosco{"1":1,"2":0,"3":1} Maeve{"1":1,"2":0,"3":1} Vance{"1":1,"2":0,"3":1} Ace{"1":1,"2":0,"3":1}
+seed 1 (rho 0.87): Ace 268 < Vance 270 < Maeve 289 < Buster 343 < Tilly 345 < Rosco 350 < Dot 356 < Clementine 358 < Barnaby 364
+   routes: Barnaby{"1":1,"2":0,"3":0} Tilly{"1":1,"2":0,"3":1} Clementine{"1":1,"2":0,"3":1} Dot{"1":1,"2":0,"3":1} Buster{"1":1,"2":1,"3":1} Rosco{"1":1,"2":0,"3":1} Maeve{"1":1,"2":0,"3":1} Vance{"1":1,"2":0,"3":1} Ace{"1":1,"2":0,"3":1}
+seed 2 (rho 0.82): Ace 268 < Vance 268 < Maeve 282 < Tilly 341 < Rosco 351 < Buster 357 < Clementine 364 < Dot 368 < Barnaby 378
+   routes: Barnaby{"1":0,"2":0,"3":0} Tilly{"1":0,"2":0,"3":1} Clementine{"1":1,"2":0,"3":1} Dot{"1":1,"2":0,"3":1} Buster{"1":1,"2":1,"3":1} Rosco{"1":1,"2":0,"3":1} Maeve{"1":1,"2":0,"3":1} Vance{"1":1,"2":0,"3":1} Ace{"1":1,"2":0,"3":1}
+seed 3 (rho 0.88): Ace 267 < Vance 287 < Maeve 289 < Rosco 343 < Tilly 348 < Buster 359 < Clementine 368 < Dot 368 < Barnaby 386
+
+Track: village
+Averages over 3 seeds (88 s wall):
+driver      skill  time   hazards  off-road  honks/race  maxStall  rescues
+Barnaby      0.05  376.2     15.0       0.0         9.3       2.4 1
+Tilly        0.18  344.7     14.3       0.0         6.7       2.5 1
+Clementine   0.28  363.2     11.7       0.0         1.3       2.5 3
+Dot          0.40  363.8     12.7       0.3         4.0       2.4 1
+Buster       0.50  352.9     19.7       0.0        63.3       1.6 1
+Rosco        0.62  347.8     14.0       0.0         3.7       2.4 1
+Maeve        0.73  286.5     26.0       0.0         0.0       0.0 0
+Vance        0.84  275.2     26.7       1.0        11.7       2.5 5
+Ace          0.95  267.6     25.7       0.0         0.0       0.0 0
+
+Spearman rho (skill vs finish) avg 0.86  | slowest top-3 286 s vs fastest bottom-3 345 s | rho@90s 0.88 | worst/best 1.41 | lead changes/race 1.7
+slowest AI travelled after 20 s: 106 m (Clementine,Clementine,Tilly) (target >= 60)
+
+ALL ASSERTIONS PASSED
+==== corn
+seed 1 (rho 0.90): Ace 278 < Vance 308 < Maeve 326 < Rosco 359 < Buster 360 < Clementine 361 < Tilly 379 < Barnaby 393 < Dot 417
+seed 2 (rho 0.87): Ace 279 < Maeve 311 < Vance 311 < Rosco 356 < Buster 356 < Tilly 357 < Clementine 380 < Barnaby 384 < Dot 400
+seed 3 (rho 0.88): Ace 277 < Maeve 311 < Vance 311 < Rosco 363 < Buster 364 < Clementine 365 < Tilly 400 < Barnaby 400 < Dot 409
+
+Track: corn
+Averages over 3 seeds (60 s wall):
+driver      skill  time   hazards  off-road  honks/race  maxStall  rescues
+Barnaby      0.05  392.6     15.3       0.6        14.3       2.5 5
+Tilly        0.18  378.5     15.3       3.5        15.0       2.5 5
+Clementine   0.28  368.6     15.0       0.0         4.3       2.5 1
+Dot          0.40  408.5     15.3       4.5         7.3       2.5 3
+Buster       0.50  360.4     16.0       0.0        93.7       0.0 0
+Rosco        0.62  359.4     15.0       0.0         4.7       0.0 0
+Maeve        0.73  315.8     15.0       0.0         1.0       0.0 0
+Vance        0.84  310.1     15.0       0.4        24.0       0.0 0
+Ace          0.95  278.3     15.0       0.0         0.0       0.0 0
+
+Spearman rho (skill vs finish) avg 0.88  | slowest top-3 316 s vs fastest bottom-3 369 s | rho@90s 0.97 | worst/best 1.47 | lead changes/race 0.0
+slowest AI travelled after 20 s: 130 m (Tilly,Tilly,Tilly) (target >= 60)
+
+ALL ASSERTIONS PASSED
+==== circuit
+seed 1 (rho 0.92): Maeve 288 < Ace 291 < Vance 307 < Rosco 322 < Dot 336 < Buster 342 < Tilly 361 < Clementine 365 < Barnaby 399
+seed 2 (rho 0.92): Maeve 285 < Ace 290 < Vance 304 < Rosco 320 < Dot 341 < Buster 348 < Tilly 352 < Clementine 363 < Barnaby 381
+seed 3 (rho 0.83): Maeve 293 < Ace 294 < Vance 306 < Dot 339 < Rosco 348 < Tilly 361 < Buster 374 < Clementine 377 < Barnaby 395
+
+Track: circuit
+Averages over 3 seeds (59 s wall):
+driver      skill  time   hazards  off-road  honks/race  maxStall  rescues
+Barnaby      0.05  391.3      0.0       1.5        10.0       2.5 5
+Tilly        0.18  358.0      0.0       1.2         8.3       1.8 2
+Clementine   0.28  368.3      0.0       0.0         0.0       0.0 0
+Dot          0.40  338.5      0.0       1.8         3.3       2.5 4
+Buster       0.50  354.9      0.0       0.0        35.0       2.2 1
+Rosco        0.62  330.1      0.0       0.0        23.7       2.5 4
+Maeve        0.73  288.3      0.0       0.0         1.0       0.0 0
+Vance        0.84  305.7      0.0       0.0         0.0       0.0 0
+Ace          0.95  291.4      0.0       0.0         3.7       0.0 0
+
+Spearman rho (skill vs finish) avg 0.89  | slowest top-3 306 s vs fastest bottom-3 358 s | rho@90s 0.92 | worst/best 1.36 | lead changes/race 4.0
+slowest AI travelled after 20 s: 76 m (Dot,Tilly,Tilly) (target >= 60)
+
+ALL ASSERTIONS PASSED
+==== country
+seed 1 (rho 0.92): Ace 274 < Maeve 296 < Vance 299 < Buster 319 < Rosco 334 < Clementine 364 < Tilly 365 < Dot 367 < Barnaby 376
+seed 2 (rho 0.92): Ace 271 < Vance 272 < Maeve 293 < Buster 320 < Rosco 327 < Tilly 365 < Clementine 377 < Dot 401 < Barnaby 404
+seed 3 (rho 0.95): Ace 274 < Maeve 292 < Vance 301 < Buster 323 < Rosco 328 < Clementine 365 < Dot 367 < Tilly 392 < Barnaby 401
+
+Track: country
+Averages over 3 seeds (51 s wall):
+driver      skill  time   hazards  off-road  honks/race  maxStall  rescues
+Barnaby      0.05  393.7     11.3       0.0        10.7       2.4 5
+Tilly        0.18  374.0     11.7       0.0         9.0       2.5 1
+Clementine   0.28  368.5      7.3       0.0         0.7       2.5 1
+Dot          0.40  378.3      9.3       5.3         5.7       2.2 2
+Buster       0.50  320.7     11.3       1.0        23.0       2.5 3
+Rosco        0.62  329.4      9.3       0.0         5.7       0.0 0
+Maeve        0.73  293.4     14.0       0.0         0.7       0.0 0
+Vance        0.84  290.5     14.7       6.0         9.3       2.5 4
+Ace          0.95  272.9     14.0       0.0         0.0       0.0 0
+
+Spearman rho (skill vs finish) avg 0.93  | slowest top-3 293 s vs fastest bottom-3 369 s | rho@90s 0.86 | worst/best 1.44 | lead changes/race 1.0
+slowest AI travelled after 20 s: 99 m (Barnaby,Barnaby,Barnaby) (target >= 60)
+
+ALL ASSERTIONS PASSED
