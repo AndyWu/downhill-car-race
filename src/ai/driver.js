@@ -32,7 +32,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
   // corn: the weak end of the field is lifted (fewer wall rubs and rescues, tighter spread); the corner/speed scale rises as skill falls
   const villTop = 1; // village mid-field spread (round 4) removed: it broke the skill order in ai-sim (rho 0.77)
-  const cornTop = world.trackId === 'corn' ? ((profile.skill ?? 0.5) > 0.9 ? 0.98 : (profile.skill ?? 0.5) > 0.8 ? 1.02 : (profile.skill ?? 0.5) > 0.7 ? 0.93 : 1) : 1; // spreads the top three so they stop convoying
+  const cornTop = world.trackId === 'corn' ? ((profile.skill ?? 0.5) > 0.9 ? 0.98 : (profile.skill ?? 0.5) > 0.8 ? 1.04 : (profile.skill ?? 0.5) > 0.7 ? 0.92 : 1) : 1; // spreads the top three so they stop convoying
   const cornLift = (world.trackId === 'corn' ? (1 + 0.45 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1)) * ((profile.skill ?? 0.5) > 0.3 && (profile.skill ?? 0.5) < 0.5 ? 1.04 : 1) : 1) * cornTop * villTop; // Dot (0.4) was the slowest finisher: a little lift keeps worst/best clear of the 1.5 limit
   const cornPatience = world.trackId === 'corn' && (profile.skill ?? 0.5) > 0.8 && (profile.skill ?? 0.5) < 0.9 ? 0 : null; // the slipstreamer does not sit behind Maeve all the way to the line: he goes round her in the next bay
   const P = capFn ? { ...profile, speed: { ...profile.speed, cap: capFn(profile.skill ?? 0.5), scale: (profile.speed.scale ?? 1) * cornLift, cornerFactor: profile.speed.cornerFactor * (1 + 0.25 * (cornLift - 1) / 0.45) } }
@@ -90,7 +90,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
 
     // ---- other cars: drafting / bumping / avoidance -> lateral offset on top of the plan ----
     let goal = 0;
-    let ahead = null, aheadDs = Infinity, alongside = null;
+    let ahead = null, aheadDs = Infinity, alongside = null, level = false;
     for (const o of others) {
       if (!o || o === self) continue;
       if (o.splitId != null && o.splitId === self.splitId && o.pathIndex != null && self.pathIndex != null && o.pathIndex !== self.pathIndex) continue; // other street
@@ -98,6 +98,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       if (lapL) dsO = ((dsO + lapL / 2) % lapL + lapL) % lapL - lapL / 2; // closed circuit: a car a lap down is still in front of (or behind) you on the road
       if (dsO === 0 && dl === 0) continue;
       if (dsO > 0.5 && dsO < aheadDs && Math.abs(dl) < 3) { ahead = o; aheadDs = dsO; }
+      if (dsO > -0.05 && dsO < 1.8 && Math.abs(dl) < 2.0 && Math.abs((o.speed || 0) - speed) < 1.0 && (dsO > 0.05 || dl > 0)) level = true;   // corn: another cart level with (or just ahead of) this one, at the same pace
       if (Math.abs(dsO) < 5 && Math.abs(dl) > 0.2 && Math.abs(dl) < 2.6 && (!alongside || Math.abs(dl) < Math.abs(alongside.lateral - self.lateral))) alongside = o;
     }
     // corn passing bays: the lane opens to ~7 m for ~60 m, so patient drivers lift the 'stay behind' cap there and go round
@@ -194,6 +195,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     }
     // speedway: never run into the back of a cart in a braking zone / corner (the pile-up at the hairpin entry): follow it, close up to ~1 m/s faster only
     if (flat && ahead && aheadDs < 14 && Math.abs(ahead.lateral - self.lateral) < 1.5 && (bendy || aheadDs < 5 || (plan.speedAt(clamp(s + 25, 0, L)) < vt - 1))) vt = Math.min(vt, (ahead.speed || 0) + 0.8 + aheadDs * 0.3);
+    // corn lane outside a bay: carts of equal pace running level fuse and crawl together; the one level with / behind another eases off until they are in single file
+    if (level && world.trackId === 'corn' && plan.narrow && !bay) vt = Math.min(vt, speed - 0.7);
     vt *= 1 - 0.04 * easeK; // lift off a touch (and paddle less, below) when clear of the AI behind
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;

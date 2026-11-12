@@ -426,7 +426,25 @@ export function createVehicleBody(specIn, world, opts = {}) {
         // a cart crawling along the corn wall (wheel in the corn, under 3 m/s) for 6 s is not finding its own way back: lift it onto the lane
         state._rub = state._cornAge < 0.6 && state.speed < 3 && state.handbrake < 0.2 && state.s > 3 ? (state._rub || 0) + dt : Math.max(0, (state._rub || 0) - dt * 0.5);
         state.sinceRec = (state.sinceRec == null ? 99 : state.sinceRec) + dt;
-        if (((state.pin > 3 || state.stuck > 3) && state.sinceRec > 3 && state.speed < 1.0) || (state._rub > 6 && state.sinceRec > 3)) { state.pin = 0; state.stuck = 0; state._rub = 0; this.recover(8); }
+        // corn: judge a wedged cart by progress, not speed. A wedged cart bounces and creeps (any m/s) but its s barely moves; a cart scraping along the corn keeps advancing.
+        // Rolling window of s (one sample per 0.25 s, 3 s deep), only while the corn was touched (or the lane edge within ~1 m) in the last 1.5 s and the player is neither braking nor reversing.
+        let wedged = false;
+        if (world.trackId === 'corn') {
+          state._wAge = inCorn || state._edge ? 0 : (state._wAge == null ? 99 : state._wAge) + dt;   // time since the cart was in the corn or within ~1 m of it (grace 3.5 s: a wedged cart wobbles across the lane)
+          const live = state._wAge < 3.5 && state.handbrake < 0.2 && !state.reverse && state.s > 3 && state.sinceRec > 0.5;
+          if (!live) { state._pwN = 0; state._pwA = 0; }
+          else {
+            const buf = state._pwB || (state._pwB = new Float32Array(13));
+            state._pwA = (state._pwA || 0) + dt;
+            if (state._pwA >= 0.25) {
+              state._pwA -= 0.25;
+              for (let i = 0; i < 12; i++) buf[i] = buf[i + 1];
+              buf[12] = state.s; state._pwN = Math.min(13, (state._pwN || 0) + 1);
+              if (state._pwN >= 13 && buf[12] - buf[0] < 1) wedged = true;
+            }
+          }
+        }
+        if (wedged || ((state.pin > 3 || state.stuck > 3) && state.sinceRec > 3 && state.speed < 1.0) || (state._rub > 6 && state.sinceRec > 3)) { state.pin = 0; state.stuck = 0; state._rub = 0; state._pwN = 0; this.recover(8); }
       } else if (state.stuck > (state.surface === 'wall' || state.surface === 'corn' ? 3.5 : 5) && !this.noRecover) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);

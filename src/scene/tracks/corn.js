@@ -158,10 +158,11 @@ export function planCorn(seed) {
     const edge = ad > hw ? ad - hw : 0;
     if (edge > 0) { f = lerp(f, 0.5, edge); d = lerp(d, 0.6, edge); b = lerp(b, 0.4, edge); if (edge > 0.5) type = 'grass'; }
     const z0 = info.zone;
-    if (z0 && info.w > 0.04) { const t = clamp(info.w * 1.25, 0, 1); f = lerp(f, z0.friction, t); d = lerp(d, z0.drag, t); b = lerp(b, z0.bump, t); if (info.w > 0.4) type = z0.type; }
+    if (z0 && info.w > 0.04) { const t = clamp(info.w * 1.25, 0, 1); f = lerp(f, z0.friction, t); d = lerp(d, z0.drag * (z0.type === 'mud' ? 0.55 : z0.type === 'sand' ? 0.6 : 1), t); b = lerp(b, z0.bump, t);   // corn: a one-track lane has no way round, so mud / sand are softer (weak carts and packs stalled dead in them)
+    if (info.w > 0.4) type = z0.type; }
     return { type, friction: clamp(f, 0.05, 1.2), drag: Math.max(0, d), bump: clamp(b, 0, 1) };
   };
-  const startPos = (slot) => ({ s: 13.5 - 4.4 * (slot >> 1) - ((slot & 1) ? 2.0 : 0), d: (slot & 1) ? 0.8 : -0.8 });
+  const startPos = (slot) => ({ s: 13.5 - 2.7 * slot, d: (slot & 1) ? 0.7 : -0.7 });   // staggered single file (two columns 1.4 m apart, 2.7 m between neighbours): the old 2-wide rows fused weak pairs that then jammed together all race
 
   // ====================================================================================
   function decorate({ net: nw, terrain, lib, parent, seed: sd, plan }) {
