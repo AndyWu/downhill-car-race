@@ -459,7 +459,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
               state._pwA -= 0.25;
               for (let i = 0; i < 12; i++) buf[i] = buf[i + 1];
               buf[12] = state.s; state._pwN = Math.min(13, (state._pwN || 0) + 1);
-              if (state._pwN >= 11 && buf[12] - buf[2] < 0.9) wedged = true;   // under 0.9 m of progress in 2.5 s
+              if (state._pwN >= 13 && buf[12] - buf[0] < 1) wedged = true;
             }
           }
         }
