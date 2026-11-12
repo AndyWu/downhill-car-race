@@ -240,7 +240,8 @@ export function createVehicleBody(specIn, world, opts = {}) {
         const sg = state.lateral >= 0 ? 1 : -1, depth = Math.abs(state.lateral) - (sc.width || 3.5) / 2;
         if (depth > 0.35) {
           const vin = -(v.x * rc.x + v.z * rc.z) * sg;   // inward speed (toward the lane centre)
-          if (vin < 2.5) { const a = Math.min(9, 3.5 + 6 * (depth - 0.35)) * h; v.x -= rc.x * sg * a; v.z -= rc.z * sg * a; }
+          const dl = Math.min(1, Math.max(0, ((state._deepT || 0) - 1.5) / 1.0));   // held in the corn for > 1.5 s: ramp the push firmly (a wheel held hard over must not sit 0.5 m in the leaves, bleeding speed)
+          if (vin < 2.5 + 0.4 * dl) { const a = Math.min(9 + 3 * dl, 3.5 + 6 * (depth - 0.35) + 3 * dl) * h; v.x -= rc.x * sg * a; v.z -= rc.z * sg * a; }
         }
       }
     }
@@ -362,6 +363,14 @@ export function createVehicleBody(specIn, world, opts = {}) {
       state.steerAngle = 0; state.paddleL = state.paddleR = 0;
       state.stuck = state.pin = state.wrongWay = state._wc = state.upsideDown = 0; state.maxS = 0; state.wetHit = state.mudHit = 0; state.wetSteps = state.wetPeak = 0;
       lastHad.fill(false);
+      if (cornTrack) {   // rescue / teleport: no stale progress buffer, pin / rub timers, wall contact or latch state (the cart was rescued twice in 0.2 s, and a chained test started dead)
+        state._pwN = 0; state._pwA = 0; if (state._pwB) state._pwB.fill(0);
+        state._rub = 0; state._cornN = 0; state._cornAge = 99; state._wAge = 99; state._edge = false; state._deepT = 0;
+        for (const c of state.wheelContacts) { c.contact = false; c.compression = 0; c.load = 0; c.slip = 0; }
+        state.sinceRec = 0;
+        const ls = state._lastSt || 0;   // a wheel still held hard over after a rescue: ignore that direction briefly so the cart is not driven straight back into the corn
+        state._cLatch = Math.abs(ls) > 0.5 ? Math.sign(ls) : 0; state._cLatchT = 0; state._cLatchPost = true;
+      }
       good.p.copy(state.position); good.q.copy(state.quaternion);
       this.updateTrack();
     },
@@ -384,7 +393,25 @@ export function createVehicleBody(specIn, world, opts = {}) {
       // steering
       const sp = state.velocity.length();
       const steerScale = 1 / (1 + Math.pow(sp / 16, 2) * 0.7);
-      let stIn = clamp(fin(inp.steer), -1, 1);
+      let stIn = clamp(fin(inp.steer), -1, 1); const stRaw = stIn;
+      if (cornTrack && !state.aiCart && state.s > 3 && (Math.abs(state.lateral) > 1.2 || state._cLatch || state._deepT > 0) && world.track && world.track.sampleAt) {   // corn latch: a wheel held hard into the corn is ignored (toward that side) while the cart is held there for > 1.5 s, or for ~2 s after a rescue, until it is released
+        const sgL = state.lateral >= 0 ? 1 : -1, hwC = (world.track.sampleAt(Math.max(0, state.s)).width || 3.5) / 2, dpL = Math.abs(state.lateral) - hwC;
+        state._deepT = dpL > 0.3 ? (state._deepT || 0) + dt : Math.max(0, (state._deepT || 0) - dt * 0.5);
+        const dLat = state._prevLat == null ? 0 : (state.lateral - state._prevLat) / dt;
+        if (!state._cLatch && state._deepT > 1.5 && stIn * sgL > 0.5) { state._cLatch = sgL; state._cLatchT = 0; state._cLatchPost = false; }
+        if (state._cLatch) {
+          state._cLatchT += dt;
+          const held = stIn * state._cLatch;
+          if (held < 0.25 || (state._cLatchPost && state._cLatchT > 3.2)) state._cLatch = 0;
+          else {
+            // the held direction is replaced by a gentle lane-keeping nudge (PD on the lateral offset) so the cart returns to the lane and stays in it instead of sliding across into the other wall
+            const pd = clamp(-(0.45 * state.lateral + 0.9 * dLat), -0.6, 0.6);
+            const r = state._cLatchPost ? clamp((state._cLatchT - 1.0) / 2.0, 0, 1) : 0;
+            stIn = stIn * r + pd * (1 - r);
+          }
+        }
+      }
+      if (cornTrack && !state.aiCart) { state._prevLat = state.lateral; state._lastSt = stRaw; }   // (after the latch has run: _lastSt is the wheel as held, _prevLat feeds its lane-keeping nudge)
       if (cornTrack && !state.aiCart && state.s > 3 && Math.abs(state.lateral) > 1.6 && world.track && world.track.sampleAt) {   // corn: steering further into the corn gives way once a wheel is well in (a held full lock cannot dig the cart into the wall)
         const dpt = Math.abs(state.lateral) - (world.track.sampleAt(Math.max(0, state.s)).width || 3.5) / 2;
         if (dpt > 0.3 && stIn * state.lateral > 0) stIn *= clamp(1 - 3 * (dpt - 0.3), 0, 1);

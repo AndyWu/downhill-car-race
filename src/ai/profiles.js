@@ -175,7 +175,7 @@ export const AI_PROFILES = AI_ROSTER;
 // follows the skill ladder there (best driver on the lightest, most efficient cart). Other tracks use profile.truckId.
 const TRACK_TRUCKS = {
   // corn lanes are ~3.4 m wide: stable long-wheelbase carts only (no twitchy barrel/crate)
-  corn: { barnaby: 'pallet-pounder', tilly: 'bathtub-betty', clementine: 'sled-dog', dot: 'ladder-larry', buster: 'wagon-wheel-willy', rosco: 'rust-bucket', maeve: 'sled-dog', vance: 'rust-bucket', ace: 'door-dasher' },
+  corn: { barnaby: 'sled-dog', tilly: 'rust-bucket', clementine: 'pallet-pounder', dot: 'wagon-wheel-willy', buster: 'door-dasher', rosco: 'wagon-wheel-willy', maeve: 'sled-dog', vance: 'bathtub-betty', ace: 'door-dasher' },
   circuit: { barnaby: 'ladder-larry', tilly: 'rust-bucket', clementine: 'sled-dog', dot: 'barrel-bomber', buster: 'pallet-pounder', rosco: 'rust-bucket', maeve: 'crate-comet', vance: 'wagon-wheel-willy', ace: 'door-dasher' },
 };
 export function aiTruckId(profile, trackId) {

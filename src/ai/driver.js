@@ -27,7 +27,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   const capFn = TRACK_CAP[world.trackId];
   const flat = !!(world.flags && world.flags.flat);
   // corn / village: the good drivers dig in harder (a solid human paddler out-paces them otherwise); the back of the field is untouched
-  const paceK = capFn ? 1 + (world.trackId === 'corn' ? 0.3 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1) : 0) + (PACE_K[world.trackId] ?? 0.45) * Math.max(0, (profile.skill ?? 0.5) - 0.3) : 1;
+  const paceK = (capFn ? 1 + (world.trackId === 'corn' ? 0.3 * clamp((0.5 - (profile.skill ?? 0.5)) / 0.45, 0, 1) : 0) + (PACE_K[world.trackId] ?? 0.45) * Math.max(0, (profile.skill ?? 0.5) - 0.3) : 1);
   // flat circuit: nothing but paddling moves a cart, so the speed ladder is compressed (the back of the field must not get lapped)
   const FC = 9.8, FK = 0.8;
   const capOf = (c) => (flat ? FC + (c - 8.4) * FK : c);
@@ -81,11 +81,16 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   // stuck recovery
   let launch = null, blockedT = 0, honkReady = 2, honkRoll = 0, trigPrev = false;
   let passSide = 0, passUntil = 0, passStart = 0, passCool = 0;
-  let stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0, consec = 0, stuckTotal = 0;
+  let lockT = 0, levelT = 0, lastResp = -1, stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0, consec = 0, stuckTotal = 0;
 
   function think(dt, self, others = []) {
     t += dt;
     if (world.trackId === 'corn') self.aiCart = true;   // tells physics this cart is AI-driven (the corn wall assists are for human drivers only)
+    if (world.trackId === 'corn') {   // corn: the physics rescued this cart itself (wedge / wrong-way / pin): forget the stall so the host does not rescue the same cart a second time 0.2 s later
+      const rs = self.respawns || 0;
+      if (lastResp < 0) lastResp = rs;
+      else if (rs !== lastResp) { lastResp = rs; stuckTotal = 0; stuckT = 0; consec = 0; reverseUntil = 0; kickUntil = 0; }
+    }
     lastS = Math.max(lastS, self.s);
     const s = self.s, speed = Math.max(0, self.speed || 0);
     const px = self.position.x, pz = self.position.z;
@@ -93,7 +98,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
 
     // ---- other cars: drafting / bumping / avoidance -> lateral offset on top of the plan ----
     let goal = 0;
-    let ahead = null, aheadDs = Infinity, alongside = null, level = false;
+    let ahead = null, aheadDs = Infinity, alongside = null, level = false, lockedBy = null;
+    const cornTrk = world.trackId === 'corn';
     for (const o of others) {
       if (!o || o === self) continue;
       if (o.splitId != null && o.splitId === self.splitId && o.pathIndex != null && self.pathIndex != null && o.pathIndex !== self.pathIndex) continue; // other street
@@ -102,6 +108,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       if (dsO === 0 && dl === 0) continue;
       if (dsO > 0.5 && dsO < aheadDs && Math.abs(dl) < 3) { ahead = o; aheadDs = dsO; }
       if (dsO > -0.05 && dsO < 1.8 && Math.abs(dl) < 2.0 && Math.abs((o.speed || 0) - speed) < 1.0 && (dsO > 0.05 || dl > 0)) level = true;   // corn: another cart level with (or just ahead of) this one, at the same pace
+      if (cornTrk && dsO > 0 && dsO < 2.2 && Math.abs(dl) < 1.5 && (o.speed || 0) < 6 && speed < 6) lockedBy = o;   // corn: a cart just ahead, overlapping, both crawling = a scrape lock (the pair crawled together at 3 m/s for 25 s in bays)
       if (Math.abs(dsO) < 5 && Math.abs(dl) > 0.2 && Math.abs(dl) < 2.6 && (!alongside || Math.abs(dl) < Math.abs(alongside.lateral - self.lateral))) alongside = o;
     }
     // corn passing bays: the lane opens to ~7 m for ~60 m, so patient drivers lift the 'stay behind' cap there and go round
@@ -201,7 +208,10 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     // speedway: never run into the back of a cart in a braking zone / corner (the pile-up at the hairpin entry): follow it, close up to ~1 m/s faster only
     if (flat && ahead && aheadDs < 14 && Math.abs(ahead.lateral - self.lateral) < 1.5 && (bendy || aheadDs < 5 || (plan.speedAt(clamp(s + 25, 0, L)) < vt - 1))) vt = Math.min(vt, (ahead.speed || 0) + 0.8 + aheadDs * 0.3);
     // corn lane outside a bay: carts of equal pace running level fuse and crawl together; the one level with / behind another eases off until they are in single file
-    if (level && !crawl && world.trackId === 'corn' && plan.narrow && !bay) vt = Math.min(vt, speed - 0.7);
+    levelT = level ? levelT + dt : Math.max(0, levelT - dt * 2);   // corn: two carts locked side by side for > 2.5 s (even crawling together at 3-4 m/s, which used to last for minutes) - the one behind lifts off hard until they separate
+    if (level && (!crawl || levelT > 2.5) && world.trackId === 'corn' && plan.narrow && !bay) vt = Math.min(vt, speed - (levelT > 2.5 ? 1.5 : 0.7));
+    lockT = lockedBy ? lockT + dt : Math.max(0, lockT - dt * 2);   // the one behind drops back (brakes) so the pair separates; the one in front just carries on
+    if (lockT > 2.5 && cornTrk) vt = Math.min(vt, 0.4);
     vt *= 1 - 0.04 * easeK; // lift off a touch (and paddle less, below) when clear of the AI behind
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
@@ -252,7 +262,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (flat && others.length) { let lead = s; for (const o of others) if (o.s > lead) lead = o.s; catchUp = 1 + CU * clamp((lead - s - 100) / 250, 0, 1); }
     const launchT = (P.skill ?? 0.5) > 0.7 ? 11 : 9; // the front row (Maeve/Vance/Ace) stays on its paddles a little longer: a player in mid-grid should not lead into turn 1
     const standing = flat && t < launchT ? 1 + (0.45 + 1.6 * Math.max(0, (P.skill ?? 0.5) - 0.5) + ((P.skill ?? 0.5) > 0.7 ? 0.25 : 0)) * (1 - t / launchT) : 1; // stronger launch for the better drivers so a human in mid-grid does not lead at once // flat start: everybody is off the line promptly (the player starts mid-grid)
-    const cadence = paceK * standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (wave ? 1 + ((P.skill ?? 0.5) > 0.65 ? 0.11 : 0.085) * Math.sin(t * 6.283 / wave.per + wave.ph) : 1) * (PD.mode === 'optimal' ? want : 1);
+    const hotK = cornPatience === 0 && s < 1300 ? 2.6 : 1;   // corn: the slipstreamer paddles hard out of the grid and through the first bays (the pro launches 35 m ahead of him), so he goes through the leader and the front order / lead changes hands; the pro pulls back ahead later
+    const cadence = paceK * hotK * standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (wave ? 1 + ((P.skill ?? 0.5) > 0.65 ? 0.11 : 0.085) * Math.sin(t * 6.283 / wave.per + wave.ph) : 1) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.
     let pv = 0;
