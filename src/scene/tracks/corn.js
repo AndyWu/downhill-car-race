@@ -274,6 +274,16 @@ export function planCorn(seed) {
           ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, 1.9 + rnd() * 1.2, sc)));
           const tt = rnd(); cols.push(new THREE.Color((0.95 + tt * 0.25) * tn[0], (0.98 + tt * 0.15) * tn[1], (0.6 + rnd() * 0.2) * tn[2]));
         }
+        // round 6: denser, irregular ragged edge: two more passes of leaf cards (wide, leaning) and tassel spikes (tall, pale, varied height) over the first ~8 m
+        for (let s = s0 + rnd() * 0.8; s < s1; s += 0.55 + rnd() * 0.5) {
+          const w = openAt(s, side); if (w.w > 0.2) continue;
+          const spike = rnd() < 0.55, hw = hwOf(s), lat = w.fl + 2.4 * sunW(s, side) + 0.05 + rnd() * 8, o = hw + lat, x = P.px + P.rhx * side * o, z = P.pz + P.rhz * side * o;
+          const y = terrain.heightAt(x, z) + canopyH(s, lat, side) - (spike ? 0.8 : 0.5) + rnd() * 0.3;
+          e4.set((rnd() - 0.5) * (spike ? 0.35 : 0.9), rnd() * 6.28, (rnd() - 0.5) * (spike ? 0.35 : 0.9), 'YXZ'); q4.setFromEuler(e4);
+          const sc = spike ? 0.34 + rnd() * 0.3 : 0.6 + rnd() * 0.45, tn = tint(s);
+          ms.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), q4.clone(), new THREE.Vector3(sc, spike ? 1.3 + rnd() * 2.2 : 0.8 + rnd() * 1.1, sc)));
+          const tt = rnd(); cols.push(spike ? new THREE.Color((0.95 + tt * 0.25) * tn[0], (0.98 + tt * 0.15) * tn[1], (0.55 + rnd() * 0.2) * tn[2]) : new THREE.Color((0.6 + tt * 0.3) * tn[0], (0.78 + tt * 0.2) * tn[1], (0.4 + rnd() * 0.2) * tn[2]));
+        }
         // sparse tassel / leaf cards standing out of the canopy: the field reads as corn from above and from the chase camera
         for (let s = s0 + rnd() * 1.5; s < s1; s += 2.5 + rnd() * 0.8) {
           for (let lat0 = 0.5 + rnd() * 1.5; lat0 < 19; lat0 += 3.0 + rnd() * 1.2) {

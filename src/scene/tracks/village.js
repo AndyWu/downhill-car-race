@@ -215,24 +215,19 @@ export function planVillage(seed) {
       for (const z of road.field.zones) { if (!z.obstacles || Math.abs(z.s - s) > 8) continue; for (const ob of z.obstacles) { const dd = Math.hypot(s - ob.s, d - ob.d); if (dd < ob.r) l += ob.h * (1 - smoothstep(0.82, 1, dd / ob.r)); } }
       return l;
     },
-    roadUV: (road, s, d, hwe, o) => {   // own (d, s) cobble frame, blended into a shared world-space frame at every junction so overlapping strips show the SAME cobbles (no sheared / torn overlap)
+    roadUV: (road, s, d, hwe, o) => {   // own (d, s) cobble frame, blended into the shared world-space junction frame wherever this strip lies near / over ANOTHER road's strip (so overlapping strips show the SAME cobbles at splits AND merges); the weight follows true proximity, not distance along the road
       const u0 = d / 2.6, v0 = s / 2.6; o[0] = u0; o[1] = v0;
-      const zs = junctionFrames();
-      if (road === main) {
-        for (const z of zs) {
-          if (z.road !== main) continue;
-          const w = 1 - smoothstep(0, 34, Math.max(z.lo - s, s - z.hi, 0)); if (w <= 0) continue;
-          main.atS(s, mp2); const wu = worldUV(z, mp2.px + mp2.rhx * d, mp2.pz + mp2.rhz * d);
-          o[0] = lerp(u0, wu[0], w); o[1] = lerp(v0, wu[1], w); return;
-        }
-        return;
+      road.atS(s, mp2); const x = mp2.px + mp2.rhx * d, z = mp2.pz + mp2.rhz * d;
+      const ri = net.roads.indexOf(road), w = 1 - smoothstep(1.5, 20, registry.clear(x, z, ri)); if (w <= 0) return;
+      const zs = junctionFrames(); let best = null, bd = 1e9;
+      for (const fz of zs) {
+        if (fz.road !== road) continue;
+        const dist = road === main ? Math.abs(s - fz.J) : fz.end ? road.length - s : s;
+        if (dist < bd) { bd = dist; best = fz; }
       }
-      const bz = zs.filter((z) => z.road === road);
-      for (const z of bz) {
-        const dist = z.end ? road.length - s : s, w = 1 - smoothstep(12, 52, dist); if (w <= 0) continue;
-        road.atS(s, mp2); const wu = worldUV(z, mp2.px + mp2.rhx * d, mp2.pz + mp2.rhz * d);
-        o[0] = lerp(u0, wu[0] + z.sh[0], w); o[1] = lerp(v0, wu[1] + z.sh[1], w);
-      }
+      if (!best) return;
+      const wu = worldUV(best, x, z), sh = road === main ? [0, 0] : best.sh;
+      o[0] = lerp(u0, wu[0] + sh[0], w); o[1] = lerp(v0, wu[1] + sh[1], w);
     },
     roadColor: (road, s, d, p, rnz, o) => {
       const ad = Math.abs(d), wx = p.px + p.rhx * d, wz = p.pz + p.rhz * d, n = 0.88 + 0.22 * (rnz.n2(wx * 0.8, wz * 0.8) * 0.5 + 0.5);
@@ -279,7 +274,7 @@ export function planVillage(seed) {
     const inSpan = (road, sg, s) => { const m = spans.get(road); if (!m) return false; for (const [a, b] of m[sg]) if (s > a - 0.35 && s < b + 0.35) return true; return false; };
     const clearOf = (x, z) => { nw.project2(x, z, qq); const rd = qq.road; rd.params(qq.idx, pp); return Math.abs(qq.d) - pp.hw; };
     const free = (x, z, r) => { for (const p of placed) if (Math.hypot(p.x - x, p.z - z) < (p.r + r) * 0.72) return false; return true; };
-    const PAL = [[1.0, 0.92, 0.74], [0.98, 0.78, 0.66], [0.84, 0.92, 0.82], [0.92, 0.86, 0.66], [0.78, 0.84, 0.94], [1.0, 0.82, 0.5], [0.96, 0.7, 0.62], [0.9, 0.9, 0.86]];
+    const PAL = [[1.0, 0.92, 0.74], [0.98, 0.78, 0.66], [1.0, 0.9, 0.7], [0.92, 0.86, 0.66], [0.98, 0.84, 0.66], [1.0, 0.82, 0.5], [0.96, 0.7, 0.62], [1.0, 0.92, 0.8]];
     const SHUT = [[0.2, 0.45, 0.3], [0.65, 0.2, 0.18], [0.2, 0.32, 0.6], [0.85, 0.72, 0.25], [0.3, 0.5, 0.5]];
     const FLOW = [[0.9, 0.15, 0.2], [0.95, 0.7, 0.15], [0.9, 0.4, 0.7], [0.95, 0.95, 0.9]];
 
@@ -360,9 +355,9 @@ export function planVillage(seed) {
           if (wb && rr() < 0.4) wb.add('dark', boxG(0.7, 0.8, 0.05, 1), L(xf(x, y, -0.13)), [1.0, 0.8, 0.42]);
           for (const sx of [-1, 1]) b.add('woodWeathered', boxG(0.42, 1.1, 0.06, 1), L(xf(x + sx * 0.74, y, -0.07)), [sc[0] * 1.2, sc[1] * 1.2, sc[2] * 1.2]);
           if (rr() < 0.55) { const fc = FLOW[Math.floor(rr() * 4)]; b.add('woodWeathered', boxG(1.05, 0.2, 0.26, 1), L(xf(x, y - 0.68, -0.14)), [0.55, 0.4, 0.3]); b.add('dark', boxG(0.95, 0.2, 0.22, 1), L(xf(x, y - 0.55, -0.14)), [fc[0] * 0.8, fc[1] * 0.8, fc[2] * 0.8]); }
-        } else if (t < 0.86) {   // ivy patch: many small dull-green leaf clumps
-          const n = 12 + Math.floor(rr() * 6), top = hgt * (0.75 + rr() * 0.3), wd = 0.5 + rr() * 0.5;
-          for (let i = 0; i < n; i++) { const g = rr(), yy = 0.25 + (top - 0.25) * Math.pow(rr(), 0.8), xx = x + (rr() - 0.5) * wd * 2 * (1 - 0.4 * yy / top); b.add('dark', sphG(0.2, 4, 3, 1), L(xf(xx, yy, -0.06 - rr() * 0.07, 0, 0, 0, 1.0 + g * 0.5, 0.9 + g * 0.5, 0.4)), [0.04 + g * 0.05, 0.14 + g * 0.1, 0.04 + g * 0.03]); }
+        } else if (t < 0.86) {   // ivy patch: a flat carpet of small leaf cards lying on the wall (no lumpy volumes)
+          const n = 34 + Math.floor(rr() * 14), top = hgt * (0.7 + rr() * 0.3), wd = 0.55 + rr() * 0.5;
+          for (let i = 0; i < n; i++) { const g = rr(), yy = 0.2 + (top - 0.2) * Math.pow(rr(), 0.85), xx = x + (rr() - 0.5) * wd * 2 * (1 - 0.35 * yy / top); b.add('dark', boxG(0.26 + g * 0.1, 0.19 + g * 0.06, 0.015, 1), L(xf(xx, yy, -0.045 - rr() * 0.025, (rr() - 0.5) * 0.3, (rr() - 0.5) * 0.3, rr() * 3.14)), [0.1 + g * 0.14, 0.36 + g * 0.24, 0.08 + g * 0.08]); }
           x += 0.6;
         } else x += 0.6;
       }
@@ -407,7 +402,7 @@ export function planVillage(seed) {
               const gt = PAL[Math.floor(rnd() * PAL.length)];
               batchOf(prog).add('plaster', boxG(w, 3.1, 0.7, 2), M.clone().multiply(xf(0, 0.6, 0.35)), gt);
               wallDecor(batchOf(prog), M, -w / 2, w / 2, 2.15, mulberry32((sc * 131) | 0), true, winOf(prog));
-              batchOf(prog).add('concrete', boxG(w + 0.1, 0.2, 0.9, 2), M.clone().multiply(xf(0, 2.2, 0.35)), [0.8, 0.78, 0.75]);
+              batchOf(prog).add('concrete', boxG(w + 0.1, 0.2, 0.9, 2), M.clone().multiply(xf(0, 2.2, 0.35)), [0.92, 0.84, 0.72]);
               reg.poly('gardenwall', gw, M.elements[13] - 0.95, [bs.base.x, bs.base.z], { sunk: true }); addSpan(road, sg, sc - w / 2, sc + w / 2);
             }
           }
@@ -525,8 +520,8 @@ export function planVillage(seed) {
               if (nb < 0 || nb >= n || rowR[nb] !== 2) continue;
               const s = (road.length * ri) / (n - 1); road.atS(s, pp); const tp = Math.min(wallTop(road, s, sg), 1.1), yaw = Math.atan2(-pp.rhz, pp.rhx), d = sg * (pp.hw + ROW + 0.95);   // gore-tip posts stay low (a bollard, not a slab standing in the street)
               const prog = road.map ? road.map.fromS + (s / road.map.len) * (road.map.toS - road.map.fromS) : s, bb = batchOf(prog), top = tp + 0.12;
-              bb.add('concrete', boxG(1.7, top + 0.9, 0.85, 1.5), xf(pp.px + pp.rhx * d, pp.py + (top - 0.9) / 2, pp.pz + pp.rhz * d, 0, yaw, 0), [0.88, 0.84, 0.76]);
-              bb.add('concrete', boxG(1.9, 0.14, 1.05, 1), xf(pp.px + pp.rhx * d, pp.py + top + 0.07, pp.pz + pp.rhz * d, 0, yaw, 0), [0.78, 0.75, 0.7]);
+              bb.add('brickwall', boxG(1.1, top + 0.9, 1.0, 1.5), xf(pp.px + pp.rhx * d, pp.py + (top - 0.9) / 2, pp.pz + pp.rhz * d, 0, yaw, 0), [1.05, 0.95, 0.88]);   // square brick post, same brick as the wall it ends
+              bb.add('concrete', boxG(1.3, 0.14, 1.2, 1), xf(pp.px + pp.rhx * d, pp.py + top + 0.07, pp.pz + pp.rhz * d, 0, yaw, 0), [0.92, 0.84, 0.72]);
             }
           }
           i0 = i1 + 1;
