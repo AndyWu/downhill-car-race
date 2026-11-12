@@ -1,5 +1,5 @@
 # CORN CRITIQUE — MAP ROUND 6
-**Score:** 7 / 10   (round 5: 8; the visual fixes landed, but the physics change regressed wall-hit handling)
+**Score:** 8 / 10 after re-test on 17b24c2 (7 / 10 on 30ad13b; round 5: 8). The first pass found a physics regression, which 17b24c2 reverted. The visual fixes (mud, canopy) hold.
 
 **Setup.** `feat/tracks` @ 30ad13b, own build on :4592 (stopped), `?track=corn&q=medium`, 640x360, real physics via `setDebugInput`. The machine was very loaded (load 12-17), so the bay-corner matrix was cut short (560 L and R and 1040 R done) and dusk/night were sampled at 780/1850/2020. Scripts are in the scratchpad `r6c-corn/`. Every cited shot was looked at. Evidence is in `screens/corn/`.
 
@@ -49,3 +49,19 @@ The cumulative respawn counter went 0 to 9 over 7 tests, against 0 in round 5. A
 2. Same file, rescue rules (~L408-430): do not rescue while the cart is moving at >1.5 m/s in the corn and still gaining speed. Count `_rub` only with a low, non-increasing speed, and raise the rub window from 6 s to ~8 s. Keep the 3.5 s wedge rescue only for speed <1 m/s.
 3. Target numbers for the recheck: full lock at 14 m/s, 3 s, retained speed of 5 m/s or more and at most 1 rescue in 7 runs, and a paddler 70 % or more in lane with 0 rescues in 40 s.
 4. `corn.js` canopy cards: use smoother alpha (not dither) on large leaf cards near the lane, or fade them by distance.
+
+## Re-test on 17b24c2
+Rebuilt from HEAD 17b24c2 and served on :4592 (now stopped). The same scripts as above were re-run, with the files in `screens/corn/retest-17b24c2/`. The sections above describe the earlier 30ad13b run.
+
+| Test | 30ad13b | 17b24c2 |
+|---|---|---|
+| 40 s straight paddling, samples outside lane edge | 27/80 | 42/80 (round 5: 37/80) |
+| Rescues in the 40 s paddle, and the s~650 swing | 1 | 0. The s~650 swing is now a gentle drift: lat -1.6 to +2.9 over ~40 m, min speed 7.5 m/s, max yaw rate 40 deg/s |
+| Full lock 3 s, 14 and 10 m/s, 7 cases, speed retained | 0.07-7.5 m/s | 5.85-7.4 m/s (round 5: 5.7-7.1) |
+| Rescues in the 7 full-lock cases | 9 | 0 |
+| Brief 0.6 s hit from 12 m/s | min 8.8 | min 8.6, back to 12.8, 0 rescues |
+| Steering-correction after a hit (bang-bang +-0.6 corrector) | 2 rescues, 0.2-6 m/s | 0 rescues, but still wall to wall: min 0.1 m/s, ~1 s near-stops, yaw up to 446 deg/s |
+
+**Verdict.** The regression is fixed. Speed kept, rescues and the straight run are back to round-5 behaviour, with no yaw spikes while paddling. The nudge no longer produces the jerky heading flips in normal play. The stronger re-centring is gone, so unsteered paddling is back to about 50 % in lane and the cart rides the wall foot tilted ~20 degrees (the round-5 problem 1, unchanged). Steering-correction after a hit still thrashes with my crude corrector. A real child steers more smoothly, so I treat that as a nit. It is not a rescue or speed regression.
+
+**Why 8.** The two requested visual fixes are verified (lens mud is now brown with a sheen, and the canopy edge is more ragged). Physics are back at parity with round 5 and nothing regressed. Remaining nits: unsteered paddling spends about half the time on the wall foot, the far canopy is still soft rolls with pixelated large leaf cards, and the bay corners at 1850/2650 and the side camera were not re-driven.
