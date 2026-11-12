@@ -134,7 +134,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (bendy) { passSide = 0; passCool = Math.max(passCool, t + 1.5); }
     if (P.pass && passSide && t <= passUntil && alongside && !goal) goal = clamp(alongside.lateral + passSide * 1.9 - eT, -3.5, 3.5); // hold the line until clear
     if (P.pass && t > passUntil) passSide = 0;
-    if (P.aggression > 0.5 && alongside) goal = clamp(alongside.lateral - eT, -2.5, 2.5) * 0.35; // shove
+    if (P.aggression > 0.5 && alongside && !(flat && bendy)) goal = clamp(alongside.lateral - eT, -2.5, 2.5) * (flat ? 0.15 : 0.35); // shove (speedway: never in a corner, and only a nudge on the straights: two carts locked together stall)
     else if (flat && alongside && !goal && !bendy) goal = (alongside.lateral > self.lateral ? -1 : 1) * clamp(2.5 - Math.abs(alongside.lateral - self.lateral), 0.4, 2) * 0.9; // flat straights: never run shoulder to shoulder (contact spins the weaker cart)
     else if (P.carAvoid > 0 && alongside && !goal) goal = (alongside.lateral > self.lateral ? -1 : 1) * (0.5 + Math.max(0, 2.2 - Math.abs(alongside.lateral - self.lateral))) * P.carAvoid; // give room, more when closer
     // a parked / stopped cart on a wide road (spun car, finished car, idle player): everybody steers round it
@@ -192,6 +192,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (plan.narrow && !bay && ahead && aheadDs < 7 && Math.abs(ahead.lateral - self.lateral) < 1.4 && P.aggression < 0.5) {
       vt = Math.min(vt, (ahead.speed || 0) + 0.4 + (1 - (cornPatience ?? P.patience ?? 0.5)) * 1.6); // patient on a lane too narrow to pass
     }
+    // speedway: never run into the back of a cart in a braking zone / corner (the pile-up at the hairpin entry): follow it, close up to ~1 m/s faster only
+    if (flat && ahead && aheadDs < 14 && Math.abs(ahead.lateral - self.lateral) < 1.5 && (bendy || aheadDs < 5 || (plan.speedAt(clamp(s + 25, 0, L)) < vt - 1))) vt = Math.min(vt, (ahead.speed || 0) + 0.8 + aheadDs * 0.3);
     vt *= 1 - 0.04 * easeK; // lift off a touch (and paddle less, below) when clear of the AI behind
     const over = speed - vt - P.brake.dead;
     let hbRaw = over > 0 ? Math.min(P.brake.max, over * P.brake.gain) : 0;
@@ -240,7 +242,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     const flatCad = Math.min(4.6, (3.7 + 0.5 * (P.skill ?? 0.5)) * (1 + 0.8 * (1 - clamp(speed / 6, 0, 1))));
     let catchUp = 1; // flat: backmarkers dig in when the field is pulling away, so nobody gets lapped
     if (flat && others.length) { let lead = s; for (const o of others) if (o.s > lead) lead = o.s; catchUp = 1 + CU * clamp((lead - s - 100) / 250, 0, 1); }
-    const standing = flat && t < 11 ? 1 + (0.45 + 1.6 * Math.max(0, (P.skill ?? 0.5) - 0.5) + 0.3 * clamp(((P.skill ?? 0.5) - 0.5) / 0.3, 0, 1)) * (1 - t / 11) : 1; // stronger launch for the better drivers so a human in mid-grid does not lead at once // flat start: everybody is off the line promptly (the player starts mid-grid)
+    const launchT = (P.skill ?? 0.5) > 0.7 ? 11 : 9; // the front row (Maeve/Vance/Ace) stays on its paddles a little longer: a player in mid-grid should not lead into turn 1
+    const standing = flat && t < launchT ? 1 + (0.45 + 1.6 * Math.max(0, (P.skill ?? 0.5) - 0.5) + ((P.skill ?? 0.5) > 0.7 ? 0.25 : 0)) * (1 - t / launchT) : 1; // stronger launch for the better drivers so a human in mid-grid does not lead at once // flat start: everybody is off the line promptly (the player starts mid-grid)
     const cadence = paceK * standing * (flat ? flatCad : PD.cadence) * warm * (flat ? 0.9 + 0.1 * stamina : fat) * (flat ? 1 : burst) * rb * catchUp * (1 - 0.15 * easeK) * (wave ? 1 + ((P.skill ?? 0.5) > 0.65 ? 0.11 : 0.085) * Math.sin(t * 6.283 / wave.per + wave.ph) : 1) * (PD.mode === 'optimal' ? want : 1);
     // Physics treats paddleL/R as a one-frame impulse (like a swipe), so a stroke is a single-frame
     // pulse of height `strokeAmp`, alternating L/R at the profile cadence.

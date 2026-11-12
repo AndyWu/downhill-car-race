@@ -291,9 +291,11 @@ export function createUI(root, opts = {}) {
   // touch paddle boxes (touch devices only): translucent, always shown during the race, flash on each stroke
   const padBox = (side) => h('div', { class: 'sbd-padbox ' + side, html: '<svg viewBox="0 0 24 40" width="1.3em" height="2.2em"><path d="M12 3v34M5 10l7-7 7 7M5 30l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Paddle</span>' });
   const padL = padBox('l'), padR = padBox('r');
+  // faint 'Brake' label over the handbrake zone (bottom, inside the left paddle) so the 3D cockpit lever has a visible touch target
+  const hbBox = h('div', { class: 'sbd-hbbox', html: '<svg viewBox="0 0 24 24" width="1.3em" height="1.3em"><path d="M12 3v14M6 12l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Brake</span>' });
   const isTouchDev = typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0);
-  if (!isTouchDev) { padL.style.display = padR.style.display = 'none'; }
-  mk('race', '', glyphs, pegBtn, toast, rankEl, lapEl, hornBtn, viewBtn, mapCv, padL, padR);
+  if (!isTouchDev) { padL.style.display = padR.style.display = hbBox.style.display = 'none'; }
+  mk('race', '', glyphs, pegBtn, toast, rankEl, lapEl, hornBtn, viewBtn, mapCv, padL, padR, hbBox);
   paintWx(); paintTrk();
 
   const pauseScr = mk('pause', 'sbd-center', h('div', { class: 'sbd-ply sbd-pause' }, h('h2', {}, 'Paused'),
@@ -439,7 +441,7 @@ export function createUI(root, opts = {}) {
     },
     /** Position the paddle boxes from the input zones ({paddleL:{x0,x1,y0,y1}, paddleR:...}, viewport fractions). */
     setTouchZones(Z) {
-      for (const [el, z] of [[padL, Z && Z.paddleL], [padR, Z && Z.paddleR]]) if (z) Object.assign(el.style, { left: z.x0 * 100 + '%', width: (z.x1 - z.x0) * 100 + '%', top: z.y0 * 100 + '%', height: (z.y1 - z.y0) * 100 + '%' });
+      for (const [el, z] of [[padL, Z && Z.paddleL], [padR, Z && Z.paddleR], [hbBox, Z && Z.handbrake]]) if (z) Object.assign(el.style, { left: z.x0 * 100 + '%', width: (z.x1 - z.x0) * 100 + '%', top: z.y0 * 100 + '%', height: (z.y1 - z.y0) * 100 + '%' });
     },
     /** Brief highlight of a paddle box when a stroke registers ('L' | 'R'). */
     flashPaddle(side) {

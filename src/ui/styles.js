@@ -132,6 +132,7 @@ export const CSS = `
 .sbd-map { position:absolute; pointer-events:auto; right: calc(var(--sar) + 1.6*var(--u)); top: calc(var(--sat) + 10*var(--u)); width: calc(13*var(--u)); height: min(calc(36*var(--u)), calc(47vh - 10*var(--u) - var(--sat))); /* ends above the bottom-right paddle box */ border-radius: calc(1.4*var(--u)); background: rgba(20,14,8,.30); touch-action: none; cursor: pointer; }
 .sbd-map.off { background: transparent; width: calc(5*var(--u)); height: calc(5*var(--u)); border: 2px dashed rgba(255,244,220,.35); }
 .sbd-padbox { position:absolute; pointer-events:none; box-sizing:border-box; border: 2px dashed rgba(255,244,220,.38); border-radius: calc(2*var(--u)); background: rgba(255,244,220,.07); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.3em; color: rgba(255,244,220,.5); font-family: var(--hand); font-size: calc(2*var(--u)); transition: background .12s, border-color .12s; }
+.sbd-hbbox { position:absolute; pointer-events:none; box-sizing:border-box; display:flex; flex-direction:row; align-items:flex-end; justify-content:center; gap:.3em; padding-bottom: calc(1.2*var(--u)); color: rgba(255,244,220,.55); font-family: var(--hand); font-size: calc(1.7*var(--u)); text-shadow: 0 0 calc(.6*var(--u)) rgba(0,0,0,.6); }
 .sbd-padbox.hit { background: rgba(240,200,90,.22); border-color: rgba(255,226,140,.75); color: rgba(255,240,200,.85); }
 .sbd-horn.hit { background: rgba(240,200,90,.45); color: #fff; }
 .sbd-rank b { font-size: 1.35em; font-family: var(--stencil); letter-spacing:.04em; }

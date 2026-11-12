@@ -188,5 +188,7 @@ export function aiTruckId(profile, trackId) {
  */
 export function aiSlot(i, n, trackId) { // eslint-disable-line no-unused-vars
   // best AI starts nearest the front on every track (the live country game has used this since the 9-driver ladder)
-  return n - i;
+  const k = n - i;
+  if (trackId === 'circuit' && n >= 4 && (k === 1 || k === 2)) return 3 - k; // speedway: Vance on pole, Ace second row-mate: the fastest car has to pass someone, so the lead changes hands
+  return k;
 }
