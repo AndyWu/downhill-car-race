@@ -1,0 +1,31 @@
+import { chromium } from '/home/user/dcr-tracks/node_modules/playwright/index.mjs';
+const D='/home/user/dcr-tracks/critique/maps/round-8/screens/corn/';
+const b = await chromium.launch({ args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport:{width:800,height:450} });
+await p.goto('http://localhost:4631/?autostart=1&track=corn&q=medium');
+await p.waitForFunction(()=>window.__game&&window.__game.vehicles.length>1,null,{timeout:120000}).catch(()=>{});
+await p.waitForTimeout(1500);
+const shot=async(n)=>{await p.screenshot({path:D+n+'.jpg',type:'jpeg',quality:70});};
+const ev=(f,a)=>p.evaluate(f,a);
+console.log(JSON.stringify(await ev(()=>{const g=window.__game;return {mode:g.state.mode,cd:g.state.countdown,n:g.vehicles.length,s:g.vehicles.map(v=>+v.body.state.s.toFixed(1)).join(',')}})));
+await shot('grid_0'); 
+await ev(()=>{window.__game.setView&&window.__game.setView(1)}); await ev(()=>window.__game.advance(0.1)); await shot('grid_view1');
+await ev(()=>window.__game.setView(0));
+// wait for go
+await ev(()=>{const g=window.__game;for(let i=0;i<12&&g.state.countdown>0;i++)g.advance(0.5);});
+await ev(()=>window.__game.advance(3)); await shot('launch_3s');
+console.log(JSON.stringify(await ev(()=>{const g=window.__game;return g.vehicles.map(v=>[+v.body.state.s.toFixed(0),+v.body.state.velocity.length().toFixed(1),v.body.state.respawns||0].join('/')).join(' ')})));
+await ev(()=>window.__game.advance(10)); await shot('launch_13s');
+// rub in leaves with chase cam
+const lead=(s,v)=>ev(([s,v])=>{const g=window.__game;g.setDebugInput({steer:0,paddleL:true,paddleR:true});g.teleport(s-15,v);g.advance(1.2);g.teleport(s,v);g.advance(0.3);},[s,v]);
+await lead(1448,13); await ev(()=>{const g=window.__game;g.setDebugInput({steer:1,paddleL:true,paddleR:true});g.advance(0.7)}); await shot('rub_early');
+await ev(()=>window.__game.advance(4)); await shot('rub_4s');
+await ev(()=>window.__game.advance(4)); await shot('rub_8s');
+await lead(328,13); await ev(()=>{const g=window.__game;g.setDebugInput({steer:1,paddleL:true,paddleR:true});g.advance(1.0)}); await shot('bay328_hit');
+await ev(()=>window.__game.advance(1.5)); await shot('bay328_after');
+await lead(600,13); await ev(()=>{const g=window.__game;g.setDebugInput({steer:-1,paddleL:true,paddleR:true});g.advance(1.2)}); await shot('bay600_hit');
+await ev(()=>window.__game.setView(1)); await ev(()=>window.__game.advance(1)); await shot('bay600_view1');
+await ev(()=>window.__game.setView(0));
+await lead(2000,13); await shot('lane_2000'); await lead(1700,13); await shot('lane_1700');
+await lead(3100,13); await shot('finish_approach');
+await b.close();
