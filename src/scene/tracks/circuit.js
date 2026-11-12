@@ -84,10 +84,11 @@ export function planCircuit(seed) {
   const pitW = (sm) => Math.max(1 - smoothstep(230, 270, sm), smoothstep(LAP - 110, LAP - 70, sm));
 
   // verge: gentle slope back to the track over the grass, then a flat-topped wall (vertical face, no back-slope ramp), plateau behind
+  const SLOPE = 0.055;
   const verge = (road, s, d) => {
     const sg = d < 0 ? -1 : 1, ad = Math.abs(d), off = offAt(s, sg), te = teAt(s, sg);
-    const r = ad - (HW + off + te), liftMax = 0.055 * Math.max(0, off - 1.5);
-    if (r < 0) return 0.055 * clamp(ad - HW - 1.5, 0, Math.max(0, off - 1.5));
+    const r = ad - (HW + off + te), liftMax = SLOPE * Math.max(0, off - 1.5);
+    if (r < 0) return SLOPE * clamp(ad - HW - 1.5, 0, Math.max(0, off - 1.5));
     const sm = ((s % LAP) + LAP) % LAP, hold = 4 + 18 * pitW(sm);
     return (liftMax + WALLH * smoothstep(0, 0.25, r)) * (1 - smoothstep(hold, hold + 14, r));
   };
@@ -107,14 +108,16 @@ export function planCircuit(seed) {
     },
   };
 
-  // hairpin gravel trap: the run-off on the OUTSIDE of the hairpin (not the other bends) is draggy gravel, so taking it flat out costs ~1.5-2 s over a braked line (measured s 370-520 at 16 m/s entry; see docs/requests.md round 4)
+  // hairpin gravel trap: the run-off on the OUTSIDE of the hairpin (not the other bends) is slippery, draggy gravel from the first of the arc, so a cart that
+  // carries full speed (16 m/s) into the apex slides wide into it and into the tyre wall. Measured s 370-520 (round 6, best of three look-aheads): flat out 12.2 s,
+  // a light brake to ~14 m/s 10.4 s, to 13 m/s 10.75 s, to 11.5 m/s 11.8 s, so a sensible brake beats flat out by 1-2 s (see docs/requests.md round 6)
   const gravelAt = (s, d) => {
     const u = ((s % LAP) + LAP) % LAP;
-    if (u < (globalThis.__CIRC?.GS ?? 392) || u > 502) return false;
+    if (u < 392 || u > 502) return false;
     const k = tab(kapT, u);
-    return Math.abs(k) > 0.02 && (d < 0 ? k > 0 : k < 0);
+    return Math.abs(k) > 0.014 && (d < 0 ? k > 0 : k < 0);
   };
-  const CV = globalThis.__CIRC || {}; const HPF = CV.HPF ?? 0.3, GRAVEL_DRAG = CV.GD ?? 1.5, GRAVEL_F = CV.GF ?? 0.5; // TMPCV
+  const HPF = 0.3, GRAVEL_DRAG = 1.5, GRAVEL_F = 0.25;   // gravel grip 0.25 (was 0.5): a slide into it cannot be steered out of, only slowed
   const hairpinW = (s) => { const u = ((s % LAP) + LAP) % LAP; return u < 405 || u > 500 ? 0 : smoothstep(0.028, 0.05, Math.abs(tab(kapT, u))); };
   const surface = (info) => {
     const ad = Math.abs(info.d), hw = info.hw;
@@ -598,7 +601,7 @@ export function planCircuit(seed) {
       warmMat.color.setRGB(0.55 + n * 3.0, 0.5 + n * 2.7, 0.38 + n * 2.0);
       poolMat.opacity = n; poolMat.visible = n > 0.01;
       if (signMat) signMat.emissiveIntensity = n * 0.75;
-      moonFill.intensity = 1.0 * smoothstep(0.3, 0.9, n); moonFill.visible = moonFill.intensity > 0.01;
+      moonFill.intensity = 1.3 * smoothstep(0.3, 0.9, n); moonFill.visible = moonFill.intensity > 0.01;
       const want = n > 0.05 && lights.length > 0;
       if (want !== lightsOn) { lightsOn = want; for (const L of lights) L.visible = want; }
       if (want) {

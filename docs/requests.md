@@ -230,3 +230,9 @@ Append requests as `- [from Agent N → Agent M] ...`
 
 ### Map loop round 6 — village fixer
 - No shared-file edits. `village.js` only: `theme.roadUV` now blends each strip into the shared world-space junction frame by true proximity to another road's strip (`registry.clear`, 1.5 to 20 m) instead of distance along the branch, so the merge ends (s 715-740, 1680-1700, 2630-2660) and the Main Street wedge at s 2605-2615 show the same cobbles in both overlapping strips; warm wall plaster (`WPAL`), flat leaf-card ivy, square brick gore end posts, river parapet physical height 1.25 to 1.5 m (still drawn 0.5 m).
+
+### Map loop round 6 — circuit fixer
+- No shared-file edits (`circuit.js` only; country untouched).
+- Hairpin braking point: gravel grip 0.5 -> 0.25 and gravel now starts at the arc entry (curvature threshold 0.02 -> 0.014), so a cart that carries full speed into the R17 apex slides into slippery gravel and the tyre wall and cannot steer out. Timing s 370-520 at 16 m/s entry (pursuit steer, best of look-ahead 8/12/16 m, real physics; before -> after): flat out 11.45 -> 12.6 s; light brake to 14 m/s 10.4 -> 10.4; to 13 m/s 10.75 -> 10.75; to 11.5 m/s 11.8 -> 11.8 (braked lines stay clean asphalt). Flat out now costs 1-2 s against any sensible brake. `gravelAt()` comment corrected.
+- No-input cart at lat +/-7, s 430: in current physics it is lifted to the asphalt at ~3.5 s; a no-input coaster entering the hairpin at 10 m/s ends in the outside gravel and is rescued at 6-10 s. No terrain change needed.
+- Night: moon fill 1.0 -> 1.3 so the cart reads better. The cream AI-headlight haze is not drawn by circuit.js (no fog/haze there), left to the vehicle/post side.
