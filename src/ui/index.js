@@ -232,7 +232,7 @@ export function createUI(root, opts = {}) {
     h('div', { class: 'g-hb', html: GLYPHS.hb }), h('div', { class: 'g-hl', html: GLYPHS.hl }), h('div', { class: 'g-gear', html: GLYPHS.gear }));
   const pegBtn = h('button', { class: 'sbd-peg', 'aria-label': 'Pause', html: peg, onClick: () => { api.show('pause'); cb('onPause'); } });
   const toast = h('div', { class: 'sbd-toast' });
-  const lapEl = h('div', { class: 'sbd-lap', 'aria-hidden': 'true' }, 'Lap 1/3');
+  const lapEl = h('div', { class: 'sbd-lap', 'aria-hidden': 'true' }, '');
   const rankEl = h('div', { class: 'sbd-rank', 'aria-hidden': 'true' }, h('b', {}, '-'), h('span', {}, '/-'));
   // horn: a visible, translucent bulb-horn button at the top-centre (also the H key)
   const hornBtn = h('button', { class: 'sbd-horn', 'aria-label': 'Honk', html: '<svg viewBox="0 0 64 40" width="100%" height="100%"><path d="M6 14h10l26-10v32L16 26H6z" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round"/><circle cx="52" cy="20" r="3" fill="currentColor"/><path d="M56 9q6 11 0 22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>' });
@@ -358,7 +358,7 @@ export function createUI(root, opts = {}) {
       screens.race.classList.toggle('on', name === 'race' || name === 'pause');
       el.style.pointerEvents = 'none';
       if (name === 'race' && leaving !== 'pause') {
-        raceT0 = performance.now(); stroke = false; rankEl.classList.remove('on'); lapEl.classList.remove('on');
+        raceT0 = performance.now(); stroke = false; rankEl.classList.remove('on'); lapEl.classList.remove('on'); lapEl.textContent = '';
         clearTimeout(gTimer); clearTimeout(idleTimer); clearTimeout(safetyTimer); glyphs.classList.remove('faint'); glyphOn();
         safetyTimer = setTimeout(() => { glyphOff(); armIdle(); }, 6000); // if main never calls raceStarted()
         armIdle();
@@ -467,7 +467,7 @@ export function createUI(root, opts = {}) {
     setMapCars(cars) { map.cars = cars || []; drawMap(); },
     /** Chalk "Lap 2/3" under the rank; hidden when laps <= 1 (or lap falsy). */
     setLap(lap, laps) {
-      if (!lap || !laps || laps <= 1) { lapEl.classList.remove('on'); return; }
+      if (!lap || !laps || laps <= 1) { lapEl.classList.remove('on'); lapEl.textContent = ''; return; }
       lapEl.textContent = `Lap ${Math.min(lap, laps)}/${laps}`; lapEl.classList.add('on');
     },
     /** Track chooser: ids 'country'|'village'|'corn'|'circuit'. */

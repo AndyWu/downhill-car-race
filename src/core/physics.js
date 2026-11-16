@@ -259,6 +259,10 @@ export function createVehicleBody(specIn, world, opts = {}) {
         v.addScaledVector(_fc, dv * dir);
       }
     }
+    if (cornTrack && state._pushT > 0) {   // post-rescue shove: ~3 m/s2 along the heading while slower than ~7 m/s, for 3 s
+      state._pushT -= h;
+      if (contacts >= 2 && hb < 0.5) { const vf = v.dot(_fwd); if (vf < 7) v.addScaledVector(_fwd, Math.min(3 * h, 7 - vf)); }
+    }
     state.paddleL = Math.max(pL, state.paddleL - h * 4.5);
     state.paddleR = Math.max(pR, state.paddleR - h * 4.5);
 
@@ -412,10 +416,14 @@ export function createVehicleBody(specIn, world, opts = {}) {
           }
         }
       }
+      if (cornTrack && !state.aiCart && !state._cLatch && Math.abs(stRaw) < 0.12 && state.s > 3 && world.track && world.track.sampleAt) {   // corn: a centred wheel (hands off / just escaped a nose-in) must not let the cart run on straight through a bay bend into the far wall: a light PD nudge keeps it ~1.7 m inside the edge of a bay (1 m in the lane)
+        const hwH = (world.track.sampleAt(Math.max(0, state.s)).width || 3.5) / 2, dLatH = state._prevLat == null ? 0 : (state.lateral - state._prevLat) / dt, latP = state.lateral + 0.5 * dLatH, offH = Math.abs(latP) - Math.max(1.0, hwH - 1.7);
+        if (offH > 0) stIn = clamp(-Math.sign(latP) * 1.3 * offH - 0.4 * dLatH, -0.8, 0.8);
+      }
       if (cornTrack && !state.aiCart) { state._prevLat = state.lateral; state._lastSt = stRaw; }   // (after the latch has run: _lastSt is the wheel as held, _prevLat feeds its lane-keeping nudge)
       if (cornTrack && !state.aiCart && state.s > 3 && Math.abs(state.lateral) > 1.6 && world.track && world.track.sampleAt) {   // corn: steering further into the corn gives way once a wheel is well in (a held full lock cannot dig the cart into the wall)
-        const dpt = Math.abs(state.lateral) - (world.track.sampleAt(Math.max(0, state.s)).width || 3.5) / 2;
-        if (dpt > 0.3 && stIn * state.lateral > 0) stIn *= clamp(1 - 3 * (dpt - 0.3), 0, 1);
+        const hwD = (world.track.sampleAt(Math.max(0, state.s)).width || 3.5) / 2, dpt = Math.abs(state.lateral) - hwD;
+        if (dpt > 0.15 && stIn * state.lateral > 0) stIn *= clamp(1 - 4 * (dpt - 0.15), 0, 1);
       }
       const tgt = stIn * lock * (0.35 + 0.65 * steerScale);
       const dA = sRate * dt;
@@ -487,11 +495,11 @@ export function createVehicleBody(specIn, world, opts = {}) {
               state._pwA -= 0.25;
               for (let i = 0; i < 12; i++) buf[i] = buf[i + 1];
               buf[12] = state.s; state._pwN = Math.min(13, (state._pwN || 0) + 1);
-              if (state._pwN >= 13 && buf[12] - buf[0] < 1) wedged = true;
+              if (state._pwN >= 13 && buf[12] - buf[0] < 1 && !state.aiCart) wedged = true;   // (AI carts: the driver's own stall timer lifts them, and waits longer when they are pinned against the human)
             }
           }
         }
-        if (wedged || ((state.pin > 3 || state.stuck > 3) && state.sinceRec > 3 && state.speed < 1.0) || (state._rub > 6 && state.sinceRec > 3)) { state.pin = 0; state.stuck = 0; state._rub = 0; state._pwN = 0; this.recover(8); }
+        if (wedged || ((state.pin > (state.aiCart ? 5 : 3) || state.stuck > (state.aiCart ? 5 : 3)) && state.sinceRec > 3 && state.speed < 1.0) || (state._rub > 6 && state.sinceRec > 3)) { state.pin = 0; state.stuck = 0; state._rub = 0; state._pwN = 0; this.recover(8); }
       } else if (state.stuck > (state.surface === 'wall' || state.surface === 'corn' ? 3.5 : 5) && !this.noRecover) { state.stuck = 0; this.recover(3); }
       this.updateTrack();
       const wc0 = state.wheelContacts.find((c) => c.contact);
@@ -529,6 +537,7 @@ export function createVehicleBody(specIn, world, opts = {}) {
       const smp = tr.sampleAt(Math.min(tr.length - 2, Math.max(0, tS)), choice);
       const x = smp.position.x, z = smp.position.z;
       placeOnGround(this, world, x, z, smp.tangent, speed > 0 ? smp.tangent.clone().multiplyScalar(speed) : new THREE.Vector3(0, 0, 0));
+      if (cornTrack) state._pushT = 3;   // corn: a short shove after a rescue so an idle (or still stuck-in-the-leaves) cart gets away at once instead of creeping
     },
     applyImpulseAt(J, point) {
       state.velocity.addScaledVector(J, 1 / m);
@@ -605,7 +614,7 @@ export function collideBodies(a, b) {
     _vb.copy(b.state.angularVelocity).cross(_tmp.copy(_cpt).sub(b.state.position)).add(b.state.velocity);
     _rv.copy(_vb).sub(_va);
     const vn = _rv.dot(_nn);
-    if (vn < 0) {
+    if (vn < 0 && !(a.state.aiCart && b.state.aiCart)) {   // corn: two AI carts never exchange momentum (aiCart is only set on corn): the pile-ups of 3-4 carts that stalled the lane came from AI carts dragging each other down
       const jn = -(1 + 0.25) * vn / (1 / ma + 1 / mb);
       _J.copy(_nn).multiplyScalar(jn);
       // bumps shove rather than spin: most of the impulse acts through the centres (a rear-ender must not swap ends)

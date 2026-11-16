@@ -81,7 +81,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
   // stuck recovery
   let launch = null, blockedT = 0, honkReady = 2, honkRoll = 0, trigPrev = false;
   let passSide = 0, passUntil = 0, passStart = 0, passCool = 0;
-  let lockT = 0, levelT = 0, lastResp = -1, stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0, consec = 0, stuckTotal = 0;
+  let humanNear = false, humanNearUntil = 0, lockT = 0, levelT = 0, lastResp = -1, stuckT = 0, reverseUntil = 0, kickUntil = 0, revNext = 0, revSteer = 1, recoveries = 0, consec = 0, stuckTotal = 0;
 
   function think(dt, self, others = []) {
     t += dt;
@@ -98,7 +98,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
 
     // ---- other cars: drafting / bumping / avoidance -> lateral offset on top of the plan ----
     let goal = 0;
-    let ahead = null, aheadDs = Infinity, alongside = null, level = false, lockedBy = null;
+    let ahead = null, aheadDs = Infinity, alongside = null, level = false, lockedBy = null, levelV = 0;
     const cornTrk = world.trackId === 'corn';
     for (const o of others) {
       if (!o || o === self) continue;
@@ -107,10 +107,11 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
       if (lapL) dsO = ((dsO + lapL / 2) % lapL + lapL) % lapL - lapL / 2; // closed circuit: a car a lap down is still in front of (or behind) you on the road
       if (dsO === 0 && dl === 0) continue;
       if (dsO > 0.5 && dsO < aheadDs && Math.abs(dl) < 3) { ahead = o; aheadDs = dsO; }
-      if (dsO > -0.05 && dsO < 1.8 && Math.abs(dl) < 2.0 && Math.abs((o.speed || 0) - speed) < 1.0 && (dsO > 0.05 || dl > 0)) level = true;   // corn: another cart level with (or just ahead of) this one, at the same pace
+      if (dsO > -0.05 && dsO < 1.8 && Math.abs(dl) < 2.0 && Math.abs((o.speed || 0) - speed) < 1.0 && (dsO > 0.05 || dl > 0)) { level = true; levelV = o.speed || 0; }   // corn: another cart level with (or just ahead of) this one, at the same pace
       if (cornTrk && dsO > 0 && dsO < 2.2 && Math.abs(dl) < 1.5 && (o.speed || 0) < 6 && speed < 6) lockedBy = o;   // corn: a cart just ahead, overlapping, both crawling = a scrape lock (the pair crawled together at 3 m/s for 25 s in bays)
       if (Math.abs(dsO) < 5 && Math.abs(dl) > 0.2 && Math.abs(dl) < 2.6 && (!alongside || Math.abs(dl) < Math.abs(alongside.lateral - self.lateral))) alongside = o;
     }
+    if (cornTrk) { const hs = typeof human === 'function' ? human() : null; if (hs && hs !== self && Math.abs(hs.s - s) < 8 && Math.abs(hs.lateral - self.lateral) < 3) humanNearUntil = t + 3; humanNear = t < humanNearUntil; }   // corn: pinned against the human (who is also stuck and will free both): wait a little longer before lifting this cart out
     // corn passing bays: the lane opens to ~7 m for ~60 m, so patient drivers lift the 'stay behind' cap there and go round
     const bay = plan.narrow && (plan.widthAt(s) > 5 || plan.widthAt(clamp(s + 14, 0, L)) > 5);
     const cornLane = world.trackId === 'corn' && plan.narrow && !bay;   // corn lane outside a bay: nobody shoves or nudges a rival (two locked carts stall the whole queue behind them)
@@ -187,8 +188,8 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (rubberBand > 0 && others.length) {
       let ref;
       const hs = typeof human === 'function' ? human() : null;
-      if (hs && hs !== self) ref = hs.s;
-      else { ref = 0; for (const o of others) ref += o.s; ref /= others.length; }
+      if (hs && hs !== self && world.trackId !== 'corn') ref = hs.s;   // corn: the field is paced by the field, not by where the human happens to be (a slower human lifted the AI behind and held the pack bunched)
+      else { ref = 0; let n = 0; for (const o of others) if (o !== hs || world.trackId !== 'corn') { ref += o.s; n++; } ref /= Math.max(1, n); }
       rb = 1 + (world.trackId !== 'country' && (P.skill ?? 0.5) > 0.7 ? (world.trackId === 'corn' && (P.skill ?? 0.5) < 0.9 ? 0.04 : 0.09) : 0.05) * rubberBand * clamp((ref - s) / 60, -1, 1); // new maps: the best AI chase a fleeing human harder
     }
     // leader ease: a car clear of the next AI behind it matches that chaser's pace (minus a little) so races stay close.
@@ -209,7 +210,7 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     if (flat && ahead && aheadDs < 14 && Math.abs(ahead.lateral - self.lateral) < 1.5 && (bendy || aheadDs < 5 || (plan.speedAt(clamp(s + 25, 0, L)) < vt - 1))) vt = Math.min(vt, (ahead.speed || 0) + 0.8 + aheadDs * 0.3);
     // corn lane outside a bay: carts of equal pace running level fuse and crawl together; the one level with / behind another eases off until they are in single file
     levelT = level ? levelT + dt : Math.max(0, levelT - dt * 2);   // corn: two carts locked side by side for > 2.5 s (even crawling together at 3-4 m/s, which used to last for minutes) - the one behind lifts off hard until they separate
-    if (level && (!crawl || levelT > 2.5) && world.trackId === 'corn' && plan.narrow && !bay) vt = Math.min(vt, speed - (levelT > 2.5 ? 1.5 : 0.7));
+    if (level && (!crawl || levelT > 2.5) && world.trackId === 'corn' && plan.narrow && !bay) vt = Math.min(vt, Math.max(levelV - (levelT > 2.5 ? 1.5 : 0.8), Math.min(vt, 4.5)));   // ease to a little under the cart it is level with (never down to a stop: a ratchet of speed - 1.5 braked pairs, and a human beside them, dead)
     lockT = lockedBy ? lockT + dt : Math.max(0, lockT - dt * 2);   // the one behind drops back (brakes) so the pair separates; the one in front just carries on
     if (lockT > 2.5 && cornTrk) vt = Math.min(vt, 0.4);
     vt *= 1 - 0.04 * easeK; // lift off a touch (and paddle less, below) when clear of the AI behind
@@ -344,6 +345,6 @@ export function createAIDriver(profile, { world, rng, spec, rubberBand = 1, huma
     /** seconds continuously below 1.5 m/s (recovery manoeuvres didn't free the car). Host should call body.recover(~8) when needsRescue. */
     get stuckFor() { return stuckTotal; },
     // corn: carts jammed together are lifted out one at a time (>= 3 s apart within ~100 m): the first one gone often frees the rest, and nobody sees three carts vanish at once
-    get needsRescue() { if (stuckTotal <= 2.5) return false; if (world.trackId === 'corn') { const g = RESCUED.get(world); if (g && g.o !== me && Math.abs(t - g.t) < 3 && Math.abs(lastS - g.s) < 100 && stuckTotal < 5.5) return false; } return true; },
+    get needsRescue() { if (stuckTotal <= (humanNear ? 4.5 : 2.5)) return false; if (world.trackId === 'corn') { const g = RESCUED.get(world); if (g && g.o !== me && Math.abs(t - g.t) < 3 && Math.abs(lastS - g.s) < 100 && stuckTotal < 5.5) return false; } return true; },
     clearStuck() { if (world.trackId === 'corn' && stuckTotal > 2.5) RESCUED.set(world, { o: me, t, s: lastS }); stuckTotal = 0; stuckT = 0; consec = 0; } };
 }
