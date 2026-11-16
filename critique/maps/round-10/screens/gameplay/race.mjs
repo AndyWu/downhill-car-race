@@ -19,7 +19,7 @@ const r = await p.evaluate((mode)=>{
  for(;t<420;t+=0.25){
   const s=V[0].body.state; const lat=s.lateral;
   let d, pad=1;
-  if(mode==='good'){ d=-(0.15*lat+0.3*(lat-prevLat)/0.25); }
+  if(mode==='fast'){ d=-(0.08*lat+0.15*(lat-prevLat)/0.25); } else if(mode==='good'){ d=-(0.15*lat+0.3*(lat-prevLat)/0.25); }
   else { noise=0.9*noise+0.3*(rng()-0.5); d=-(0.1*lat+0.15*(lat-prevLat)/0.25)+noise; pad=0.7; }
   d=Math.max(-1,Math.min(1,d)); prevLat=lat;
   if(V[0].finished) g.setDebugInput({steer:0,paddleL:0,paddleR:0}); else g.setDebugInput({steer:d,paddleL:pad,paddleR:pad});
