@@ -404,8 +404,9 @@ export function createVehicleBody(specIn, world, opts = {}) {
           const held = stIn * state._cLatch;
           if (held < 0.25 || (state._cLatchPost && state._cLatchT > 3.2)) state._cLatch = 0;
           else {
-            // the held direction is replaced by a gentle lane-keeping nudge (PD on the lateral offset) so the cart returns to the lane and stays in it instead of sliding across into the other wall
-            const pd = clamp(-(0.45 * state.lateral + 0.9 * dLat), -0.6, 0.6);
+            // the held direction is replaced by a gentle nudge (PD on the lateral offset) that brings the cart back to the lane EDGE on the held side and lets it ride there — it does not centre the cart (that read as the game taking the wheel)
+            const edgeT = state._cLatch * Math.max(0, hwC - 0.65);
+            const pd = clamp(-(0.45 * (state.lateral - edgeT) + 0.9 * dLat), -0.6, 0.6);
             const r = state._cLatchPost ? clamp((state._cLatchT - 1.0) / 2.0, 0, 1) : 0;
             stIn = stIn * r + pd * (1 - r);
           }
