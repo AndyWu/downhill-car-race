@@ -418,8 +418,12 @@ export function createVehicleBody(specIn, world, opts = {}) {
       }
       if (cornTrack && !state.aiCart && !state._cLatch && Math.abs(stRaw) < 0.12 && state.s > 3 && world.track && world.track.sampleAt) {   // corn: a centred wheel (hands off / just escaped a nose-in) must not let the cart run on straight through a bay bend into the far wall: a light PD nudge keeps it ~1.7 m inside the edge of a bay (1 m in the lane)
         const hwH = (world.track.sampleAt(Math.max(0, state.s)).width || 3.5) / 2, dLatH = state._prevLat == null ? 0 : (state.lateral - state._prevLat) / dt, latP = state.lateral + 0.5 * dLatH, offH = Math.abs(latP) - Math.max(1.0, hwH - 1.7);
-        if (offH > 0) stIn = clamp(-Math.sign(latP) * 1.3 * offH - 0.4 * dLatH, -0.8, 0.8);
-      }
+        if (offH > 0) { stIn = clamp(-Math.sign(latP) * 1.3 * offH - 0.4 * dLatH, -0.8, 0.8); state._hN = Math.sign(state.lateral); }
+        else if (state._hN) {   // back inside the band: only straighten the cart (kill the inward drift) so it settles on the side it came from — never carry it through the middle to the far side
+          if (Math.abs(dLatH) < 0.15 || dLatH * state._hN > 0 || state.lateral * state._hN < 0) state._hN = 0;
+          else stIn = clamp(-0.9 * dLatH, -0.5, 0.5);
+        }
+      } else if (cornTrack) state._hN = 0;
       if (cornTrack && !state.aiCart) { state._prevLat = state.lateral; state._lastSt = stRaw; }   // (after the latch has run: _lastSt is the wheel as held, _prevLat feeds its lane-keeping nudge)
       if (cornTrack && !state.aiCart && state.s > 3 && Math.abs(state.lateral) > 1.6 && world.track && world.track.sampleAt) {   // corn: steering further into the corn gives way once a wheel is well in (a held full lock cannot dig the cart into the wall)
         const hwD = (world.track.sampleAt(Math.max(0, state.s)).width || 3.5) / 2, dpt = Math.abs(state.lateral) - hwD;
