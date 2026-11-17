@@ -1,0 +1,23 @@
+   stalls: Vance 3s@256
+seed 1 (rho 0.93): Ace 277 < Vance 299 < Rosco 322 < Maeve 322 < Buster 328 < Tilly 335 < Dot 336 < Clementine 340 < Barnaby 352
+   stalls: Tilly 3s@948
+seed 2 (rho 0.97): Vance 275 < Ace 278 < Maeve 315 < Rosco 321 < Buster 330 < Clementine 336 < Dot 361 < Tilly 363 < Barnaby 364
+seed 3 (rho 0.87): Vance 275 < Ace 277 < Maeve 314 < Rosco 320 < Dot 340 < Tilly 340 < Clementine 341 < Buster 342 < Barnaby 373
+
+Track: corn
+Averages over 3 seeds (39 s wall):
+driver      skill  time   hazards  off-road  honks/race  maxStall  rescues
+Barnaby      0.05  363.3     16.0       0.0        12.3       2.8 1
+Tilly        0.18  346.0     15.0       0.0        11.3       3.0 0
+Clementine   0.28  339.3     15.0       0.3         1.7       0.0 0
+Dot          0.40  345.7     15.3      10.8        10.7       1.8 0
+Buster       0.50  333.4     16.0       1.9        45.3       2.6 1
+Rosco        0.62  321.1     14.7       0.5         9.7       0.0 0
+Maeve        0.73  317.1     15.0       1.2         5.7       0.0 0
+Vance        0.84  283.2     15.3       0.0         7.0       3.5 0
+Ace          0.95  277.3     15.0       0.0         2.0       0.0 0
+
+Spearman rho (skill vs finish) avg 0.92  | slowest top-3 317 s vs fastest bottom-3 339 s | rho@90s 0.87 | worst/best 1.31 | lead changes/race 0.7
+slowest AI travelled after 20 s: 131 m (Barnaby,Barnaby,Barnaby) (target >= 60)
+
+ALL ASSERTIONS PASSED

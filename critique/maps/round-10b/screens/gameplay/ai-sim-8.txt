@@ -1,0 +1,30 @@
+   stalls: Vance 3s@256
+seed 1 (rho 0.93): Ace 277 < Vance 299 < Rosco 322 < Maeve 322 < Buster 328 < Tilly 335 < Dot 336 < Clementine 340 < Barnaby 352
+   stalls: Tilly 3s@948
+seed 2 (rho 0.97): Vance 275 < Ace 278 < Maeve 315 < Rosco 321 < Buster 330 < Clementine 336 < Dot 361 < Tilly 363 < Barnaby 364
+seed 3 (rho 0.87): Vance 275 < Ace 277 < Maeve 314 < Rosco 320 < Dot 340 < Tilly 340 < Clementine 341 < Buster 342 < Barnaby 373
+   stalls: Tilly 3s@895
+seed 4 (rho 0.97): Vance 274 < Ace 275 < Maeve 313 < Rosco 319 < Buster 328 < Clementine 336 < Dot 350 < Tilly 357 < Barnaby 362
+seed 5 (rho 0.93): Vance 275 < Ace 277 < Maeve 316 < Rosco 320 < Buster 328 < Clementine 341 < Tilly 343 < Dot 360 < Barnaby 374
+seed 6 (rho 0.83): Vance 273 < Ace 276 < Maeve 317 < Rosco 320 < Tilly 332 < Dot 336 < Clementine 341 < Buster 344 < Barnaby 362
+   stalls: Barnaby 3s@1617
+seed 7 (rho 0.97): Vance 274 < Ace 277 < Maeve 316 < Rosco 319 < Buster 328 < Dot 339 < Tilly 339 < Clementine 344 < Barnaby 387
+seed 8 (rho 0.97): Vance 274 < Ace 276 < Maeve 312 < Rosco 317 < Buster 325 < Dot 334 < Tilly 334 < Clementine 336 < Barnaby 357
+
+Track: corn
+Averages over 8 seeds (97 s wall):
+driver      skill  time   hazards  off-road  honks/race  maxStall  rescues
+Barnaby      0.05  366.4     15.9       0.0        11.4       3.2 1
+Tilly        0.18  343.0     14.9       0.3        10.8       3.3 1
+Clementine   0.28  339.4     15.0       0.1         1.1       0.0 0
+Dot          0.40  344.4     15.3       4.4         9.0       2.3 1
+Buster       0.50  331.4     15.8       2.0        37.1       2.6 1
+Rosco        0.62  319.8     14.9       0.2        18.4       0.0 0
+Maeve        0.73  315.8     15.0       0.4         5.6       0.0 0
+Vance        0.84  277.4     15.1       0.0         6.4       3.5 0
+Ace          0.95  276.5     15.0       0.3         2.1       0.0 0
+
+Spearman rho (skill vs finish) avg 0.93  | slowest top-3 316 s vs fastest bottom-3 339 s | rho@90s 0.91 | worst/best 1.32 | lead changes/race 1.4
+slowest AI travelled after 20 s: 131 m (Barnaby,Barnaby,Barnaby,Barnaby,Barnaby,Barnaby,Barnaby,Barnaby) (target >= 60)
+
+ALL ASSERTIONS PASSED
